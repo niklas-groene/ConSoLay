@@ -11,15 +11,18 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 
 /**
  * Turns the live graph into the next state of a sequence, e.g. the network of the next time point read from a graph
- * file. Nodes are matched by their label, edges by the labels of their ends in either direction; everything the state
- * does not change stays as it is, above all the positions of the kept nodes.
+ * file. Nodes are matched by their label, edges by the labels of their ends in either direction: a live edge stands for
+ * one state edge between the same labels, one with its own direction first, so parallel and antiparallel arcs count one
+ * by one. Everything the state does not change stays as it is, above all the positions of the kept nodes.
  *
  * @author Niklas Gröne
  */
@@ -78,10 +81,30 @@ public final class NextState {
             nodesRemoved++;
         }
 
-        Map<String, Edge> stateEdges = new HashMap<>();
-        for (Edge e : state.getEdges()) stateEdges.put(key(e), e);
-        for (Edge e : new ArrayList<>(live.getEdges())) {
-            if (!stateEdges.containsKey(key(e))) live.deleteEdge(e);
+        Map<String, List<Edge>> stateEdges = new HashMap<>();
+        for (Edge e : state.getEdges()) stateEdges.computeIfAbsent(key(e), k -> new ArrayList<>()).add(e);
+        // The state edges no live edge stands for, by key; a live edge that stands for none goes.
+        Map<String, List<Edge>> unmatched = new HashMap<>();
+        for (Map.Entry<String, List<Edge>> e : stateEdges.entrySet()) {
+            unmatched.put(e.getKey(), new ArrayList<>(e.getValue()));
+        }
+        List<Edge> liveEdges = new ArrayList<>(live.getEdges());
+        Set<Edge> kept = new HashSet<>();
+        for (boolean sameDirection : new boolean[]{true, false}) {
+            for (Edge e : liveEdges) {
+                List<Edge> free = unmatched.get(key(e));
+                if (kept.contains(e) || free == null) continue;
+                for (Edge s : free) {
+                    if (!sameDirection || label(s.getSource()).equals(label(e.getSource()))) {
+                        free.remove(s);
+                        kept.add(e);
+                        break;
+                    }
+                }
+            }
+        }
+        for (Edge e : liveEdges) {
+            if (!kept.contains(e)) live.deleteEdge(e);
         }
         int edgesRemoved = edgesBefore - live.getNumberOfEdges();
 
@@ -96,17 +119,15 @@ public final class NextState {
         }
         placeBlock(added, drawing);
 
-        Map<String, Edge> liveEdges = new HashMap<>();
-        for (Edge e : live.getEdges()) liveEdges.put(key(e), e);
         int edgesAdded = 0;
-        for (Map.Entry<String, Edge> e : stateEdges.entrySet()) {
-            if (liveEdges.containsKey(e.getKey())) continue;
-            Edge s = e.getValue();
-            Node source = liveByLabel.get(label(s.getSource()));
-            Node target = liveByLabel.get(label(s.getTarget()));
-            if (source == null || target == null) continue;
-            live.addEdgeCopy(s, source, target);
-            edgesAdded++;
+        for (String key : stateEdges.keySet()) {
+            for (Edge s : unmatched.get(key)) {
+                Node source = liveByLabel.get(label(s.getSource()));
+                Node target = liveByLabel.get(label(s.getTarget()));
+                if (source == null || target == null) continue;
+                live.addEdgeCopy(s, source, target);
+                edgesAdded++;
+            }
         }
         return new Change(added.size(), nodesRemoved, edgesAdded, edgesRemoved);
     }

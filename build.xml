@@ -182,6 +182,9 @@ Looked in:
             <arg value="layout.sbgn.SbgnUserTypesTest"/>
             <arg value="adaptagrams_bridge.DragSolveTest"/>
             <arg value="layout.store.StoreRoundTripTest"/>
+            <arg value="layout.mental_map.SnapshotTest"/>
+            <arg value="layout.mental_map.NextStateTest"/>
+            <arg value="layout.mental_map.ShengLayoutTest"/>
         </java>
     </target>
 

@@ -7,6 +7,7 @@ import org.graffiti.graph.Graph;
 import org.graffiti.graph.Node;
 
 import java.awt.geom.Point2D;
+import java.lang.ref.WeakReference;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -83,6 +84,8 @@ public final class ComparisonLayoutRunner {
     private final MentalMapLayout prototype = new MentalMapLayout();
     private final ImprovedMentalMapLayout improved = new ImprovedMentalMapLayout();
     private Snapshot lastReference;
+    /** The graph of the last run; weak, so that it can go once its session is closed (see {@link #forget}). */
+    private WeakReference<Graph> lastLive;
 
     /**
      * Run one condition on the live graph relative to the pinned snapshot. Returns what the mental-map layouts
@@ -95,6 +98,7 @@ public final class ComparisonLayoutRunner {
             improved.reset();
             lastReference = reference;
         }
+        lastLive = new WeakReference<>(live);
 
         Context c = Context.from(live, reference);
         // Every condition starts from the pinned drawing on the survivors, not from the output of the previous run.
@@ -169,6 +173,20 @@ public final class ComparisonLayoutRunner {
             CBLayoutAlgorithm.bboxConst = previousBbox;
         }
         return derived;
+    }
+
+    /**
+     * Drops what the last run keeps of {@code closed} (its reference, the state of the layouts and the clusters and
+     * native objects of the engine) if it was the graph of the last run; the next run builds all of it again.
+     */
+    public void forget(Graph closed) {
+        if (closed == null || lastLive == null || lastLive.get() != closed) return;
+        lastLive = null;
+        lastReference = null;
+        prototype.release();
+        improved.release();
+        CBLayoutAlgorithm.allCluster = new ArrayList<>();
+        CBLayoutAlgorithm.clearNativeKeepAlive();
     }
 
     /** The Prototype without the stable mode and without the final overlap pass. */
@@ -525,7 +543,7 @@ public final class ComparisonLayoutRunner {
         }
 
         static Context from(Graph live, Snapshot reference) {
-            for (Node node : live.getNodes()) Snapshot.ensureUid(node);
+            Snapshot.ensureUniqueUids(live);
             Map<String, Node> liveById = indexByUid(live);
             Map<String, Point2D> refPos = reference.positionsByUid();
             Set<String> refIds = new HashSet<>(refPos.keySet());

@@ -16,6 +16,7 @@ import layout.mental_map.NextState;
 import layout.mental_map.Snapshot;
 import layout.mental_map.SnapshotHistory;
 import layout.sbgn.ConstraintSBGNLayout;
+import layout.sbgn.SbgnPortSync;
 
 import org.AttributeHelper;
 import org.BackgroundTaskStatusProviderSupportingExternalCall;
@@ -71,6 +72,8 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
     private static final int SCRUB_MAX = 1000;
     /** Duration of a step to the neighbouring snapshot (ms); longer jumps take longer, up to {@link #STEP_MS_MAX}. */
     private static final int STEP_MS_PER_SNAPSHOT = 650, STEP_MS_MIN = 300, STEP_MS_MAX = 1400;
+    /** Duration of Play per transition between two snapshots (ms), and at least for the whole timeline. */
+    private static final int PLAY_MS_PER_TRANSITION = 1500, PLAY_MS_MIN = 2400;
     /**
      * While the timeline runs without one still frame, the camera looks this far (in snapshots) ahead, so it starts to
      * make room before the graph needs it.
@@ -125,6 +128,24 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         File stateFile;
         /** Name of the state loaded last; the next layout run labels its snapshot with it. Null: none waiting. */
         String pendingState;
+        /** The {@link #stateFile} of each snapshot, where known. */
+        final Map<Snapshot, File> stateFiles = new WeakHashMap<>();
+        /** The graph shows a frame of the scrubber that nothing changed since (it may lie between two snapshots). */
+        boolean showsFrame;
+
+        /** Adds {@code s} to the history (see {@link SnapshotHistory#add(Snapshot, boolean)}) with the state file. */
+        Snapshot add(Snapshot s, boolean makeReference) {
+            history.add(s, makeReference);
+            if (stateFile != null) stateFiles.put(s, stateFile);
+            return s;
+        }
+
+        /** Snapshot {@code s} was put on the graph: its state file is the graph's now, no loaded state waits. */
+        void restored(Snapshot s) {
+            stateFile = stateFiles.get(s);
+            pendingState = null;
+            showsFrame = false;
+        }
     }
 
     /**
@@ -449,7 +470,9 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
 
     @Override
     public void sessionClosed(Session s) {
-        if (s != null && s.getGraph() != null) timelines.remove(s.getGraph());   // weak keys alone keep the last one
+        if (s == null || s.getGraph() == null) return;
+        timelines.remove(s.getGraph());   // weak keys alone keep the last one
+        comparisonLayouts.forget(s.getGraph());
     }
 
     /** The skeleton window PD step 1 opens is a helper view of the running SBGN layout, not a map of the user. */
@@ -519,8 +542,21 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
      * restored, so the next morph frame restores again; and the live mode may re-lay out.
      */
     private void graphEdited() {
+        if (!SwingUtilities.isEventDispatchThread()) {
+            // e.g. an algorithm run in the background: the panel's state belongs to the event thread, but only the
+            // stack of this thread shows whether the change is layout output
+            boolean layoutOutput = liveToggle.isSelected() && isLayoutOutput();
+            SwingUtilities.invokeLater(() -> graphEdited(layoutOutput));
+            return;
+        }
+        graphEdited(false);
+    }
+
+    /** {@link #graphEdited()} on the event thread; {@code layoutOutput}: the change came from layout code. */
+    private void graphEdited(boolean layoutOutput) {
         if (!suppressLive && !scrubbing) {
             lastScrubIndex = -1;
+            timeline.showsFrame = false;
             // The "Mental map" rows keep only constraints whose nodes are still on the graph. VANTED deletes inside a
             // transaction, so AddonTab's (delayed) preNodeRemoved, which refreshes the lists, does not come.
             if (timeline.lastRun != null && !sectionRefreshQueued) {
@@ -531,7 +567,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
                 });
             }
         }
-        scheduleLiveRelayout();
+        if (!layoutOutput) scheduleLiveRelayout();
     }
 
     public void transactionStarted(TransactionEvent e) {
@@ -588,15 +624,18 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
                 t.lastRun = null;
                 t.noRunReason = "The last run failed.";
                 DerivedConstraints derived = comparisonLayouts.run(choice, live, ref);
+                // The run drops every bend; SBGN-ED's port markers need their bend for an export as SBGN-ML.
+                SbgnPortSync.apply(live);
                 t.lastRun = new LastRun(methodName(choice), snapshotName(ref), derived);
                 t.noRunReason = null;
                 t.shown = positionsByUid(live);
+                t.showsFrame = false;
                 if (addToHistory) {
                     // Record the result, but keep the reference pinned so that repeated runs stay relative to it.
                     String label = t.pendingState == null ? "After " + methodName(choice)
                             : t.pendingState + " · " + methodName(choice);
                     t.pendingState = null;
-                    history.add(Snapshot.capture(live, label), false);
+                    t.add(Snapshot.capture(live, label), false);
                 }
                 growOffset(GraphBounds.union(history.bounds(), GraphBounds.of(live)));
                 done = true;
@@ -655,7 +694,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         if (label == null) label = "Snapshot " + (history.addedCount() + 1);
         // In the frame of the timeline; nodes nobody moved since the panel put them there get exactly that position.
         // A capture moves nothing (it would bypass VANTED's undo history), so the display offset is not grown here.
-        Snapshot s = history.add(Snapshot.capture(live, label, t.offsetX, t.offsetY, t.shown));
+        Snapshot s = t.add(Snapshot.capture(live, label, t.offsetX, t.offsetY, t.shown), true);
         t.shown = s.positionsByUid();
         camera.ensureScrollable(live, GraphBounds.of(live));
         refreshTimeline();
@@ -665,7 +704,8 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
     /**
      * "Load next state…": pin the current layout as the reference (the snapshot that already holds it, or a new
      * capture), then turn the graph into the state of a chosen graph file (see {@link NextState}). The next layout run
-     * labels its snapshot with the state's name. The file chooser proposes the file after the current state's file.
+     * labels its snapshot with the state's name. On an empty graph the state is captured and pinned as it is. The file
+     * chooser proposes the file after the current state's file.
      */
     private void loadNextState() {
         Graph live = activeGraph();
@@ -699,7 +739,9 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         }
 
         stopTimeline();
-        pinCurrentState(live, current == null ? null : stateName(current));
+        // An empty graph has no layout to place the state relative to: the state becomes the first reference.
+        boolean first = live.getNumberOfNodes() == 0;
+        if (!first) pinCurrentState(live, current == null ? null : stateName(current));
         suppressLive = true;
         NextState.Change change;
         try {
@@ -708,14 +750,20 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
             suppressLive = false;
         }
         t.stateFile = file;
-        t.pendingState = stateName(file);
+        t.pendingState = first ? null : stateName(file);
+        t.showsFrame = false;
         lastScrubIndex = -1;   // the live topology is none of the snapshots now
+        if (first) captureSnapshot(stateName(file));
         dropSbgnLayoutOf(live);
         if (t.lastRun != null) ConstraintsTab.mentalMapRunChanged();   // its rows keep only nodes still on the graph
         Rectangle2D bounds = GraphBounds.of(live);
         camera.ensureScrollable(live, bounds);
         camera.keepInView(live, bounds, TimelineCamera.Pace.JUMP, true);
         DisplayConstraints.revalidateIndication();
+        if (first) {
+            status("Loaded " + stateName(file) + " as the first state: " + change, StatusLabel.Kind.SUCCESS);
+            return;
+        }
         status("Loaded " + t.pendingState + ": " + change + " – Run layout places them", StatusLabel.Kind.SUCCESS);
         if (liveToggle.isSelected()) restartLiveTimer();
     }
@@ -818,6 +866,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         Graph live = activeGraph();
         if (live == null) return;
         stopTimeline();
+        keepLiveState();
         double ox = timeline.offsetX, oy = timeline.offsetY;
         growOffset(history.bounds());   // e.g. a captured state that reached negative coordinates
         // before the restore: its node deletions refresh the lists, which then need not rebuild the old run's rows
@@ -826,6 +875,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         try {
             s.restore(live, timeline.offsetX, timeline.offsetY);
             timeline.shown = s.positionsByUid();
+            timeline.restored(s);
         } finally {
             suppressLive = false;
         }
@@ -838,6 +888,38 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         camera.ensureScrollable(live, bounds);
         camera.keepInView(live, bounds, TimelineCamera.Pace.JUMP, true);
         DisplayConstraints.revalidateIndication();
+    }
+
+    /**
+     * Before the timeline puts a snapshot on the graph: the state the graph shows becomes the newest snapshot (the
+     * reference stays pinned) unless a snapshot holds it or it is an unchanged frame of the scrubber, so that edits,
+     * the result of a live run and a loaded state are not lost.
+     */
+    private void keepLiveState() {
+        Graph live = activeGraph();
+        GraphTimeline t = timeline;
+        if (live == null || live.getNumberOfNodes() == 0 || history.isEmpty()) return;
+        if (t.showsFrame && showsTimelineFrame(live, t)) return;
+        String label = t.pendingState != null ? t.pendingState : "Snapshot " + (history.addedCount() + 1);
+        Snapshot now = Snapshot.capture(live, label, t.offsetX, t.offsetY, t.shown);
+        for (Snapshot s : history.getAll()) {
+            if (s.sameState(now)) return;
+        }
+        t.add(now, false);
+        t.shown = now.positionsByUid();
+        refreshTimeline();
+        showSliderAt(history.getAll().size() - 1);
+    }
+
+    /** Every node of {@code live} stands where the timeline last put it ({@link GraphTimeline#shown}). */
+    private static boolean showsTimelineFrame(Graph live, GraphTimeline t) {
+        if (live.getNumberOfNodes() != t.shown.size()) return false;
+        for (Node n : live.getNodes()) {
+            Point2D p = t.shown.get(Snapshot.uidOf(n));
+            if (p == null || AttributeHelper.getPositionX(n) != p.getX() + t.offsetX
+                    || AttributeHelper.getPositionY(n) != p.getY() + t.offsetY) return false;
+        }
+        return true;
     }
 
     /** Live mode needs a reference taken before the first edit; switching it on counts as using the panel. */
@@ -858,8 +940,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         if (suppressLive || scrubbing) return;
         if (liveToggle == null || !liveToggle.isSelected()) return;
         if (isLayoutOutput()) return;
-        if (SwingUtilities.isEventDispatchThread()) restartLiveTimer();
-        else SwingUtilities.invokeLater(this::restartLiveTimer);   // e.g. an algorithm run in the background
+        restartLiveTimer();
     }
 
     private void restartLiveTimer() {
@@ -971,6 +1052,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         }
         Graph live = activeGraph();
         if (live == null) return;
+        if (!isTimelineRunning()) keepLiveState();   // the scrubber was moved by hand
         List<Snapshot> s = history.getAll();
         int n = s.size();
         if (n < 2) return;
@@ -1003,6 +1085,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         try {
             if (nearest != lastScrubIndex) {
                 s.get(nearest).restore(live, ox, oy);
+                timeline.restored(s.get(nearest));
                 dropSbgnLayoutOf(live);
                 lastScrubIndex = nearest;
             }
@@ -1025,6 +1108,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
                 shown.put(uid, p);
             }
             timeline.shown = shown;
+            timeline.showsFrame = true;
         } finally {
             suppressLive = false;
             scrubbing = false;
@@ -1096,6 +1180,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
             restTimeline();
             return;
         }
+        keepLiveState();
         List<Snapshot> all = history.getAll();
         int n = all.size();
         if (n < 2) return;
@@ -1108,12 +1193,14 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         // One still camera for the whole replay if that keeps the graph large enough; see TimelineCamera.stillFrame.
         runContent = camera.stillFrame(live, boxes(all, from, n - 1));
         playButton.setText("‖ Pause");
-        // Aim at about 1.5 s per transition (50 frames of 30 ms), and at least 80 frames for the whole replay.
-        final int transitionCount = n - 1;
-        final int frames = Math.max(80, transitionCount * 50);
-        final int increment = Math.max(1, scrubSlider.getMaximum() / frames);
+        // By elapsed time, as a step: the timer coalesces late ticks, and whole slider units per tick round the speed.
+        final int startValue = fromStart ? 0 : scrubSlider.getValue();
+        final double duration = Math.max(PLAY_MS_MIN, (n - 1) * PLAY_MS_PER_TRANSITION)
+                * (SCRUB_MAX - startValue) / (double) SCRUB_MAX;
+        final long start = System.nanoTime();
         playTimer = new Timer(30, e -> {
-            int v = scrubSlider.getValue() + increment;
+            double t = Math.min(1, (System.nanoTime() - start) / 1e6 / duration);
+            int v = startValue + (int) Math.round((SCRUB_MAX - startValue) * t);
             if (v >= scrubSlider.getMaximum()) {
                 scrubSlider.setValue(scrubSlider.getMaximum());
                 stopPlay();
@@ -1134,6 +1221,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
      * continue from the snapshot the running step heads for.
      */
     private void step(int direction) {
+        keepLiveState();
         List<Snapshot> all = history.getAll();
         int n = all.size();
         Graph live = activeGraph();

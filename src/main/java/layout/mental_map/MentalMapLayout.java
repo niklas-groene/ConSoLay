@@ -178,6 +178,17 @@ public class MentalMapLayout {
         return derived;
     }
 
+    /** Drops every reference to the graphs of the last run. */
+    void release() {
+        store.clear();
+        derived = DerivedConstraints.NONE;
+        g = null;
+        forwardMapNodes = null;
+        ignoreNodesOrdering = null;
+        survivingRefNodes = null;
+        clusters = null;
+    }
+
     /** Splits the reference nodes into those without a live counterpart and the survivors. */
     private void exclusionList(Graph live) {
         ignoreNodesOrdering = new ArrayList<>();

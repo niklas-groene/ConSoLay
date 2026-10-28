@@ -7,7 +7,7 @@ import java.util.List;
 
 /**
  * Ordered timeline of layout {@link Snapshot}s plus the pinned reference of the mental-map layouts. The user can pin
- * any snapshot of the timeline; the timeline keeps the newest {@link #MAX_SIZE} snapshots.
+ * any snapshot of the timeline; the timeline keeps {@link #MAX_SIZE} snapshots: the pinned one and the newest others.
  *
  * @author Niklas Gröne
  */
@@ -37,10 +37,7 @@ public class SnapshotHistory {
             reference = s;
         }
         while (snapshots.size() > MAX_SIZE) {
-            Snapshot removed = snapshots.remove(0);
-            if (removed == reference) {
-                reference = snapshots.isEmpty() ? null : snapshots.get(snapshots.size() - 1);
-            }
+            snapshots.remove(snapshots.get(0) == reference ? 1 : 0);   // the oldest that is not pinned
         }
         return s;
     }

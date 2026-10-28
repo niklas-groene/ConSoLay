@@ -84,7 +84,10 @@ public class ImprovedMentalMapLayout {
 
     /** Age per node label, in steps survived (0 = inserted in the current step). */
     private final Map<String, Integer> ageByKey = new HashMap<>();
-    /** Previous clustering: node label -> cluster id, used for the hysteresis band. */
+    /**
+     * Previous clustering: node label -> cluster id, used for the hysteresis band. A step that clusters nothing (fewer
+     * than two eligible nodes) leaves it as it is, so it holds the last clustering made.
+     */
     private final Map<String, Integer> prevClusterByKey = new HashMap<>();
     /** True until the first step of a sequence; the nodes of its reference drawing start mature, not at age 1. */
     private boolean freshSequence = true;
@@ -99,6 +102,13 @@ public class ImprovedMentalMapLayout {
     /** What the last step applied: its constraints and clusters (empty before the first step or after a failed one). */
     public DerivedConstraints derived() {
         return derived;
+    }
+
+    /** {@link #reset()}, and drops every reference to the graph of the last step. */
+    void release() {
+        reset();
+        store.clear();
+        derived = DerivedConstraints.NONE;
     }
 
     private static String keyOf(Node n) {
@@ -529,7 +539,8 @@ public class ImprovedMentalMapLayout {
     /**
      * Number of overlapping rectangle pairs among {@code eligible}, tested without the clearance the separation edges
      * add, so that an edge already in place never counts again. Pairs tied on both axes are skipped: they are aligned
-     * twice and cannot be separated.
+     * twice and cannot be separated. So are pairs with an inserted node ({@link #immediateClusterAdmission}): it has no
+     * tie class, and the repair moves only the classes.
      */
     private int countNodeOverlaps(List<Node> eligible, AxisOrder orderX, AxisOrder orderY) {
         Map<Node, Integer> clsX = orderX.classIndexByNode();
@@ -537,9 +548,11 @@ public class ImprovedMentalMapLayout {
         int overlaps = 0;
         for (int i = 0; i < eligible.size(); i++) {
             Node a = eligible.get(i);
+            if (!clsX.containsKey(a) || !clsY.containsKey(a)) continue;
             double ax = AttributeHelper.getPositionX(a), ay = AttributeHelper.getPositionY(a);
             for (int j = i + 1; j < eligible.size(); j++) {
                 Node b = eligible.get(j);
+                if (!clsX.containsKey(b) || !clsY.containsKey(b)) continue;
                 if (Objects.equals(clsX.get(a), clsX.get(b))
                         && Objects.equals(clsY.get(a), clsY.get(b))) continue;
                 if (overlaps(a, ax, ay, b)) overlaps++;

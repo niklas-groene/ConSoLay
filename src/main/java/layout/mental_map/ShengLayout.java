@@ -81,11 +81,9 @@ final class ShengLayout {
             }
             A[i][i] = diag;
         }
-        boolean anyNodeTerm = false;
         for (int i = 0; i < n; i++) {
             if (sNode[i] > 0 && !Double.isNaN(anchorX[i])) {
                 A[i][i] += lambdaNode * sNode[i];
-                anyNodeTerm = true;
             }
         }
         double[] dEdgeX = new double[n], dEdgeY = new double[n];
@@ -98,13 +96,14 @@ final class ShengLayout {
             dEdgeY[e.i] += c * e.ly;  dEdgeY[e.j] -= c * e.ly;
         }
 
-        // Without an anchored node the system is singular along a global translation: pin node 0 to its current
-        // position with the mean diagonal as weight, which fixes the translation without changing the drawing.
+        // A component without a node term (each one if no node is anchored, or an inserted isolated node) makes the
+        // system singular: pin its first node to its current position, weighted with the mean diagonal.
+        int[] pinned = unanchoredComponents(nbr, edges, anchorX, sNode);
         double pin = 0;
-        if (!anyNodeTerm) {
+        if (pinned.length > 0) {
             for (int i = 0; i < n; i++) pin += A[i][i];
             pin = (pin > 0) ? pin / n : 1.0;
-            A[0][0] += pin;
+            for (int r : pinned) A[r][r] += pin;
         }
 
         double[][] chol = cholesky(A);
@@ -138,7 +137,7 @@ final class ShengLayout {
                 rhsX[i] += dEdgeX[i];
                 rhsY[i] += dEdgeY[i];
             }
-            if (!anyNodeTerm) { rhsX[0] += pin * px[0]; rhsY[0] += pin * py[0]; }
+            for (int r : pinned) { rhsX[r] += pin * px[r]; rhsY[r] += pin * py[r]; }
 
             cholSolve(chol, rhsX, px);
             cholSolve(chol, rhsY, py);
@@ -150,6 +149,36 @@ final class ShengLayout {
         }
 
         separateComponents(nbr, px, py, idealLength);
+    }
+
+    /**
+     * The first node of every component without a node term, ascending; the components join the nodes of {@code nbr}
+     * and of the edge terms with a positive weight.
+     */
+    private static int[] unanchoredComponents(int[][] nbr, List<EdgeConstraint> edges, double[] anchorX,
+                                              double[] sNode) {
+        int n = nbr.length;
+        int[] root = new int[n];
+        for (int i = 0; i < n; i++) root[i] = i;
+        for (int i = 0; i < n; i++) for (int j : nbr[i]) union(root, i, j);
+        for (EdgeConstraint e : edges) if (e.weight > 0) union(root, e.i, e.j);
+        boolean[] anchored = new boolean[n];
+        for (int i = 0; i < n; i++) if (sNode[i] > 0 && !Double.isNaN(anchorX[i])) anchored[find(root, i)] = true;
+        int[] first = new int[n];
+        int count = 0;
+        for (int i = 0; i < n; i++) if (find(root, i) == i && !anchored[i]) first[count++] = i;
+        return Arrays.copyOf(first, count);
+    }
+
+    /** Root of {@code i}'s component: its node with the smallest index (see {@link #union}). */
+    private static int find(int[] root, int i) {
+        while (root[i] != i) i = root[i] = root[root[i]];
+        return i;
+    }
+
+    private static void union(int[] root, int a, int b) {
+        int ra = find(root, a), rb = find(root, b);
+        if (ra != rb) root[Math.max(ra, rb)] = Math.min(ra, rb);
     }
 
     /** Value of the objective at the current layout; used only as the convergence test. */

@@ -1,6 +1,9 @@
 package layout.mental_map;
 
+import constraints.ConstraintStore;
+import constraints.OrthogonalEdgeConstraintGraph;
 import org.AttributeHelper;
+import org.graffiti.editor.actions.PasteAction;
 import org.graffiti.event.ListenerManager;
 import org.graffiti.graph.AdjListGraph;
 import org.graffiti.graph.Edge;
@@ -15,8 +18,11 @@ import java.awt.RenderingHints;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -57,9 +63,7 @@ public class Snapshot {
 
     /** Capture the current layout of {@code live} as a new snapshot. */
     public static Snapshot capture(Graph live, String label) {
-        for (Node n : live.getNodes()) {
-            ensureUid(n);
-        }
+        ensureUniqueUids(live);
         Graph copy = new AdjListGraph(live, new ListenerManager());
         return new Snapshot(copy, label);
     }
@@ -97,6 +101,39 @@ public class Snapshot {
         if (uidOf(n).isEmpty()) {
             AttributeHelper.setAttribute(n, UID_PATH, UID_NAME, UUID.randomUUID().toString());
         }
+    }
+
+    /**
+     * {@link #ensureUid} for every node of {@code g}, and a uid of their own for nodes that share one (VANTED's copy and
+     * paste copies the attribute): it stays with a node that was not pasted, and among those with the oldest.
+     */
+    public static void ensureUniqueUids(Graph g) {
+        Map<String, Node> owners = new HashMap<>();
+        List<Node> renew = new ArrayList<>();
+        for (Node n : g.getNodes()) {
+            String uid = uidOf(n);
+            if (uid.isEmpty()) {
+                renew.add(n);
+                continue;
+            }
+            Node owner = owners.get(uid);
+            if (owner == null) {
+                owners.put(uid, n);
+            } else if (keepsUid(n, owner)) {
+                owners.put(uid, n);
+                renew.add(owner);
+            } else {
+                renew.add(n);
+            }
+        }
+        for (Node n : renew) AttributeHelper.setAttribute(n, UID_PATH, UID_NAME, UUID.randomUUID().toString());
+    }
+
+    /** Whether {@code a} rather than {@code b}, which has the same uid, keeps it. */
+    private static boolean keepsUid(Node a, Node b) {
+        boolean pastedA = AttributeHelper.hasAttribute(a, PasteAction.PASTED_NODE);
+        boolean pastedB = AttributeHelper.hasAttribute(b, PasteAction.PASTED_NODE);
+        return pastedA != pastedB ? pastedB : a.getID() < b.getID();
     }
 
     /** Reference positions keyed by node UID (cached; used for timeline interpolation). */
@@ -156,9 +193,11 @@ public class Snapshot {
     /**
      * Restores the layout state onto the live graph, matched by uid: re-adds the nodes and edges deleted since the
      * capture, removes those added since, and repositions the survivors, everything moved by ({@code dx}, {@code dy})
-     * (the live graph may show the timeline moved out of negative coordinates, which VANTED cannot display).
+     * (the live graph may show the timeline moved out of negative coordinates, which VANTED cannot display). An edge
+     * constraint on an edge the snapshot also has stays, bound to the edge's copy.
      */
     public void restore(Graph live, double dx, double dy) {
+        ensureUniqueUids(live);   // a node pasted since the capture is a new node, not its original
         Map<String, Node> liveByUid = byUid(live);
 
         Set<String> snapUids = new HashSet<>();
@@ -183,19 +222,38 @@ public class Snapshot {
             live.deleteNode(l);
         }
 
-        // The edge set is rebuilt from the snapshot, so surviving edges also get their captured attributes back.
+        // The edge set is rebuilt from the snapshot, so surviving edges also get their captured attributes back. The
+        // copies come first: an old edge between the same two nodes hands its constraints on before it is deleted.
         List<Edge> liveEdges = new ArrayList<>(live.getEdges());
+        Map<List<Node>, Deque<Edge>> oldByEnds = new HashMap<>();
         for (Edge e : liveEdges) {
-            live.deleteEdge(e);
+            oldByEnds.computeIfAbsent(Arrays.asList(e.getSource(), e.getTarget()), k -> new ArrayDeque<>()).add(e);
         }
+        Map<Edge, Edge> copies = new HashMap<>();
         for (Edge c : referenceGraph.getEdges()) {
             Node s = liveByUid.get(uidOf(c.getSource()));
             Node t = liveByUid.get(uidOf(c.getTarget()));
             if (s != null && t != null) {
                 Edge copy = live.addEdgeCopy(c, s, t);
-                if (copy != null) GraphBounds.translate(copy, dx, dy);
+                if (copy == null) continue;
+                GraphBounds.translate(copy, dx, dy);
+                Deque<Edge> old = oldByEnds.get(Arrays.asList(s, t));
+                if (old != null && !old.isEmpty()) copies.put(old.poll(), copy);
             }
         }
+        boolean rebound = false;
+        for (OrthogonalEdgeConstraintGraph c
+                : ConstraintStore.of(live).getConstraints(OrthogonalEdgeConstraintGraph.class)) {
+            Edge copy = copies.get(c.getEdge());
+            if (copy != null) {
+                c.rebind(copy);
+                rebound = true;
+            }
+        }
+        for (Edge e : liveEdges) {
+            live.deleteEdge(e);
+        }
+        if (rebound) ConstraintStore.onListsChanged.run();
     }
 
     public String getLabel() {
