@@ -1,5 +1,7 @@
 package constraints;
 
+import constraints.HorizontalConstraint.HorizontalConstraintType;
+import constraints.VerticalConstraint.VerticalConstraintType;
 import org.AttributeHelper;
 import org.graffiti.graph.AdjListGraph;
 import org.graffiti.graph.Graph;
@@ -18,9 +20,9 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 /**
- * The per-graph stores around a side view (the PD skeleton window), and which constraint the feasibility guard gives
- * up on a contradiction between step constraints of different priorities and a user constraint. Run with
- * {@code ant test}.
+ * The per-graph stores around a side view (the PD skeleton window), which constraint the feasibility guard gives up
+ * on a contradiction between step constraints of different priorities and a user constraint, and that it keeps the
+ * order of the constraints it does not drop. Run with {@code ant test}.
  */
 public class StoreAndGuardTest {
 
@@ -88,5 +90,25 @@ public class StoreAndGuardTest {
         assertSame(normal, dropped.get(0).constraint);
         assertTrue(store.getAllConstraints().contains(high));
         assertNull("the user's constraint ranks above the dropped one", user.getDeactivation());
+    }
+
+    /** a and b would coincide; the newest alignment (c, d) does not separate them and keeps its place in the store. */
+    @Test
+    public void coincidenceKeepsTheOrderOfWhatStays() {
+        Graph g = new AdjListGraph();
+        Node a = node(g, 0, 0), b = node(g, 100, 100), c = node(g, 200, 0), d = node(g, 300, 0);
+        Constraint row = new HorizontalConstraint(Arrays.asList(a, b), HorizontalConstraintType.MIDDLE);
+        Constraint column = new VerticalConstraint(Arrays.asList(a, b), VerticalConstraintType.MIDDLE);
+        Constraint other = new HorizontalConstraint(Arrays.asList(c, d), HorizontalConstraintType.MIDDLE);
+        Constraints store = new Constraints();
+        for (Constraint x : Arrays.asList(other, row, column)) {
+            x.setAutomatic(true);
+            store.addConstraint(x);
+        }
+
+        List<ConstraintFeasibility.Dropped> dropped = ConstraintFeasibility.enforce(store, true);
+        assertEquals(1, dropped.size());
+        assertSame(column, dropped.get(0).constraint);
+        assertEquals(Arrays.asList(other, row), store.getAllConstraints());
     }
 }

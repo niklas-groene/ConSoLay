@@ -224,11 +224,10 @@ public final class ConstraintFeasibility {
                 ? Integer.compare(a.getRank(), b.getRank()) : Long.compare(b.getId(), a.getId()));
         else alignments.sort((a, b) -> Long.compare(b.getId(), a.getId()));
         for (Constraint c : alignments) {
-            constraints.removeConstraint(c);
-            Model m = Model.build(constraints);
-            if (!m.coincide(pair[0], pair[1])) return c;
-            // re-added at the end: the order does not matter for feasibility, but the solve gets it in a new order
-            constraints.addConstraint(c);
+            if (!Model.build(constraints, c).coincide(pair[0], pair[1])) {
+                constraints.removeConstraint(c);
+                return c;
+            }
         }
         return null;
     }
@@ -243,8 +242,13 @@ public final class ConstraintFeasibility {
         final List<List<Constraint>> aligns = new ArrayList<>();   // per dimension: the alignment constraints
 
         static Model build(Constraints constraints) {
+            return build(constraints, null);
+        }
+
+        /** The model of {@code constraints} without {@code left}. */
+        static Model build(Constraints constraints, Constraint left) {
             Model m = new Model();
-            for (Constraint c : constraints.getAllConstraints()) for (Node n : c.getNodes()) m.node(n);
+            for (Constraint c : constraints.getAllConstraints()) if (c != left) for (Node n : c.getNodes()) m.node(n);
             int n = m.nodes.size();
             m.parent = new int[2][n];
             for (int d = 0; d < 2; d++) for (int i = 0; i < n; i++) m.parent[d][i] = i;
@@ -252,7 +256,8 @@ public final class ConstraintFeasibility {
             m.aligns.add(new ArrayList<>());
             for (Constraint c : constraints.getAllConstraints()) {
                 int dim = c instanceof VerticalConstraint ? 0 : c instanceof HorizontalConstraint ? 1 : -1;
-                if (dim < 0 || !c.isActive()) continue;   // a constraint no solve applies cannot contradict anything
+                // a constraint no solve applies cannot contradict anything
+                if (dim < 0 || !c.isActive() || c == left) continue;
                 m.aligns.get(dim).add(c);
                 List<Node> ns = c.getNodes();
                 for (int i = 1; i < ns.size(); i++) m.union(dim, m.index.get(ns.get(0)), m.index.get(ns.get(i)));
@@ -261,6 +266,7 @@ public final class ConstraintFeasibility {
             m.arcs.add(new ArrayList<>());
             for (Constraint c : constraints.getAllConstraints()) {
                 if (!(c instanceof SeparationConstraintGraph) || c.getNodes().size() != 2 || !c.isActive()) continue;
+                if (c == left) continue;
                 SeparationConstraintGraph s = (SeparationConstraintGraph) c;
                 if (s.getDistance() <= 0) continue;
                 int dim = s.getType() == SeparationConstraintGraph.SeparationConstraintType.HORIZONTAL ? 0 : 1;
