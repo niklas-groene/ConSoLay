@@ -81,20 +81,17 @@ public final class Regression {
         boolean mm = true, stepwise = false;
         for (int i = 0; i < argv.length; i++) {
             switch (argv[i]) {
-                case "--maps": maps = new File(argv[++i]); break;
-                case "--out": out = new File(argv[++i]); break;
-                case "--baseline": baseline = new File(argv[++i]); break;
-                case "--include": include = Pattern.compile(argv[++i]); break;
-                case "--exclude": exclude = Pattern.compile(argv[++i]); break;
+                case "--maps": maps = new File(need(argv, ++i, "--maps")); break;
+                case "--out": out = new File(need(argv, ++i, "--out")); break;
+                case "--baseline": baseline = new File(need(argv, ++i, "--baseline")); break;
+                case "--include": include = Pattern.compile(need(argv, ++i, "--include")); break;
+                case "--exclude": exclude = Pattern.compile(need(argv, ++i, "--exclude")); break;
                 case "--no-mm": mm = false; break;
                 case "--stepwise": stepwise = true; break;
                 default: throw new IllegalArgumentException("Unknown argument " + argv[i]);
             }
         }
-        if (maps == null || out == null) {
-            System.err.println("Usage: Regression --maps DIR --out DIR [--baseline DIR] [--include REGEX] [--exclude REGEX] [--no-mm] [--stepwise]");
-            System.exit(64);
-        }
+        if (maps == null || out == null) usage(null);
         out.mkdirs();
         final PrintStream log = System.out;
         long t0 = System.currentTimeMillis();
@@ -143,6 +140,18 @@ public final class Regression {
         }
         log.println(differs == 0 && failed == 0 ? "RESULT same" : "RESULT " + differs + " differ, " + failed + " failed");
         System.exit(differs == 0 && failed == 0 ? 0 : 1);
+    }
+
+    /** {@code argv[i]}, the value of the option {@code key}; without one, the usage is printed and the run ends. */
+    private static String need(String[] argv, int i, String key) {
+        if (i >= argv.length) usage(key + " expects a value");
+        return argv[i];
+    }
+
+    private static void usage(String error) {
+        if (error != null) System.err.println("ERROR " + error);
+        System.err.println("Usage: Regression --maps DIR --out DIR [--baseline DIR] [--include REGEX] [--exclude REGEX] [--no-mm] [--stepwise]");
+        System.exit(64);
     }
 
     // ------------------------------------------------------------------ SBGN

@@ -93,9 +93,8 @@ public final class HeadlessSvgExporter {
     private static Bounds ensurePositive(Graph graph, int border, double[] shiftOut) {
         Bounds b = bounds(graph);
         if (b.x < border || b.y < border) {
-            double dx = border - b.x, dy = border - b.y;
-            HeadlessCenterLayout.moveGraphTopLeft(graph, border, border);
-            if (shiftOut != null) { shiftOut[0] = dx; shiftOut[1] = dy; }
+            double[] applied = HeadlessCenterLayout.moveGraphTopLeft(graph, border, border);
+            if (shiftOut != null) { shiftOut[0] = applied[0]; shiftOut[1] = applied[1]; }
             b = bounds(graph);
         }
         return b;

@@ -150,13 +150,16 @@ public class SbgnUserTypesTest {
         ConstraintStore.constraints.addConstraint(pin);
         ConstraintStore.constraints.addConstraint(area);
         new ConstraintSBGNLayout(g, Language.PD).runAll();
+        int violated = 0;
         for (Constraint c : Arrays.asList(pin, area)) {
             String why = ConstraintCheck.violation(c, g.getNodes(), ConstraintCheck.TOLERANCE);
             if (why == null) continue;
+            violated++;
             boolean listed = false;
             for (ConflictLog.Entry e : ConflictLog.entries()) listed |= e.constraint == c && e.kind == ConflictLog.Kind.UNSATISFIED;
             assertTrue(c.getKind() + " does not hold (" + why + ") but is not listed", listed);
         }
+        assertTrue("the pin and the area both hold: the scenario no longer contradicts the steps", violated > 0);
     }
 
     @Test

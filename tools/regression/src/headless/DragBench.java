@@ -52,7 +52,7 @@ import java.util.Map;
  *     pd:  Files/Carbohydrate Metabolism.Glycolysis, Gluconeogenesis.sbgn after the PD algorithm (its automatic constraints)
  *     big: the largest map in Files (central_plant_metabolism.sbgn) with the reaction rule set of the examples applied
  * </pre>
- * Paths: --trn-gml, --trn-rules (defaults in ../PacificVis2027/example_trn), --files (default Files).
+ * Paths: --trn-gml, --trn-rules (defaults in supplement/example_trn), --files (default Files).
  */
 public final class DragBench {
 
@@ -65,21 +65,21 @@ public final class DragBench {
         int steps = 30, nodes = 5, warmup = 10;
         boolean around = false, least = false;
         List<String> only = Arrays.asList("fd0o0", "fd0o1", "fd1o0", "fd1o1");
-        File trnGml = new File("../PacificVis2027/example_trn/ecoli_sugar_regulation.gml");
-        File trnRules = new File("../PacificVis2027/example_trn/library/Transcription network.cblrules.json");
+        File trnGml = new File("supplement/example_trn/ecoli_sugar_regulation.gml");
+        File trnRules = new File("supplement/example_trn/library/Transcription network.cblrules.json");
         File files = new File("Files");
         for (int i = 0; i < argv.length; i++) {
             switch (argv[i]) {
-                case "--scenario": scenario = argv[++i]; break;
-                case "--steps": steps = Integer.parseInt(argv[++i]); break;
-                case "--nodes": nodes = Integer.parseInt(argv[++i]); break;
-                case "--warmup": warmup = Integer.parseInt(argv[++i]); break;
-                case "--only": only = Arrays.asList(argv[++i].split(",")); break;
+                case "--scenario": scenario = need(argv, ++i, "--scenario"); break;
+                case "--steps": steps = Integer.parseInt(need(argv, ++i, "--steps")); break;
+                case "--nodes": nodes = Integer.parseInt(need(argv, ++i, "--nodes")); break;
+                case "--warmup": warmup = Integer.parseInt(need(argv, ++i, "--warmup")); break;
+                case "--only": only = Arrays.asList(need(argv, ++i, "--only").split(",")); break;
                 case "--around": around = true; break;
                 case "--least": least = true; break;
-                case "--trn-gml": trnGml = new File(argv[++i]); break;
-                case "--trn-rules": trnRules = new File(argv[++i]); break;
-                case "--files": files = new File(argv[++i]); break;
+                case "--trn-gml": trnGml = new File(need(argv, ++i, "--trn-gml")); break;
+                case "--trn-rules": trnRules = new File(need(argv, ++i, "--trn-rules")); break;
+                case "--files": files = new File(need(argv, ++i, "--files")); break;
                 default: throw new IllegalArgumentException("Unknown argument " + argv[i]);
             }
         }
@@ -199,6 +199,12 @@ public final class DragBench {
     }
 
     // ------------------------------------------------------------------ helpers
+
+    /** {@code argv[i]}, the value of the option {@code key}. */
+    private static String need(String[] argv, int i, String key) {
+        if (i >= argv.length) throw new IllegalArgumentException(key + " expects a value");
+        return argv[i];
+    }
 
     /** The {@code k} nodes with the most constraints (the nodes a user would drag to see the constraints act). */
     static List<Node> mostConstrained(Graph g, int k) {

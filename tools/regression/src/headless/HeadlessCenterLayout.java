@@ -21,8 +21,12 @@ public class HeadlessCenterLayout {
         shift(graph, dx, dy);
     }
 
-    /** Moves the drawing so that the top-left corner of its visible node boxes and bends lies at (offX, offY). */
-    public static void moveGraphTopLeft(Graph graph, double offX, double offY) {
+    /**
+     * Moves the drawing so that the top-left corner of its visible node boxes and bends lies at (offX, offY).
+     *
+     * @return the shift applied, {dx, dy}; {0, 0} for a drawing without visible elements
+     */
+    public static double[] moveGraphTopLeft(Graph graph, double offX, double offY) {
         double minX = Double.POSITIVE_INFINITY;
         double minY = Double.POSITIVE_INFINITY;
 
@@ -47,9 +51,11 @@ public class HeadlessCenterLayout {
             }
         }
 
-        if (!Double.isFinite(minX) || !Double.isFinite(minY)) return;
+        if (!Double.isFinite(minX) || !Double.isFinite(minY)) return new double[] { 0, 0 };
 
-        shift(graph, offX - minX, offY - minY);
+        double dx = offX - minX, dy = offY - minY;
+        shift(graph, dx, dy);
+        return new double[] { dx, dy };
     }
 
     private static void shift(Graph graph, double dx, double dy) {

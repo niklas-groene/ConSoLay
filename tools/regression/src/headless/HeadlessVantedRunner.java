@@ -221,7 +221,12 @@ public class HeadlessVantedRunner {
 
         if (a.original) {
             File f = new File(outDir, base + "_original.svg");
-            HeadlessSvgExporter.exportSvg(graph, f, BORDER);
+            Runnable restore = keepPositions(graph);
+            try {
+                HeadlessSvgExporter.exportSvg(graph, f, BORDER);
+            } finally {
+                restore.run();
+            }
             out.println("WROTE_ORIGINAL_SVG=" + f.getAbsolutePath());
             outputs.put("originalSvg", f.getName());
         }
@@ -286,14 +291,19 @@ public class HeadlessVantedRunner {
                     }
                 } else {
                     File f = new File(outDir, base + "_step" + (i + 1) + ".svg");
-                    HeadlessSvgExporter.exportSvg(graph, f, BORDER);
-                    out.println("WROTE_STEP_SVG " + (i + 1) + "=" + f.getAbsolutePath());
-                    sj.put("svg", f.getName());
-                    if (a.png) {
-                        File p = new File(outDir, base + "_step" + (i + 1) + ".png");
-                        HeadlessSvgExporter.exportPng(graph, p, BORDER, 2400);
-                        out.println("WROTE_STEP_PNG " + (i + 1) + "=" + p.getAbsolutePath());
-                        sj.put("png", p.getName());
+                    Runnable restore = keepPositions(graph);
+                    try {
+                        HeadlessSvgExporter.exportSvg(graph, f, BORDER);
+                        out.println("WROTE_STEP_SVG " + (i + 1) + "=" + f.getAbsolutePath());
+                        sj.put("svg", f.getName());
+                        if (a.png) {
+                            File p = new File(outDir, base + "_step" + (i + 1) + ".png");
+                            HeadlessSvgExporter.exportPng(graph, p, BORDER, 2400);
+                            out.println("WROTE_STEP_PNG " + (i + 1) + "=" + p.getAbsolutePath());
+                            sj.put("png", p.getName());
+                        }
+                    } finally {
+                        restore.run();
                     }
                 }
             }
@@ -385,21 +395,7 @@ public class HeadlessVantedRunner {
      */
     private static void writeSkeletonSnapshot(Graph skeleton, File outDir, String base, JSONObject sj, String positions,
                                               boolean png, PrintStream out, JSONObject outputs) throws Exception {
-        List<CoordinateAttribute> coords = new ArrayList<>();
-        List<double[]> saved = new ArrayList<>();
-        for (Node nd : skeleton.getNodes()) {
-            try {
-                Object co = nd.getAttribute(GraphicAttributeConstants.COORD_PATH);
-                if (co instanceof CoordinateAttribute) coords.add((CoordinateAttribute) co);
-            } catch (Exception ignore) { /* no position */ }
-        }
-        for (Edge e : skeleton.getEdges()) {
-            for (Object b : HeadlessCenterLayout.bendValues(e)) {
-                if (b instanceof CoordinateAttribute) coords.add((CoordinateAttribute) b);
-            }
-        }
-        for (CoordinateAttribute c : coords) saved.add(new double[] { c.getX(), c.getY() });
-
+        Runnable restore = keepPositions(skeleton);
         File f = new File(outDir, base + "_skeleton.svg");
         try {
             HeadlessSvgExporter.exportSvg(skeleton, f, BORDER, true);
@@ -412,18 +408,42 @@ public class HeadlessVantedRunner {
                 sj.put("png", p.getName());
             }
         } finally {
-            for (int k = 0; k < coords.size(); k++) {
-                CoordinateAttribute c = coords.get(k);
-                double[] xy = saved.get(k);
-                if (Double.doubleToRawLongBits(c.getX()) != Double.doubleToRawLongBits(xy[0])) c.setX(xy[0]);
-                if (Double.doubleToRawLongBits(c.getY()) != Double.doubleToRawLongBits(xy[1])) c.setY(xy[1]);
-            }
+            restore.run();
         }
         sj.put("graph", "skeleton");
         sj.put("graphNodes", skeleton.getNumberOfNodes());
         sj.put("graphEdges", skeleton.getNumberOfEdges());
         sj.put("graphLayout", positions);
         outputs.put("skeletonSvg", f.getName());
+    }
+
+    /**
+     * Records every node centre and edge bend of {@code g}; the returned action resets each to its exact recorded
+     * value. A snapshot of a graph that is still laid out runs in between, as the SVG/PNG export shifts the graph.
+     */
+    private static Runnable keepPositions(Graph g) {
+        List<CoordinateAttribute> coords = new ArrayList<>();
+        List<double[]> saved = new ArrayList<>();
+        for (Node nd : g.getNodes()) {
+            try {
+                Object co = nd.getAttribute(GraphicAttributeConstants.COORD_PATH);
+                if (co instanceof CoordinateAttribute) coords.add((CoordinateAttribute) co);
+            } catch (Exception ignore) { /* no position */ }
+        }
+        for (Edge e : g.getEdges()) {
+            for (Object b : HeadlessCenterLayout.bendValues(e)) {
+                if (b instanceof CoordinateAttribute) coords.add((CoordinateAttribute) b);
+            }
+        }
+        for (CoordinateAttribute c : coords) saved.add(new double[] { c.getX(), c.getY() });
+        return () -> {
+            for (int k = 0; k < coords.size(); k++) {
+                CoordinateAttribute c = coords.get(k);
+                double[] xy = saved.get(k);
+                if (Double.doubleToRawLongBits(c.getX()) != Double.doubleToRawLongBits(xy[0])) c.setX(xy[0]);
+                if (Double.doubleToRawLongBits(c.getY()) != Double.doubleToRawLongBits(xy[1])) c.setY(xy[1]);
+            }
+        };
     }
 
     private static JSONObject constraintsJson(Constraints cs) {
@@ -708,9 +728,11 @@ public class HeadlessVantedRunner {
 
     private static void usage(String error) {
         if (error != null) System.err.println("ERROR " + error);
-        System.err.println("Usage:");
-        System.err.println("  java -jar clean-runner.jar --in FILE.sbgn [--outdir DIR] [options]");
-        System.err.println("  java -jar clean-runner.jar --indir DIR [--outdir DIR] [--recursive] [--ext .sbgn] [options]");
+        System.err.println("Usage (after ant regression-compile; CP = target/classes:target/regression-classes:"
+                + "libs/sbgn-ed.jar:$VANTED/target/classes:$VANTED_LIBS/*):");
+        System.err.println("  java -cp \"$CP\" headless.HeadlessVantedRunner --in FILE.sbgn [--outdir DIR] [options]");
+        System.err.println("  java -cp \"$CP\" headless.HeadlessVantedRunner --indir DIR [--outdir DIR] [--recursive]"
+                + " [--ext .sbgn] [options]");
         System.err.println("Options:");
         System.err.println("  --language auto|PD|ER|AF  --steps N  --per-step  --original  --png  --json");
     }

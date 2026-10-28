@@ -332,15 +332,10 @@ public class PDWriterNoGui {
                     pos = SBGNMLHelper.getDockingPosition(docking, tgtnodepos, tgtnodesize);
                     arc.setTarget(glyph);
                 } else if (bendin != null) {
-                    try {
-                        Port port = SBGNMLHelper.getPort(PortHelper.portPosition(edge, tgtnodepos, tgtnodesize, bends, false, srcnodepos), tgtnodepos, tgtnodesize, glyph);
-                        pos = new Vector2d(port.getX(), port.getY());
-                        SBGNMLHelper.setGlyphOrientation(glyph, port, tgtnodepos, tgtnodesize);
-                        arc.setTarget(port);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-
+                    Port port = SBGNMLHelper.getPort(PortHelper.portPosition(edge, tgtnodepos, tgtnodesize, bends, false, srcnodepos), tgtnodepos, tgtnodesize, glyph);
+                    pos = new Vector2d(port.getX(), port.getY());
+                    SBGNMLHelper.setGlyphOrientation(glyph, port, tgtnodepos, tgtnodesize);
+                    arc.setTarget(port);
                 } else {
                     pos = SBGNMLHelper.getIntersectionEdgeNode(srcpoint, edge.getTarget(), tgtnodepos, tgtnodesize);
                     arc.setTarget(glyph);

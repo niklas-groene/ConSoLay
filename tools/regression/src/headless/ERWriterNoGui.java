@@ -493,6 +493,8 @@ public class ERWriterNoGui {
 
         for (Edge edge : graph.getEdges())
             if (!processededges.contains(edge)) {
+                while (usedIds.contains("arc" + arcid))
+                    arcid++;
                 while (knownGlyphIDs.contains("glyph" + glyphid) || usedIds.contains("glyph" + glyphid))
                     glyphid++;
                 Arc arc = getArc(edge, map, hmnode2glyph, hmnode2outcome, hmnode2port, arcid, "glyph" + glyphid);

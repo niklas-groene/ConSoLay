@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -65,6 +66,7 @@ public class DragSolveTest {
         assertTrue("needs -Dcblayout.dragSolve=component (the default)", CBLayoutAlgorithm.DRAG_SOLVE_COMPONENT);
         List<Node> nodes = new ArrayList<>(graph.getNodes());
         nodes.sort((a, b) -> Long.compare(a.getID(), b.getID()));
+        int compared = 0;
         for (int k = 0; k < 6; k++) {
             Node n = nodes.get((k * 7) % nodes.size());
             Map<Node, double[]> start = TemplateApplier.positions(graph);
@@ -86,9 +88,26 @@ public class DragSolveTest {
             }
             assertTrue("drag " + k + ": the solve around the node differs from the full solve by " + max + " px", max <= 1e-6);
             assertEquals("drag " + k + ": the decisions differ", decidedFull.keySet(), decidedAround.keySet());
+            for (Map.Entry<Constraint, Deactivation> e : decidedFull.entrySet()) {
+                sameDecision("drag " + k + ", " + e.getKey(), e.getValue(), decidedAround.get(e.getKey()));
+                compared++;
+            }
             restore(start);
             CBLayoutAlgorithm.executeUserConstraints(graph, false, false);
         }
+        assertTrue("no drag deactivated a constraint: no decisions were compared", compared > 0);
+    }
+
+    /** The same partners (the same constraints, in the same order), axis, shortfall and texts. */
+    private static void sameDecision(String what, Deactivation full, Deactivation around) {
+        assertEquals(what + ": number of partners", full.partners.size(), around.partners.size());
+        for (int i = 0; i < full.partners.size(); i++) {
+            assertSame(what + ": partner " + i, full.partners.get(i), around.partners.get(i));
+        }
+        assertEquals(what + ": axis", full.axis, around.axis);
+        assertEquals(what + ": shortfall", full.shortfall, around.shortfall, 1e-6);
+        assertEquals(what + ": reason", full.reason(), around.reason());
+        assertEquals(what + ": short reason", full.shortReason(), around.shortReason());
     }
 
     private static Map<Constraint, Deactivation> decisions() {
