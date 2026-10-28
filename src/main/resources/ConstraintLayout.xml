@@ -4,7 +4,7 @@
     <author>Niklas Gröne</author>
     <description>Integrating Constraints into Vanted, together with some Constraint-based Algorithms.</description>
     <plugindesc>
-        <name>Constraint SBGN Layout</name>
+        <name>ConSoLay</name>
         <main>cblayout.CBLayout</main>
         <version>1.0.0</version>
         <compatibility>2.7.*, 2.8.*</compatibility>

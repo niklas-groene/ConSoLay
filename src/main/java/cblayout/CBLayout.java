@@ -21,7 +21,7 @@ import org.graffiti.plugin.gui.GraffitiComponent;
 import org.graffiti.plugin.inspector.InspectorTab;
 
 /**
- * The VANTED add-on "Constraint SBGN Layout": the inspector tab "Constraint-Based Layout", the Layout menu entries
+ * The VANTED add-on "ConSoLay": the inspector tab "Constraint-Based Layout", the Layout menu entries
  * "Constraint SBGN Layout" and "Apply constraints", the SBGN step algorithms on the Algorithms page and the toolbar
  * buttons that arrange the graph windows.
  */

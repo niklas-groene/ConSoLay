@@ -1,4 +1,4 @@
-# Constraint-Based Layout, an add-on for VANTED
+# ConSoLay: constraint-based layout, an add-on for VANTED
 
 Constraint-based graph layout in [VANTED](https://www.cls.uni-konstanz.de/software/vanted/) with the Adaptagrams
 libraries (libcola, libvpsc, libavoid): the user states relations between nodes (25 constraint types: alignments, gaps,
@@ -25,7 +25,7 @@ checkout with its third-party libraries next to this folder or under `~/VANTED`:
 ```
 
 ```bash
-ant                       # builds target/jar/ConstraintLayout.jar (the add-on with the Adaptagrams binding inside)
+ant                       # builds target/jar/ConSoLay.jar (the add-on with the Adaptagrams binding inside)
 ant test                  # the unit tests (two of them load the Adaptagrams natives)
 ant -Dregression.java=$JAVA8_HOME/bin/java regression   # lays out every map in Files/ and compares with the baseline
 ```
@@ -35,7 +35,7 @@ add-on, which reads and writes SBGN-ML) is on the class path; the SBGN layouts w
 
 ## Install
 
-In VANTED: Edit › Preferences › Add-ons › Install Add-on, choose `target/jar/ConstraintLayout.jar` (or copy it into
+In VANTED: Edit › Preferences › Add-ons › Install Add-on, choose `target/jar/ConSoLay.jar` (or copy it into
 VANTED's add-ons folder) and restart. The SBGN-ED add-on must be installed as well for SBGN maps. The tab
 "Constraint-Based Layout" appears in the side panel; the Layout menu gets "Constraint SBGN Layout" and "Apply
 constraints".

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!--
-  Build for the Constraint SBGN Layout VANTED add-on.
+  Build for the ConSoLay VANTED add-on.
 
   Layout:
     src/main/java/         Java sources
@@ -13,12 +13,12 @@
   Usage:
     ant                    # default = create_run_jar
     ant clean              # remove target/
-    ant create_run_jar     # build addon JAR -> target/jar/ConstraintLayout.jar
+    ant create_run_jar     # build addon JAR -> target/jar/ConSoLay.jar
     ant test               # compile and run the unit tests in src/test/java
     ant regression         # lay out every map in Files/*.sbgn headless and compare with tools/regression/baseline
     ant regression-baseline  # rewrite that baseline from the current code (see supplement/regression.md)
 
-  Install: drop target/jar/ConstraintLayout.jar into VANTED via
+  Install: drop target/jar/ConSoLay.jar into VANTED via
            "Edit -> Preferences -> Add-ons -> Install Add-on" (or just put it next
            to other addon JARs in the VANTED plugins folder).
 -->
@@ -28,7 +28,7 @@
     <property name="res.dir"        value="src/main/resources"/>
     <property name="classes.dir"    value="target/classes"/>
     <property name="jar.dest.path"  value="target/jar"/>
-    <property name="target.name"    value="ConstraintLayout.jar"/>
+    <property name="target.name"    value="ConSoLay.jar"/>
     <property name="test.src.dir"     value="src/test/java"/>
     <property name="test.classes.dir" value="target/test-classes"/>
 
