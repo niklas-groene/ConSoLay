@@ -40,8 +40,10 @@ import java.awt.geom.Rectangle2D;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.prefs.Preferences;
 
 /**
@@ -62,8 +64,9 @@ public class TemplatePanel extends JPanel {
         if (instance != null && message != null) instance.searchStatus.setStatus(message, StatusLabel.Kind.SUCCESS);
     }
 
-    /** The constraints of the store changed (deleted, switched, solved): the instance states follow. */
+    /** The constraints of the store changed (deleted, switched, solved): the instance states and match checks follow. */
     public static void constraintsChanged() {
+        TemplateWorkbench.storeChanged();
         if (instance != null) instance.instanceList.repaint();
     }
 
@@ -226,6 +229,14 @@ public class TemplatePanel extends JPanel {
         library.reload();
         libraryModel.clear();
         for (TemplateLibrary.Entry e : library.entries()) libraryModel.addElement(new Item(e.template, e.file, e.error, false));
+        Set<String> examples = new HashSet<>();
+        for (TemplateDef t : TemplateExamples.all()) examples.add(t.id);
+        // saved elsewhere than the library folder (or no folder chosen): listed while the session lasts
+        for (TemplateDef t : library.templates()) {
+            if (library.find(t.id) == null && !examples.contains(t.id) && library.latest(t.id) == t) {
+                libraryModel.addElement(new Item(t, null, null, false));
+            }
+        }
         for (TemplateDef t : TemplateExamples.all()) libraryModel.addElement(new Item(t, null, null, true));
         int idx = 0;
         for (int i = 0; i < libraryModel.size(); i++) {
@@ -340,8 +351,9 @@ public class TemplatePanel extends JPanel {
 
     /** The editor saved a template: list it and select it. */
     void saved(TemplateDef t) {
+        library.reload();
+        if (library.find(t.id) == null) library.addInMemory(t);   // saved outside the folder
         reloadLibrary(t.id);
-        if (library.find(t.id) == null) library.addInMemory(t);
     }
 
     // ================================================================== search
@@ -418,7 +430,15 @@ public class TemplatePanel extends JPanel {
         SearchRun r = TemplateWorkbench.get().run(g);
         if (r == null) return;
         int more = r.options.maxMatches * 2;
-        String why = TemplateWorkbench.get().search(r.tasks, r.options.semantics, r.options.exact, TemplateWorkbench.get().lastWithinSelection, more);
+        List<Node> scope = r.snapshot.scope();   // the same nodes as the run it extends
+        if (scope != null) {
+            scope.removeIf(n -> !g.containsNode(n));
+            if (scope.isEmpty()) {
+                searchStatus.setStatus("The nodes searched among are deleted; search again.", StatusLabel.Kind.ERROR);
+                return;
+            }
+        }
+        String why = TemplateWorkbench.get().search(r.tasks, r.options.semantics, r.options.exact, scope, more);
         if (why != null) searchStatus.setStatus(why, StatusLabel.Kind.ERROR);
     }
 
@@ -820,6 +840,7 @@ public class TemplatePanel extends JPanel {
                 if (it.template.isComposite()) b.add("Composite · " + it.template.components.size() + " parts");
                 if (it.file != null && TemplateFiles.isGmlFile(it.file)) b.add("GML · no constraints yet");
                 else if (!it.example) b.add("rev. " + it.template.revision);
+                if (!it.example && it.file == null) b.add("not in the library folder");
                 if (it.template.isComposite() && library != null && !library.updatesFor(it.template).isEmpty()) b.add("update available");
             }
             badges.setText(String.join(" · ", b));

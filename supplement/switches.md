@@ -169,7 +169,7 @@ Every tuning decision of the layouts is a switch: the default is the current beh
 | `mentalmap.seedRadius` | `1.5` | MentalMapLayout | -Dmentalmap.seedRadius (default 1.5; 0 = unbounded free-spot search): reach of the seed search beyond the padded boundary of an inserted node's placed neighbours, in ideal edge lengths; it also bounds how far from its neighbours' cluster an inserted node may start and still join it. |
 | `mentalmap.stableExtent` | `true` | MentalMapLayout | -Dmentalmap.stableExtent=true\|false (default true): true keeps the drawing's area per node over chained steps (reduced order gaps, anchors, seeded inserted nodes, merged clusters, an unchanged graph only projected, drift removal); false keeps the full reference gaps and runs the unanchored layout without these. |
 
-## Templates (9)
+## Templates (10)
 
 | Switch | Default | Class | What it does |
 |---|---|---|---|
@@ -180,6 +180,7 @@ Every tuning decision of the layouts is a switch: the default is the current beh
 | `cblayout.templates.maxMatches` | `1000` | TemplateLimits | -Dcblayout.templates.maxMatches=n (default 1000): distinct matches (node sets) one search run collects. |
 | `cblayout.templates.maxParts` | `20000` | TemplateLimits | -Dcblayout.templates.maxParts=n (default 20000): occurrences of a component a composite search combines. |
 | `cblayout.templates.maxShown` | `200` | TemplateLimits | -Dcblayout.templates.maxShown=n (default 200): matches drawn and listed at the same time. |
+| `cblayout.templates.maxSteps` | `20000000` | TemplateLimits | -Dcblayout.templates.maxSteps=n (default 20000000): partial assignments (candidate tests) one run tries. |
 | `cblayout.templates.maxVariants` | `12` | TemplateLimits | -Dcblayout.templates.maxVariants=n (default 12): assignments with different constraints kept per match. |
 | `cblayout.templates.metrics` | `(unset)` | TemplateMetrics | -Dcblayout.templates.metrics=path.csv (default unset: nothing recorded): appends every record to that file. |
 

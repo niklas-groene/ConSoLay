@@ -179,6 +179,11 @@ Looked in:
             <arg value="layout.sbgn.ERAlignmentPlanTest"/>
             <arg value="layout.sbgn.SbgnPortSyncTest"/>
             <arg value="layout.template.io.TemplateExamplesTest"/>
+            <arg value="layout.template.io.TemplateFormatTest"/>
+            <arg value="layout.template.search.SearchRunTest"/>
+            <arg value="layout.template.apply.InstanceEditTest"/>
+            <arg value="gui.template.TemplateEditorTest"/>
+            <arg value="gui.template.TemplateWorkbenchTest"/>
             <arg value="layout.sbgn.SbgnUserTypesTest"/>
             <arg value="adaptagrams_bridge.DragSolveTest"/>
             <arg value="layout.store.StoreRoundTripTest"/>

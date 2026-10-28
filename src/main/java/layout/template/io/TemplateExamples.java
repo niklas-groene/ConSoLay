@@ -228,20 +228,30 @@ public final class TemplateExamples {
 
     /**
      * Two series of reactions, the second starting where the first ends, the second below the first: the pathway runs
-     * top-down. A composite of two uses of "Two reactions in series" joined by a shared node and a COLUMN relation.
+     * top-down. A composite of two uses of "Two reactions in series" joined by a shared node and a COLUMN relation. The
+     * shared node ends the upper row, so the lower series is laid out by the composite itself: a row of its other nodes
+     * that starts straight below the shared node (its own rows would hold it on the line of the shared node).
      */
     static TemplateDef pathwayChain(TemplateDef series, TemplateDef reaction) {
-        TemplateDef t = base("pathway-chain", "Pathway chain", "Four reactions in a row: two series of two reactions, "
-                + "the product of the upper series is the substrate of the lower one (a shared node); the lower series "
-                + "lies below the upper one, so the pathway runs from top to bottom.");
+        TemplateDef t = base("pathway-chain", "Pathway chain", "Four reactions: two series of two reactions, the product "
+                + "of the upper series is the substrate of the lower one (a shared node). The upper series is a row; the "
+                + "lower series is a row below it that starts under the shared node, so the pathway runs from top to "
+                + "bottom.");
+        t.revision = 2;
         t.kind = TemplateDef.Kind.COMPOSITE;
         component(t, "c1", "Upper", series, 40, 40);
         component(t, "c2", "Lower", series, 40, 200);
+        t.component("c2").includeConstraints = false;
         StructureLink l = new StructureLink("l1", "c1", "p2", "c2", "p1");   // the Output of the upper series is the Input of the lower one
         l.type = StructureLink.Type.SAME_NODE;
         t.links.add(l);
         passPort(t, "p1", "Input", "c1", "p1");
         passPort(t, "p2", "Output", "c2", "p2");
+        // the lower series' processes and products (c2/c1 its upstream reaction, c2/c2 its downstream one)
+        spec(t, ConstraintKind.ROW, "Lower row").role("ordered", Arrays.asList("c2/c1/n2", "c2/c1/n3", "c2/c2/n2",
+                "c2/c2/n3")).param("gap", 80.0).param("even", false);
+        spec(t, ConstraintKind.ALIGN_CENTER, "Turn down").role("nodes", Arrays.asList("c1/c2/n3", "c2/c1/n2"))
+                .param("axis", "x").param("anchor", "centre");
         LayoutRelation column = new LayoutRelation("r1", LayoutRelation.Type.COLUMN);
         column.components.add("c1");
         column.components.add("c2");

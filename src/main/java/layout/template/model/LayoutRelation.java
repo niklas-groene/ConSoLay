@@ -60,6 +60,23 @@ public final class LayoutRelation {
         }
     }
 
+    /** One dividing line of a relation between components (see {@link Templates#divides}). */
+    public static final class Divide {
+        /** Names the line in its relation: "0", "1", … in order; in a grid "c0", … (columns) and "r0", … (rows). */
+        public final String key;
+        /** True: a vertical line (before = left of it), false: a horizontal one (before = above it). */
+        public final boolean vertical;
+        /** Qualified node ids on either side. */
+        public final List<String> before, after;
+
+        Divide(String key, boolean vertical, List<String> before, List<String> after) {
+            this.key = key;
+            this.vertical = vertical;
+            this.before = before;
+            this.after = after;
+        }
+    }
+
     public String id;
     public Type type = Type.LEFT_OF;
     /** The components in order (types on components). */

@@ -118,6 +118,14 @@ public final class GraphSnapshot {
         return allowed == null || allowed[node];
     }
 
+    /** The nodes a search may use, as given to {@link #capture} (null: the whole graph). */
+    public List<Node> scope() {
+        if (allowed == null) return null;
+        List<Node> l = new ArrayList<>();
+        for (int i = 0; i < nodes.length; i++) if (allowed[i]) l.add(nodes[i]);
+        return l;
+    }
+
     /** The value of {@code path} at node {@code i} ("" if none; label and SBGN role always known). */
     public String nodeValue(String path, int i) {
         if (Condition.LABEL.equals(path)) return labels[i];

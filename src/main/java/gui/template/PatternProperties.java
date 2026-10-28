@@ -1,6 +1,7 @@
 package gui.template;
 
 import constraints.Constraint;
+import constraints.ConstraintKind;
 import constraints.Priority;
 import constraints.spec.ConstraintSpec;
 import constraints.spec.ConstraintSpecs;
@@ -46,6 +47,9 @@ final class PatternProperties extends JPanel {
     private String shownKey = "";
     /** Set while this panel changes the model, so the rebuild does not replace the control being used. */
     private boolean selfChange;
+    /** The role list entry ("constraint|role", index) to select again after the next rebuild, or null. */
+    private String keepRoleKey;
+    private int keepRoleIndex = -1;
 
     PatternProperties(EditorModel model) {
         super(new BorderLayout());
@@ -59,12 +63,16 @@ final class PatternProperties extends JPanel {
 
     /** Rebuilds when the selection or the structure changed (not for the panel's own value edits). */
     void refresh() {
+        ConstraintSpec s = model.selConstraint == null ? null : model.def().constraint(model.selConstraint);
         String key = model.selConstraint + "|" + model.selNodes + "|" + model.selEdges + "|" + model.def().nodes.size() + "|"
-                + model.def().constraints.size() + "|" + model.def().ports.size() + "|" + model.canUndo() + model.undoName();
-        if (selfChange && key.equals(shownKey)) return;
+                + model.def().constraints.size() + "|" + model.def().ports.size() + "|" + model.canUndo() + model.undoName()
+                + "|" + (s == null ? "" : s.roles);
+        if (selfChange && key.equals(shownKey)) {
+            keepRoleKey = null;
+            return;
+        }
         shownKey = key;
         column.clearRows();
-        ConstraintSpec s = model.selConstraint == null ? null : model.def().constraint(model.selConstraint);
         if (s != null) column.addRow(constraintSection(s));
         if (model.selNodes.size() == 1) {
             column.addRow(nodeSection(model.def().node(model.selNodes.iterator().next())), sectionGap());
@@ -75,6 +83,7 @@ final class PatternProperties extends JPanel {
         column.addRow(templateSection(), sectionGap());
         column.revalidate();
         column.repaint();
+        keepRoleKey = null;
     }
 
     private int sectionGap() {
@@ -178,6 +187,8 @@ final class PatternProperties extends JPanel {
         list.setFixedCellWidth(1);
         list.setFixedCellHeight(ROW_H);
         list.getAccessibleContext().setAccessibleName(r.label);
+        String roleKey = s.id + "|" + r.name;
+        if (roleKey.equals(keepRoleKey) && keepRoleIndex < m.size()) list.setSelectedIndex(keepRoleIndex);
         list.setCellRenderer((jl, id, i, sel, f) -> {
             String text;
             if (id == null) text = "(empty cell)";
@@ -196,11 +207,14 @@ final class PatternProperties extends JPanel {
             return c;
         });
         list.addListSelectionListener(e -> {
+            if (e.getValueIsAdjusting()) return;
             String id = list.getSelectedValue();
             if (id != null && !r.edges && model.def().node(id) != null) {
                 model.selNodes.clear();
                 model.selNodes.add(id);
-                // The constraint stays selected; the node is only highlighted.
+                // The constraint stays selected; the node is only highlighted, and the new list keeps this entry.
+                keepRoleKey = roleKey;
+                keepRoleIndex = list.getSelectedIndex();
                 shownKey = "";
                 selfChange = true;
                 model.fire();
@@ -223,12 +237,17 @@ final class PatternProperties extends JPanel {
                 }));
         JButton remove = Ui.button("−", "Removes the chosen element from this constraint.", e -> {
             int i = list.getSelectedIndex();
-            if (i < 0) return;
+            ConstraintSpec k0 = model.def().constraint(s.id);
+            if (i < 0 || k0 == null || i >= k0.role(r.name).size()) return;
             edit("Remove element", () -> {
                 ConstraintSpec k = model.def().constraint(s.id);
-                List<String> cur = new ArrayList<>(k.role(r.name));
-                cur.remove(i);
-                k.role(r.name, cur);
+                if (k.kind() == ConstraintKind.STAR && "ring".equals(r.name)) {
+                    EditorModel.removeRingNode(k, i);
+                } else {
+                    List<String> cur = new ArrayList<>(k.role(r.name));
+                    cur.remove(i);
+                    k.role(r.name, cur);
+                }
                 ConstraintSpecs.fillDerived(k, model.geometry());
             });
         });
@@ -241,9 +260,13 @@ final class PatternProperties extends JPanel {
     }
 
     private void move(ConstraintSpec s, ConstraintSpecs.RoleInfo r, int i, int d) {
-        List<String> cur = new ArrayList<>(s.role(r.name));
+        ConstraintSpec now = model.def().constraint(s.id);
+        if (now == null) return;
+        List<String> cur = new ArrayList<>(now.role(r.name));
         int j = i + d;
-        if (i < 0 || j < 0 || j >= cur.size()) return;
+        if (i < 0 || i >= cur.size() || j < 0 || j >= cur.size()) return;
+        keepRoleKey = s.id + "|" + r.name;
+        keepRoleIndex = j;
         edit("Reorder elements", () -> {
             ConstraintSpec k = model.def().constraint(s.id);
             List<String> l = new ArrayList<>(k.role(r.name));
@@ -269,7 +292,7 @@ final class PatternProperties extends JPanel {
                 c -> edit("Change role condition", () -> {
                     PatternNode k = model.def().node(n.id);
                     k.setCondition(c);
-                    if (c.op == Condition.Op.EQUALS) k.role = c.values.get(0);
+                    if (c.op == Condition.Op.EQUALS && !c.values.isEmpty()) k.role = c.values.get(0);
                 })), Ui.GAP_S);
         for (Condition c : n.conditions) {
             if (Condition.SBGN_ROLE.equals(c.attribute)) continue;
@@ -283,7 +306,7 @@ final class PatternProperties extends JPanel {
             edit("Add condition", () -> model.def().node(n.id).setCondition(new Condition(path.trim(), Condition.Op.EXISTS, null)));
         });
         sec.addRow(addCond, Ui.GAP_XS);
-        JSpinner w = new JSpinner(new SpinnerNumberModel(n.width, 1, 5000, 5)), h = new JSpinner(new SpinnerNumberModel(n.height, 1, 5000, 5));
+        JSpinner w = new JSpinner(sizeModel(n.width)), h = new JSpinner(sizeModel(n.height));
         w.addChangeListener(e -> edit("Resize node", () -> model.def().node(n.id).width = ((Number) w.getValue()).doubleValue()));
         h.addChangeListener(e -> edit("Resize node", () -> model.def().node(n.id).height = ((Number) h.getValue()).doubleValue()));
         sec.addRow(Ui.labeled("Size", Ui.row(w, h)), Ui.GAP_S);
@@ -338,6 +361,11 @@ final class PatternProperties extends JPanel {
         return sec;
     }
 
+    /** 1 to 5000 px, widened to a size outside (from a graph node or a file), so the spinner can show it. */
+    private static SpinnerNumberModel sizeModel(double v) {
+        return new SpinnerNumberModel(v, Math.min(1, v), Math.max(5000, v), 5);
+    }
+
     private static String suggestPortName(PatternNode n) {
         return n.label != null && !n.label.trim().isEmpty() ? n.label.trim() : "Port";
     }
@@ -374,7 +402,7 @@ final class PatternProperties extends JPanel {
                 c -> edit("Change edge role", () -> {
                     PatternEdge k = model.def().edge(e.id);
                     k.setCondition(c);
-                    if (c.op == Condition.Op.EQUALS) k.role = c.values.get(0);
+                    if (c.op == Condition.Op.EQUALS && !c.values.isEmpty()) k.role = c.values.get(0);
                 })), Ui.GAP_S);
         JButton del = Ui.button("Delete edge", null, ev -> model.change("Delete edge",
                 () -> model.deleteElements(Collections.emptyList(), Collections.singleton(e.id))));

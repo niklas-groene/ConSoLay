@@ -19,6 +19,8 @@ public final class TemplateLimits {
     public static int maxApplyPerStep = intProperty("maxApply", 100);
     /** -Dcblayout.templates.maxAssignments=n (default 200000): complete assignments one run examines. */
     public static int maxAssignments = intProperty("maxAssignments", 200_000);
+    /** -Dcblayout.templates.maxSteps=n (default 20000000): partial assignments (candidate tests) one run tries. */
+    public static int maxSteps = intProperty("maxSteps", 20_000_000);
     /** -Dcblayout.templates.maxVariants=n (default 12): assignments with different constraints kept per match. */
     public static int maxVariants = intProperty("maxVariants", 12);
     /** -Dcblayout.templates.maxParts=n (default 20000): occurrences of a component a composite search combines. */

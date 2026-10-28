@@ -30,6 +30,7 @@ final class PatternMatcher {
     private final boolean semantics;
     private final boolean exact;
     private final AtomicBoolean cancel;
+    private final Enumerator.Budget budget;
 
     private int[] order;
     private int[] parent;
@@ -41,18 +42,20 @@ final class PatternMatcher {
     private long steps;
     private boolean stopped;
 
-    PatternMatcher(CompiledPattern p, GraphSnapshot g, boolean semantics, boolean exact, AtomicBoolean cancel) {
+    PatternMatcher(CompiledPattern p, GraphSnapshot g, boolean semantics, boolean exact, AtomicBoolean cancel,
+                   Enumerator.Budget budget) {
         this.p = p;
         this.g = g;
         this.semantics = semantics;
         this.exact = exact;
         this.cancel = cancel;
+        this.budget = budget;
         this.map = new int[p.nodeCount()];
         this.used = new boolean[g.nodeCount()];
         this.stamp = new int[g.nodeCount()];
     }
 
-    /** Runs the search; returns false if it was stopped (by the sink or by cancelling). */
+    /** Runs the search; returns false if it was stopped (by the sink, by cancelling or because the budget is spent). */
     boolean run(Sink sink) {
         int n = p.nodeCount();
         if (n == 0 || g.nodeCount() == 0) return true;
@@ -132,7 +135,12 @@ final class PatternMatcher {
         int u = order[k];
         if (parent[k] < 0) {
             for (int v : candidates[u]) {
-                if (used[v] || !consistent(u, v)) continue;
+                if (used[v]) continue;
+                if (!budget.take()) {
+                    stopped = true;
+                    return;
+                }
+                if (!consistent(u, v)) continue;
                 place(u, v);
                 search(k + 1, sink);
                 unplace(u, v);
@@ -150,7 +158,12 @@ final class PatternMatcher {
             local.add(v);
         }
         for (int v : local) {
-            if (used[v] || !contains(candidates[u], v) || !consistent(u, v)) continue;
+            if (used[v] || !contains(candidates[u], v)) continue;
+            if (!budget.take()) {
+                stopped = true;
+                return;
+            }
+            if (!consistent(u, v)) continue;
             place(u, v);
             search(k + 1, sink);
             unplace(u, v);

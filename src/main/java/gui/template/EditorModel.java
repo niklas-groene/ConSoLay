@@ -3,6 +3,7 @@ package gui.template;
 import adaptagrams_bridge.CBLayoutAlgorithm;
 import constraints.Constraint;
 import constraints.ConstraintCheck;
+import constraints.ConstraintKind;
 import constraints.spec.ConstraintSpec;
 import constraints.spec.ConstraintSpecs;
 import layout.template.io.TemplateLibrary;
@@ -72,7 +73,19 @@ final class EditorModel {
     EditorModel(TemplateDef def, TemplateLibrary library) {
         this.def = def;
         this.library = library;
+        reserveKnownIds();
         rebuild();
+    }
+
+    /** Keeps the local ids of every known revision of the template from being handed out again (see lastIds). */
+    private void reserveKnownIds() {
+        def.reserveIdsOf(def);
+        for (TemplateDef d : def.dependencies.values()) if (def.id != null && def.id.equals(d.id)) def.reserveIdsOf(d);
+        if (library == null || def.id == null) return;
+        for (TemplateDef t : library.templates()) {
+            if (def.id.equals(t.id)) def.reserveIdsOf(t);
+            for (TemplateDef d : t.dependencies.values()) if (def.id.equals(d.id)) def.reserveIdsOf(d);
+        }
     }
 
     TemplateDef def() {
@@ -136,18 +149,33 @@ final class EditorModel {
 
     void undo() {
         if (undo.isEmpty()) return;
+        TemplateDef now = def;
         redo.push(def.copy());
         redoNames.push(undoNames.pop());
         def = undo.pop();
+        keepIdentity(now);
         afterJump();
     }
 
     void redo() {
         if (redo.isEmpty()) return;
+        TemplateDef now = def;
         undo.push(def.copy());
         undoNames.push(redoNames.pop());
         def = redo.pop();
+        keepIdentity(now);
         afterJump();
+    }
+
+    /**
+     * Undo and redo change the content only: the identity (id, revision, how it was made; set by saving) stays that of
+     * {@code now}, and no id handed out before becomes free again. So a save after an undo makes the next revision.
+     */
+    private void keepIdentity(TemplateDef now) {
+        def.id = now.id;
+        def.revision = now.revision;
+        def.source = now.source;
+        def.reserveIdsOf(now);
     }
 
     private void afterJump() {
@@ -327,8 +355,7 @@ final class EditorModel {
             for (String r : new ArrayList<>(s.refs())) {
                 if (!names.containsKey(r)) continue;
                 removed.add(names.get(r));
-                for (List<String> l : s.roles.values()) l.removeIf(r::equals);
-                for (Object v : s.params.values()) if (v instanceof Map) ((Map<?, ?>) v).remove(r);
+                removeRef(s, r);
             }
             if (removed.isEmpty()) continue;
             List<String> v = ConstraintSpecs.validate(s, nodeIdList, edgeIdList);
@@ -342,6 +369,38 @@ final class EditorModel {
         for (String n : notes.values()) if (n.startsWith("Invalid")) invalid++; else updated++;
         message = (gone.size() + goneEdges.size()) + " elements deleted" + (updated > 0 ? "; " + updated + " constraints updated" : "")
                 + (invalid > 0 ? "; " + invalid + " constraints are invalid now (see the list)" : "") + ".";
+    }
+
+    /**
+     * Takes the element {@code id} out of {@code s} as the constraint objects do when a node goes: a grid keeps its
+     * cell (empty), a star's angles follow their ring nodes, every other role closes up.
+     */
+    static void removeRef(ConstraintSpec s, String id) {
+        for (Map.Entry<String, List<String>> e : s.roles.entrySet()) {
+            List<String> l = e.getValue();
+            if (s.kind() == ConstraintKind.GRID && "cells".equals(e.getKey())) {
+                l.replaceAll(x -> id.equals(x) ? null : x);
+            } else if (s.kind() == ConstraintKind.STAR && "ring".equals(e.getKey())) {
+                for (int i = l.indexOf(id); i >= 0; i = l.indexOf(id)) removeRingNode(s, i);
+            } else {
+                l.removeIf(id::equals);
+            }
+        }
+        for (Object v : s.params.values()) if (v instanceof Map) ((Map<?, ?>) v).remove(id);
+    }
+
+    /** Removes the {@code i}-th node of a star's ring together with its angle. */
+    static void removeRingNode(ConstraintSpec s, int i) {
+        List<String> ring = s.roles.get("ring");
+        if (ring == null || i < 0 || i >= ring.size()) return;
+        ring.remove(i);
+        Object a = s.params.get("angles");
+        if (a instanceof double[] && i < ((double[]) a).length) {
+            double[] d = (double[]) a, rest = new double[d.length - 1];
+            System.arraycopy(d, 0, rest, 0, i);
+            System.arraycopy(d, i + 1, rest, i, d.length - i - 1);
+            s.params.put("angles", rest);
+        }
     }
 
     /** Ports of the pattern that name a node of {@code ids}. */

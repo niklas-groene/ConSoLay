@@ -68,6 +68,8 @@ final class PatternCanvas extends JComponent {
     private Point connectTo;
     private final Timer dragSolve;
     private Point pendingDrag;
+    /** Hides the ghost of a held node a moment after the drag; stopped when the next gesture starts. */
+    private Timer ghostTimer;
 
     PatternCanvas(EditorModel model) {
         this.model = model;
@@ -417,6 +419,7 @@ final class PatternCanvas extends JComponent {
 
     private final class Mouse extends MouseAdapter {
         @Override public void mousePressed(MouseEvent e) {
+            if (ghostTimer != null) ghostTimer.stop();
             requestFocusInWindow();
             press = e.getPoint();
             last = e.getPoint();
@@ -546,14 +549,15 @@ final class PatternCanvas extends JComponent {
             connectTo = null;
             if (ghost != null) {
                 // keep the ghost visible a moment so the user sees what held the node
-                Timer t = new Timer(1200, ev -> {
+                if (ghostTimer != null) ghostTimer.stop();
+                ghostTimer = new Timer(1200, ev -> {
                     ghost = null;
                     heldText = null;
                     pressNode = null;
                     repaint();
                 });
-                t.setRepeats(false);
-                t.start();
+                ghostTimer.setRepeats(false);
+                ghostTimer.start();
             } else {
                 pressNode = null;
             }

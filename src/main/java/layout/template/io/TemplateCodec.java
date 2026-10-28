@@ -49,7 +49,7 @@ public final class TemplateCodec {
 
     private static final Set<String> TEMPLATE_FIELDS = new HashSet<>(Arrays.asList("format", "formatVersion", "id", "revision",
             "name", "description", "kind", "source", "note", "importedWithoutConstraints", "coordinates", "nodes", "edges",
-            "ports", "constraints", "components", "links", "relations", "dependencies"));
+            "ports", "constraints", "components", "links", "relations", "dependencies", "lastIds"));
 
     public static Map<String, Object> toJson(TemplateDef t) {
         Map<String, Object> m = new LinkedHashMap<>();
@@ -155,6 +155,11 @@ public final class TemplateCodec {
             List<Object> deps = new ArrayList<>();
             for (TemplateDef d : t.dependencies.values()) deps.add(toJson(d));
             m.put("dependencies", deps);
+        }
+        if (!t.lastIds.isEmpty()) {
+            Map<String, Object> ids = new LinkedHashMap<>();
+            for (Map.Entry<String, Integer> e : t.lastIds.entrySet()) ids.put(e.getKey(), (double) e.getValue());
+            m.put("lastIds", ids);
         }
         putUnknown(m, t.unknownFields);
         return m;
@@ -338,38 +343,62 @@ public final class TemplateCodec {
             TemplateDef d = fromJson(o);
             t.dependencies.put(d.id + "@" + d.revision, d);
         }
+        if (m.get("lastIds") instanceof Map) {
+            for (Map.Entry<?, ?> e : ((Map<?, ?>) m.get("lastIds")).entrySet()) {
+                Object n = e.getValue();
+                if (n instanceof Double) t.lastIds.put(String.valueOf(e.getKey()), ((Double) n).intValue());
+            }
+        }
         keepUnknown(m, TEMPLATE_FIELDS, t.unknownFields);
         return t;
     }
 
-    /** One constraint definition; a type this version does not know keeps its JSON text. */
+    /**
+     * One constraint definition; a type this version does not know keeps its JSON text and is read leniently: what does
+     * not fit this version's value forms is left out here (the text keeps it), the element ids are still known.
+     */
     public static ConstraintSpec constraint(Object o) throws FormatException {
         Map<String, Object> c = object(o, "A constraint");
         ConstraintSpec s = new ConstraintSpec();
         s.id = req(c, "id", "A constraint");
         s.type = req(c, "type", "Constraint " + s.id);
+        boolean known = ConstraintSpecs.isKnown(s.type);
+        if (!known) s.raw = Json.write(c);
         s.name = str(c, "name", null);
-        s.priority = priority(c.get("priority"), Priority.NORMAL);
+        try {
+            s.priority = priority(c.get("priority"), Priority.NORMAL);
+        } catch (FormatException e) {
+            if (known) throw e;
+        }
         s.enabled = bool(c, "enabled", true);
         Object roles = c.get("roles");
-        if (roles != null) {
+        if (roles != null && (known || roles instanceof Map)) {
             for (Map.Entry<String, Object> e : object(roles, "Constraint " + s.id + " roles").entrySet()) {
                 List<String> ids = new ArrayList<>();
-                if (!(e.getValue() instanceof List)) throw new FormatException("Constraint " + s.id + ": role \"" + e.getKey() + "\" must be a list.");
+                if (!(e.getValue() instanceof List)) {
+                    if (!known) continue;
+                    throw new FormatException("Constraint " + s.id + ": role \"" + e.getKey() + "\" must be a list.");
+                }
                 for (Object id : (List<?>) e.getValue()) {
-                    if (id != null && !(id instanceof String)) throw new FormatException("Constraint " + s.id + ": role \"" + e.getKey() + "\" must list ids.");
+                    if (id != null && !(id instanceof String)) {
+                        if (!known) continue;
+                        throw new FormatException("Constraint " + s.id + ": role \"" + e.getKey() + "\" must list ids.");
+                    }
                     ids.add((String) id);
                 }
                 s.roles.put(e.getKey(), ids);
             }
         }
         Object params = c.get("params");
-        if (params != null) {
+        if (params != null && (known || params instanceof Map)) {
             for (Map.Entry<String, Object> e : object(params, "Constraint " + s.id + " params").entrySet()) {
-                s.params.put(e.getKey(), param(e.getValue(), s.id, e.getKey()));
+                try {
+                    s.params.put(e.getKey(), param(e.getValue(), s.id, e.getKey()));
+                } catch (FormatException ex) {
+                    if (known) throw ex;
+                }
             }
         }
-        if (!ConstraintSpecs.isKnown(s.type)) s.raw = Json.write(c);
         return s;
     }
 

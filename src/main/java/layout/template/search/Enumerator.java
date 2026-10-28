@@ -38,20 +38,51 @@ final class Enumerator {
     private final boolean semantics;
     private final boolean exact;
     private final AtomicBoolean cancel;
+    private final Budget budget;
     /** Notes for the user (components cut off at the limit, …). */
     final List<String> notes = new ArrayList<>();
     /** Occurrences per template (id@revision), shared by uses of the same template. */
     private final Map<String, List<FlatMapping>> partCache = new HashMap<>();
     long assignments;
+    /** The occurrences of a component could not all be collected (cancelled, or the budget is spent). */
+    private boolean interrupted;
+
+    /** Candidate tests (partial assignments tried) that enumerations may make together; shared by the tasks of a run. */
+    static final class Budget {
+        private final long limit;
+        private long used;
+
+        Budget(long limit) {
+            this.limit = limit;
+        }
+
+        /** Counts one candidate test; false once the budget is spent. */
+        boolean take() {
+            return ++used <= limit;
+        }
+
+        boolean spent() {
+            return used > limit;
+        }
+
+        long used() {
+            return Math.min(used, limit);
+        }
+    }
 
     Enumerator(GraphSnapshot g, boolean semantics, boolean exact, AtomicBoolean cancel) {
+        this(g, semantics, exact, cancel, new Budget(Long.MAX_VALUE));
+    }
+
+    Enumerator(GraphSnapshot g, boolean semantics, boolean exact, AtomicBoolean cancel, Budget budget) {
         this.g = g;
         this.semantics = semantics;
         this.exact = exact;
         this.cancel = cancel;
+        this.budget = budget;
     }
 
-    /** Runs through every assignment of {@code t}; returns false if stopped (by the sink or cancelled). */
+    /** Runs through every assignment of {@code t}; returns false if stopped (by the sink, cancelled or out of budget). */
     boolean enumerate(TemplateDef t, TemplateSource source, Sink sink) {
         return enumerate(t, source, sink, 0);
     }
@@ -64,7 +95,7 @@ final class Enumerator {
 
     private boolean enumeratePattern(TemplateDef t, Sink sink) {
         CompiledPattern cp = new CompiledPattern(t);
-        PatternMatcher pm = new PatternMatcher(cp, g, semantics, exact, cancel);
+        PatternMatcher pm = new PatternMatcher(cp, g, semantics, exact, cancel, budget);
         Map<String, Integer> portIndex = new LinkedHashMap<>();
         Map<String, Integer> nodeIndex = new HashMap<>();
         for (int i = 0; i < cp.nodeIds.length; i++) nodeIndex.put(cp.nodeIds[i], i);
@@ -87,7 +118,7 @@ final class Enumerator {
         List<FlatMapping> l = new ArrayList<>();
         int limit = TemplateLimits.maxPartsPerComponent;
         boolean[] cut = {false};
-        enumerate(t, source, m -> {
+        boolean finished = enumerate(t, source, m -> {
             if (l.size() >= limit) {
                 cut[0] = true;
                 return false;
@@ -95,6 +126,10 @@ final class Enumerator {
             l.add(m);
             return true;
         }, depth + 1);
+        if (!finished && !cut[0]) {
+            interrupted = true;   // an incomplete list must neither count as all occurrences nor be reused
+            return l;
+        }
         if (cut[0]) notes.add("'" + useName + "' (" + t.name + ") occurs more than " + limit + " times; only the first "
                 + limit + " occurrences were combined.");
         partCache.put(key, l);
@@ -128,6 +163,7 @@ final class Enumerator {
         }
 
         boolean run(Sink sink) {
+            if (interrupted) return false;
             if (comps.isEmpty() || comps.size() != t.components.size()) return true;
             for (ComponentUse c : comps) if (parts.get(c.id).isEmpty()) return true;
             planOrder();
@@ -183,6 +219,10 @@ final class Enumerator {
             }
             ComponentUse c = order[k];
             for (FlatMapping cand : candidates(k)) {
+                if (!budget.take()) {
+                    stopped = true;
+                    return;
+                }
                 if (!fits(c, cand)) continue;
                 List<String> newLinks = new ArrayList<>();
                 if (!links(c, cand, newLinks)) {
@@ -220,7 +260,7 @@ final class Enumerator {
             Set<Integer> seen = new HashSet<>();
             for (int e : g.incident[x]) {
                 int y = g.other(e, x);
-                if (!seen.add(y) || !edgeFitsLink(l, e, cIsTo ? x : y, cIsTo ? y : x)) continue;
+                if (!edgeFitsLink(l, e, cIsTo ? x : y, cIsTo ? y : x) || !seen.add(y)) continue;
                 List<FlatMapping> m = index.get(y);
                 if (m != null) l2.addAll(m);
             }

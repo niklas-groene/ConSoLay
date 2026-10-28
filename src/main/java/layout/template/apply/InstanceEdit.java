@@ -36,6 +36,8 @@ public final class InstanceEdit extends AbstractUndoableEdit {
     private final String name;
     private final Graph graph;
     private final List<TemplateInstance> added = new ArrayList<>();
+    /** Per applied instance, its constraints that were still in the store when the application was undone. */
+    private final Map<TemplateInstance, List<Constraint>> presentAtUndo = new IdentityHashMap<>();
     private final Map<TemplateInstance, List<Constraint>> removed = new LinkedHashMap<>();
     private final Map<TemplateInstance, boolean[]> onBefore = new IdentityHashMap<>(), onAfter = new IdentityHashMap<>();
     private final Map<TemplateInstance, Map<String, Boolean>> partsBefore = new IdentityHashMap<>(), partsAfter = new IdentityHashMap<>();
@@ -119,7 +121,11 @@ public final class InstanceEdit extends AbstractUndoableEdit {
         Constraints store = ConstraintStore.of(graph);   // the store of the edit's graph, whichever graph is active now
         List<Constraint> touched = new ArrayList<>();
         if (store != null) {
-            for (TemplateInstance i : added) touched.addAll(TemplateApplier.unapply(i, store));
+            for (TemplateInstance i : added) {
+                List<Constraint> present = TemplateApplier.unapply(i, store);
+                presentAtUndo.put(i, present);
+                touched.addAll(present);
+            }
             for (Map.Entry<TemplateInstance, List<Constraint>> e : removed.entrySet()) TemplateApplier.restore(e.getKey(), e.getValue(), store);
         }
         for (Map.Entry<TemplateInstance, boolean[]> e : onBefore.entrySet()) e.getKey().setOn(e.getValue()[0]);
@@ -139,7 +145,10 @@ public final class InstanceEdit extends AbstractUndoableEdit {
         super.redo();
         Constraints store = ConstraintStore.of(graph);   // the store of the edit's graph, whichever graph is active now
         if (store != null) {
-            for (TemplateInstance i : added) TemplateApplier.restore(i, i.constraints(), store);
+            // only what undo took away: constraints deleted in between stay deleted
+            for (TemplateInstance i : added) {
+                TemplateApplier.restore(i, presentAtUndo.getOrDefault(i, i.constraints()), store);
+            }
             List<Constraint> gone = new ArrayList<>();
             for (TemplateInstance i : removed.keySet()) gone.addAll(TemplateApplier.unapply(i, store));
             if (!gone.isEmpty()) ConflictLog.forget(gone);

@@ -4,6 +4,7 @@ import layout.template.model.Condition;
 import layout.template.model.PatternEdge;
 import layout.template.model.PatternNode;
 import layout.template.model.StructureLink;
+import layout.template.model.TemplateDef;
 import layout.template.model.Templates;
 
 import org.graffiti.graph.Edge;
@@ -39,7 +40,9 @@ public final class MatchValidator {
         for (PatternEdge p : Templates.flatEdges(task.template, task.source).values()) {
             for (Condition c : p.conditions) ep.add(c.attribute);
         }
-        for (StructureLink l : task.template.links) for (Condition c : l.edgeConditions) ep.add(c.attribute);
+        for (TemplateDef d : Templates.closure(task.template, task.source)) {
+            for (StructureLink l : d.links) for (Condition c : l.edgeConditions) ep.add(c.attribute);
+        }
         GraphSnapshot snap = GraphSnapshot.capture(g, m.nodes(), np, ep, 0);
         Enumerator en = new Enumerator(snap, m.run.options.semantics, m.run.options.exact, null);
         boolean[] same = {false};

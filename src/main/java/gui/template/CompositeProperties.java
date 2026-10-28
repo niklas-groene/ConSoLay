@@ -169,7 +169,10 @@ final class CompositeProperties extends JPanel {
                 JCheckBox on = new JCheckBox(TemplateEditor.title(s), s.enabled && !c.disabledConstraints.contains(s.id));
                 on.setOpaque(false);
                 on.setFont(Ui.small());
-                on.setEnabled(c.includeConstraints);
+                // a use can only switch off: a constraint that is off in the template stays off
+                on.setEnabled(c.includeConstraints && s.enabled);
+                if (!s.enabled) on.setToolTipText(Ui.tooltip("Switched off in the template itself; switch it on there "
+                        + "(Edit template…)."));
                 on.addActionListener(e -> edit("Switch component constraint", () -> {
                     ComponentUse k = model.def().component(c.id);
                     if (on.isSelected()) k.disabledConstraints.remove(s.id);
@@ -265,13 +268,19 @@ final class CompositeProperties extends JPanel {
         JComboBox<ComponentUse> cc = Ui.comboBox(t.components.toArray(new ComponentUse[0]));
         cc.setSelectedItem(t.component(comp));
         JComboBox<Object> pc = Ui.comboBox(new Object[0]);
+        boolean[] filling = {false};
         Runnable fill = () -> {
-            pc.removeAllItems();
-            ComponentUse c = (ComponentUse) cc.getSelectedItem();
-            TemplateDef inner = Templates.resolve(c, model.source());
-            if (inner != null) for (Port p : inner.ports) pc.addItem(p);
-            if (inner == null || inner.port(port) == null) {
-                if (port != null && c != null && c.id.equals(comp)) pc.addItem("(deleted port " + port + ")");
+            filling[0] = true;   // the first item added selects itself: that is no choice of the user's
+            try {
+                pc.removeAllItems();
+                ComponentUse c = (ComponentUse) cc.getSelectedItem();
+                TemplateDef inner = Templates.resolve(c, model.source());
+                if (inner != null) for (Port p : inner.ports) pc.addItem(p);
+                if (inner == null || inner.port(port) == null) {
+                    if (port != null && c != null && c.id.equals(comp)) pc.addItem("(deleted port " + port + ")");
+                }
+            } finally {
+                filling[0] = false;
             }
         };
         fill.run();
@@ -286,6 +295,7 @@ final class CompositeProperties extends JPanel {
             if (c != null && p instanceof Port) onChange.accept(c.id, ((Port) p).id);
         });
         pc.addActionListener(e -> {
+            if (filling[0]) return;
             ComponentUse c = (ComponentUse) cc.getSelectedItem();
             Object p = pc.getSelectedItem();
             if (c != null && p instanceof Port && !(c.id.equals(comp) && ((Port) p).id.equals(port))) onChange.accept(c.id, ((Port) p).id);

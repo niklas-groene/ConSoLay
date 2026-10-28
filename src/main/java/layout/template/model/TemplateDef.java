@@ -7,6 +7,7 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 
 /**
@@ -62,6 +63,11 @@ public final class TemplateDef {
 
     /** Top-level fields of a newer format this version does not know: written back as read (JSON text). */
     public final Map<String, String> unknownFields = new LinkedHashMap<>();
+    /**
+     * Per id prefix ("n", "e", "k", "p", "c", "l", "r") the highest number handed out so far, also for elements deleted
+     * since: a local id is never handed out twice, so what other templates refer to cannot bind to a new element.
+     */
+    public final Map<String, Integer> lastIds = new TreeMap<>();
 
     public TemplateDef() { }
 
@@ -149,42 +155,81 @@ public final class TemplateDef {
 
     // ---- fresh local ids
 
-    public String nextNodeId() { return next("n", nodeIds()); }
+    public String nextNodeId() { return fresh("n", nodeIds()); }
 
-    public String nextEdgeId() { return next("e", edgeIds()); }
+    public String nextEdgeId() { return fresh("e", edgeIds()); }
 
-    public String nextConstraintId() {
+    public String nextConstraintId() { return fresh("k", constraintIds()); }
+
+    public String nextPortId() { return fresh("p", portIds()); }
+
+    public String nextComponentId() { return fresh("c", componentIds()); }
+
+    public String nextLinkId() { return fresh("l", linkIds()); }
+
+    public String nextRelationId() { return fresh("r", relationIds()); }
+
+    /** Raises {@link #lastIds} over every local id of {@code t} (this template, or another revision of it). */
+    public void reserveIdsOf(TemplateDef t) {
+        reserve("n", t.nodeIds());
+        reserve("e", t.edgeIds());
+        reserve("k", t.constraintIds());
+        reserve("p", t.portIds());
+        reserve("c", t.componentIds());
+        reserve("l", t.linkIds());
+        reserve("r", t.relationIds());
+        for (Map.Entry<String, Integer> e : t.lastIds.entrySet()) lastIds.merge(e.getKey(), e.getValue(), Math::max);
+    }
+
+    private void reserve(String prefix, Collection<String> ids) {
+        int max = highest(prefix, ids);
+        if (max > 0) lastIds.merge(prefix, max, Math::max);
+    }
+
+    /** "prefix" + a number above every id of that form and every one handed out before. */
+    private String fresh(String prefix, Collection<String> ids) {
+        int n = Math.max(lastIds.getOrDefault(prefix, 0), highest(prefix, ids)) + 1;
+        lastIds.put(prefix, n);
+        return prefix + n;
+    }
+
+    private List<String> constraintIds() {
         List<String> ids = new ArrayList<>();
         for (ConstraintSpec c : constraints) ids.add(c.id);
-        return next("k", ids);
+        return ids;
     }
 
-    public String nextPortId() {
+    private List<String> portIds() {
         List<String> ids = new ArrayList<>();
         for (Port p : ports) ids.add(p.id);
-        return next("p", ids);
+        return ids;
     }
 
-    public String nextComponentId() {
+    private List<String> componentIds() {
         List<String> ids = new ArrayList<>();
         for (ComponentUse c : components) ids.add(c.id);
-        return next("c", ids);
+        return ids;
     }
 
-    public String nextLinkId() {
+    private List<String> linkIds() {
         List<String> ids = new ArrayList<>();
         for (StructureLink l : links) ids.add(l.id);
-        return next("l", ids);
+        return ids;
     }
 
-    public String nextRelationId() {
+    private List<String> relationIds() {
         List<String> ids = new ArrayList<>();
         for (LayoutRelation r : relations) ids.add(r.id);
-        return next("r", ids);
+        return ids;
     }
 
     /** "prefix" + the smallest number above every id of that form. */
     static String next(String prefix, Collection<String> ids) {
+        return prefix + (highest(prefix, ids) + 1);
+    }
+
+    /** The highest number of the ids of the form "prefix" + number (0 if there is none). */
+    private static int highest(String prefix, Collection<String> ids) {
         int max = 0;
         for (String id : ids) {
             if (id == null || !id.startsWith(prefix)) continue;
@@ -194,7 +239,7 @@ public final class TemplateDef {
                 // another naming scheme
             }
         }
-        return prefix + (max + 1);
+        return max;
     }
 
     // ---- geometry
@@ -232,6 +277,7 @@ public final class TemplateDef {
         for (LayoutRelation r : relations) t.relations.add(r.copy());
         for (Map.Entry<String, TemplateDef> e : dependencies.entrySet()) t.dependencies.put(e.getKey(), e.getValue().copy());
         t.unknownFields.putAll(unknownFields);
+        t.lastIds.putAll(lastIds);
         return t;
     }
 

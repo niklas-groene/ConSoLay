@@ -64,6 +64,8 @@ final class TemplateEditor extends JFrame {
     /** Components looked into, from the edited template down (read-only views). */
     private final List<ComponentUse> path = new ArrayList<>();
     private final List<TemplateDef> pathTemplates = new ArrayList<>();
+    /** The canvas and info panel of the read-only look inside shown now (null: none), replaced on each navigation. */
+    private JComponent viewCanvas, viewInfo;
 
     private TemplateEditor(TemplateDef def, File file, TemplateLibrary library, String bannerMessage, Consumer<TemplateDef> onSaved) {
         super("Template: " + def.name);
@@ -408,6 +410,10 @@ final class TemplateEditor extends JFrame {
 
     private void showLevel() {
         CardLayout cl = (CardLayout) centerCards.getLayout(), cr = (CardLayout) rightCards.getLayout();
+        if (viewCanvas != null) centerCards.remove(viewCanvas);
+        if (viewInfo != null) rightCards.remove(viewInfo);
+        viewCanvas = null;
+        viewInfo = null;
         if (path.isEmpty()) {
             cl.show(centerCards, "edit");
             cr.show(rightCards, "edit");
@@ -426,6 +432,7 @@ final class TemplateEditor extends JFrame {
             pc.readOnly = true;
             canvas = pc;
         }
+        viewCanvas = canvas;
         centerCards.add(canvas, "view");
         cl.show(centerCards, "view");
         JPanel info = new JPanel(new BorderLayout());
@@ -446,6 +453,7 @@ final class TemplateEditor extends JFrame {
         box.add(back);
         if (path.size() == 1) box.add(Ui.button("Edit template…", null, e -> editComponentTemplate(c)));
         info.add(box, BorderLayout.NORTH);
+        viewInfo = info;
         rightCards.add(info, "view");
         cr.show(rightCards, "view");
         refreshCrumbs();

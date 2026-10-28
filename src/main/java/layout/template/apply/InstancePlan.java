@@ -175,8 +175,8 @@ public final class InstancePlan {
     /**
      * The constraint definitions a layout relation stands for, on the qualified ids relative to {@code t}. Relations
      * between components become dividing lines between the node sets of the components (half the gap on each side of
-     * the line, so the bounding boxes end up at least the gap apart); port alignments align the centres of the port
-     * nodes.
+     * the line, so the bounding boxes end up at least the gap apart; a node the components share lies on neither side,
+     * see {@link Templates#divides}); port alignments align the centres of the port nodes.
      */
     public static List<ConstraintSpec> relationSpecs(TemplateDef t, LayoutRelation r, TemplateSource source) {
         List<ConstraintSpec> l = new ArrayList<>();
@@ -184,41 +184,14 @@ public final class InstancePlan {
         switch (r.type) {
             case LEFT_OF:
             case ROW:
-                for (int i = 0; i + 1 < r.components.size(); i++) {
-                    l.add(divide(id + "-" + i, ConstraintKind.DIVIDE_X, nodes(t, r.components.get(i), source),
-                            nodes(t, r.components.get(i + 1), source), r));
-                }
-                break;
             case ABOVE:
             case COLUMN:
-                for (int i = 0; i + 1 < r.components.size(); i++) {
-                    l.add(divide(id + "-" + i, ConstraintKind.DIVIDE_Y, nodes(t, r.components.get(i), source),
-                            nodes(t, r.components.get(i + 1), source), r));
+            case GRID:
+                for (LayoutRelation.Divide d : Templates.divides(t, r, source)) {
+                    ConstraintKind kind = d.vertical ? ConstraintKind.DIVIDE_X : ConstraintKind.DIVIDE_Y;
+                    l.add(divide(id + "-" + d.key, kind, d.before, d.after, r));
                 }
                 break;
-            case GRID: {
-                int cols = Math.max(1, r.columns), n = r.components.size();
-                int rows = (n + cols - 1) / cols;
-                for (int c = 0; c + 1 < cols; c++) {
-                    List<String> left = new ArrayList<>(), right = new ArrayList<>();
-                    for (int row = 0; row < rows; row++) {
-                        int a = row * cols + c, b = row * cols + c + 1;
-                        if (a < n) left.addAll(nodes(t, r.components.get(a), source));
-                        if (b < n) right.addAll(nodes(t, r.components.get(b), source));
-                    }
-                    if (!left.isEmpty() && !right.isEmpty()) l.add(divide(id + "-c" + c, ConstraintKind.DIVIDE_X, left, right, r));
-                }
-                for (int row = 0; row + 1 < rows; row++) {
-                    List<String> top = new ArrayList<>(), bottom = new ArrayList<>();
-                    for (int c = 0; c < cols; c++) {
-                        int a = row * cols + c, b = (row + 1) * cols + c;
-                        if (a < n) top.addAll(nodes(t, r.components.get(a), source));
-                        if (b < n) bottom.addAll(nodes(t, r.components.get(b), source));
-                    }
-                    if (!top.isEmpty() && !bottom.isEmpty()) l.add(divide(id + "-r" + row, ConstraintKind.DIVIDE_Y, top, bottom, r));
-                }
-                break;
-            }
             case ALIGN_PORTS_H:
             case ALIGN_PORTS_V: {
                 List<String> ns = new ArrayList<>();
@@ -249,10 +222,6 @@ public final class InstancePlan {
         s.priority = r.priority;
         s.enabled = r.enabled;
         return s;
-    }
-
-    private static List<String> nodes(TemplateDef t, String component, TemplateSource source) {
-        return Templates.componentNodes(t, component, source);
     }
 
     /** The parts' names from the template down to {@code part}, e.g. [Source] or [Pair, Source]. */

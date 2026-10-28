@@ -44,6 +44,7 @@ import org.graffiti.graph.GraphElement;
 import org.graffiti.graph.Node;
 import org.graffiti.plugin.view.View;
 import org.graffiti.session.EditorSession;
+import org.graffiti.session.Session;
 
 import javax.swing.*;
 import java.awt.*;
@@ -52,6 +53,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -102,11 +104,32 @@ public final class TemplateWorkbench {
     /** Instance emphasised on the graph (from the instance list), or null. */
     TemplateInstance focusInstance;
     private boolean firing, fireQueued;
-    /** The scope option of the last search (for "Find more"). */
-    boolean lastWithinSelection;
 
     private TemplateWorkbench() {
-        InstanceRegistry.addListener(this::fireLater);
+        InstanceRegistry.addListener(TemplateWorkbench::storeChanged);
+    }
+
+    /**
+     * The constraints of the store changed (applied, removed, switched, preferred, undone, edited in the Constraints
+     * tab): the conflict checks of the matches were made against the old ones and are made again when needed.
+     */
+    public static void storeChanged() {
+        if (!SwingUtilities.isEventDispatchThread()) {
+            SwingUtilities.invokeLater(TemplateWorkbench::storeChanged);
+            return;
+        }
+        TemplateWorkbench wb = instance;
+        if (wb == null) return;
+        for (GraphState st : wb.states.values()) {
+            if (st.run != null) for (Match m : st.run.matches()) m.check = MatchCheck.NOT_CHECKED;
+        }
+        Match open = wb.focus;
+        if (open != null) {
+            SwingUtilities.invokeLater(() -> {
+                if (wb.focus == open && open.check.status == MatchCheck.Status.NOT_CHECKED) wb.openPopover(open);
+            });
+        }
+        wb.fireLater();
     }
 
     // ================================================================== graphs and listeners
@@ -260,8 +283,38 @@ public final class TemplateWorkbench {
         hover = null;
         closePopover();
         focusInstance = null;
+        forgetClosedGraphs();
         if (suggestionMode) MatchInteraction.get().attach();
         fire();
+    }
+
+    /**
+     * Drops the runs, matches and change listeners of graphs whose sessions are closed, so the graphs can be collected
+     * (a run's snapshot and matches hold their graph). Without a main frame (headless) everything is kept.
+     */
+    private void forgetClosedGraphs() {
+        Set<Graph> open = Collections.newSetFromMap(new IdentityHashMap<>());
+        try {
+            if (MainFrame.getInstance() == null) return;
+            for (Session x : MainFrame.getSessions()) if (x.getGraph() != null) open.add(x.getGraph());
+        } catch (RuntimeException e) {
+            return;
+        }
+        for (Iterator<Map.Entry<Graph, GraphState>> it = states.entrySet().iterator(); it.hasNext(); ) {
+            Map.Entry<Graph, GraphState> e = it.next();
+            Graph g = e.getKey();
+            if (g == null || open.contains(g)) continue;
+            GraphState st = e.getValue();
+            if (st.run != null) st.run.cancel();
+            try {
+                g.getListenerManager().removeGraphListener(st.watch);
+                g.getListenerManager().removeAttributeListener(st.watch);
+            } catch (Exception ignored) {
+                // not registered: nothing to remove
+            }
+            it.remove();
+        }
+        if (focusInstance != null && !open.contains(focusInstance.graph)) focusInstance = null;
     }
 
     // ================================================================== search
@@ -278,16 +331,24 @@ public final class TemplateWorkbench {
 
     /** {@link #search(List, boolean, boolean, boolean)} collecting at most {@code maxMatches} matches. */
     public String search(List<SearchTask> tasks, boolean semantics, boolean exact, boolean withinSelection, int maxMatches) {
-        Graph g = activeGraph();
-        if (g == null) return "Open a graph first.";
-        if (tasks.isEmpty()) return "Choose a template first.";
         Collection<Node> scope = null;
-        if (withinSelection) {
+        if (withinSelection && activeGraph() != null && !tasks.isEmpty()) {
             EditorSession s = activeSession();
             List<Node> sel = s == null ? Collections.emptyList() : GraphHelper.getSelectedNodes(s);
             if (sel.isEmpty()) return "Select the nodes to search among, or search the whole graph.";
             scope = sel;
         }
+        return search(tasks, semantics, exact, scope, maxMatches);
+    }
+
+    /**
+     * A search on the active graph among the nodes {@code scope} (null: the whole graph), e.g. those of an earlier run;
+     * see {@link #search(List, boolean, boolean, boolean)}.
+     */
+    public String search(List<SearchTask> tasks, boolean semantics, boolean exact, Collection<Node> scope, int maxMatches) {
+        Graph g = activeGraph();
+        if (g == null) return "Open a graph first.";
+        if (tasks.isEmpty()) return "Choose a template first.";
         GraphState st = state(g);
         if (st.run != null && st.run.state() == SearchRun.State.RUNNING) st.run.cancel();
         Set<String> np = new HashSet<>(), ep = new HashSet<>();
@@ -299,7 +360,6 @@ public final class TemplateWorkbench {
         }
         GraphSnapshot snap = GraphSnapshot.capture(g, scope, np, ep, st.version);
         SearchRun run = new SearchRun(snap, tasks, new SearchRun.Options(semantics, exact, maxMatches));
-        lastWithinSelection = withinSelection;
         st.run = run;
         st.runOutdated = false;
         st.page = 0;
@@ -682,7 +742,8 @@ public final class TemplateWorkbench {
                 for (Match m : run.matches()) {
                     if (m.state == Match.State.APPLIED || m.state == Match.State.INVALID) continue;
                     if (touches(m, el)) {
-                        if (removed) {
+                        // another edge between match nodes may go: whether the match still fits is checked before applying
+                        if (removed && (el instanceof Node || m.edges().contains(el))) {
                             m.state = Match.State.INVALID;
                             m.reason = el instanceof Node ? "a node of the match was deleted" : "an edge of the match was deleted";
                             m.selected = false;

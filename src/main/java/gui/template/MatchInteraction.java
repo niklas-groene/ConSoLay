@@ -26,6 +26,7 @@ final class MatchInteraction extends MouseAdapter {
     private static MatchInteraction instance;
     private static final int CLICK_SLOP = 4;
     private static final String ESC_KEY = "cblayout.templates.escape";
+    private static final KeyStroke ESCAPE = KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0);
 
     static MatchInteraction get() {
         if (instance == null) instance = new MatchInteraction();
@@ -34,6 +35,8 @@ final class MatchInteraction extends MouseAdapter {
 
     private JComponent attached;
     private JRootPane root;
+    /** What Escape was bound to in the root pane's own key map before (put back on detach), or null. */
+    private Object rootEscape;
     private Point pressed;
     private boolean dragging;
     private final Timer hoverTimer;
@@ -57,7 +60,10 @@ final class MatchInteraction extends MouseAdapter {
         c.addMouseMotionListener(this);
         root = SwingUtilities.getRootPane(c);
         if (root != null) {
-            root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), ESC_KEY);
+            InputMap im = root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+            KeyStroke[] own = im.keys();   // this map's own bindings, not those of its parents
+            if (own != null) for (KeyStroke k : own) if (ESCAPE.equals(k)) rootEscape = im.get(k);
+            im.put(ESCAPE, ESC_KEY);
             root.getActionMap().put(ESC_KEY, new AbstractAction() {
                 private static final long serialVersionUID = 1L;
                 @Override public void actionPerformed(ActionEvent e) { escape(); }
@@ -72,11 +78,14 @@ final class MatchInteraction extends MouseAdapter {
             attached.removeMouseMotionListener(this);
         }
         if (root != null) {
-            root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).remove(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0));
+            InputMap im = root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+            if (rootEscape != null) im.put(ESCAPE, rootEscape);
+            else im.remove(ESCAPE);
             root.getActionMap().remove(ESC_KEY);
         }
         attached = null;
         root = null;
+        rootEscape = null;
     }
 
     void escape() {

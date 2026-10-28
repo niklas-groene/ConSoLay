@@ -1,14 +1,24 @@
 package layout.template.io;
 
+import adaptagrams_bridge.CBLayoutAlgorithm;
+import constraints.ConstraintConflicts;
+import constraints.spec.ConstraintSpec;
+import layout.template.apply.ConflictPreview;
+import layout.template.apply.InstancePlan;
+import layout.template.apply.TemplateApplier;
+import layout.template.model.ComponentUse;
 import layout.template.model.Condition;
+import layout.template.model.LayoutRelation;
 import layout.template.model.PatternEdge;
 import layout.template.model.PatternNode;
+import layout.template.model.StructureLink;
 import layout.template.model.TemplateDef;
 import layout.template.model.TemplateSource;
 import layout.template.model.TemplateValidator;
 import layout.template.model.Templates;
 import layout.template.search.GraphSnapshot;
 import layout.template.search.Match;
+import layout.template.search.MatchCheck;
 import layout.template.search.SearchRun;
 import layout.template.search.SearchTask;
 
@@ -26,6 +36,7 @@ import org.sbgned.sbgnml.SBGNMLReader;
 import javax.swing.SwingUtilities;
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -34,6 +45,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -102,6 +114,64 @@ public class TemplateExamplesTest {
     public void pathwayChainMatches() throws Exception {
         List<Match> ms = matches("example:pathway-chain");
         assertTrue("expected matches on glycolysis, got " + ms.size(), ms.size() > 0);
+    }
+
+    /** Every assignment of the pathway chain makes constraints that hold together: the lower series lies below. */
+    @Test
+    public void pathwayChainHoldsAtEveryMatch() throws Exception {
+        List<Match> ms = matches("example:pathway-chain");
+        ConstraintConflicts.Scope scope = CBLayoutAlgorithm.userScope(glycolysis, false, false);
+        for (Match m : ms) {
+            for (Match.Variant v : m.variants()) {
+                TemplateApplier.Request q = new TemplateApplier.Request(m.task, v.nodes, v.edges, v.links, m.title());
+                MatchCheck c = ConflictPreview.check(glycolysis, Collections.emptyList(), Collections.singletonList(q),
+                        scope, 0);
+                assertEquals(m.title() + ": " + c.details, MatchCheck.Status.COMPATIBLE, c.status);
+            }
+        }
+    }
+
+    /**
+     * Two series of reactions joined at a shared node: the shared node lies on neither side of a relation's dividing
+     * line, and a relation that the joined rows contradict (one below the other) is reported; side by side they hold.
+     */
+    @Test
+    public void relationAcrossSharedNodeIsChecked() {
+        TemplateDef reaction = TemplateExamples.reaction(), series = TemplateExamples.reactionSeries(reaction);
+        TemplateDef t = TemplateDef.create("Chain", TemplateDef.Kind.COMPOSITE);
+        t.components.add(new ComponentUse("c1", "Upper", series.ref()));
+        t.components.add(new ComponentUse("c2", "Lower", series.ref()));
+        StructureLink l = new StructureLink("l1", "c1", "p2", "c2", "p1");
+        l.type = StructureLink.Type.SAME_NODE;
+        t.links.add(l);
+        LayoutRelation r = new LayoutRelation("r1", LayoutRelation.Type.COLUMN);
+        r.components.add("c1");
+        r.components.add("c2");
+        t.relations.add(r);
+        t.dependencies.put(series.id + "@" + series.revision, series);
+        t.dependencies.put(reaction.id + "@" + reaction.revision, reaction);
+        TemplateSource source = TemplateSource.embeddedIn(t);
+
+        List<ConstraintSpec> specs = InstancePlan.relationSpecs(t, r, source);
+        assertEquals(1, specs.size());
+        assertEquals(5, specs.get(0).role("before").size());
+        assertFalse(specs.get(0).role("before").contains("c1/c2/n3"));
+        assertFalse(specs.get(0).role("after").contains("c2/c1/n1"));
+        List<String> w = warnings(t, source, "r1");
+        assertEquals(w.toString(), 1, w.size());
+        assertTrue(w.get(0), w.get(0).contains("cannot hold"));
+
+        r.type = LayoutRelation.Type.LEFT_OF;
+        assertTrue(warnings(t, source, "r1").isEmpty());
+    }
+
+    private static List<String> warnings(TemplateDef t, TemplateSource source, String elementId) {
+        List<String> l = new ArrayList<>();
+        for (TemplateValidator.Problem p : TemplateValidator.validate(t, source)) {
+            assertEquals(p.toString(), TemplateValidator.Severity.WARNING, p.severity);
+            if (elementId.equals(p.elementId)) l.add(p.message);
+        }
+        return l;
     }
 
     /** One search of the example {@code id} on the glycolysis map, with the semantics (role conditions) on. */

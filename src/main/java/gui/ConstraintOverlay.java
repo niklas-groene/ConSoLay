@@ -31,6 +31,8 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.awt.font.TextLayout;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Arc2D;
@@ -137,11 +139,23 @@ public class ConstraintOverlay extends JComponent {
             JLayeredPane layered = frame.getLayeredPane();
             overlay.setBounds(0, 0, layered.getWidth(), layered.getHeight());
             layered.add(overlay, JLayeredPane.PALETTE_LAYER);
-            layered.addComponentListener(new ComponentAdapter() {
+            ComponentAdapter resize = new ComponentAdapter() {
                 @Override
                 public void componentResized(ComponentEvent e) {
                     overlay.setBounds(0, 0, layered.getWidth(), layered.getHeight());
                     overlay.repaint();
+                }
+            };
+            layered.addComponentListener(resize);
+            // a closed frame (e.g. a detached view) gives its overlay up, so neither keeps the other alive
+            frame.addWindowListener(new WindowAdapter() {
+                @Override
+                public void windowClosed(WindowEvent e) {
+                    frame.removeWindowListener(this);
+                    layered.removeComponentListener(resize);
+                    layered.remove(overlay);
+                    overlay.constraints.clear();
+                    INSTANCES.remove(frame);
                 }
             });
             INSTANCES.put(frame, overlay);

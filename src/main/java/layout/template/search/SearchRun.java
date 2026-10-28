@@ -87,6 +87,7 @@ public final class SearchRun {
     private volatile String limitMessage;
     private volatile boolean limitedByMatches;
     private volatile long assignments;
+    private volatile long steps;
     private volatile long durationNanos;
     private final List<String> notes = Collections.synchronizedList(new ArrayList<>());
     private final List<Match> matches = new ArrayList<>();   // Swing thread only
@@ -103,6 +104,9 @@ public final class SearchRun {
     public String limitMessage() { return limitMessage; }
 
     public long assignments() { return assignments; }
+
+    /** Partial assignments the run tried (candidate tests; at most {@link TemplateLimits#maxSteps}). */
+    public long steps() { return steps; }
 
     /** True if the run stopped because it had collected {@link Options#maxMatches} matches (more may exist). */
     public boolean isLimitedByMatches() { return limitedByMatches; }
@@ -153,25 +157,32 @@ public final class SearchRun {
     private void runSearch(Listener listener) {
         long start = System.nanoTime();
         Collector collector = new Collector(listener);
+        Enumerator.Budget budget = new Enumerator.Budget(TemplateLimits.maxSteps);
         State end = State.COMPLETE;
         try {
+            // a note (a component cut off) limits the run but does not stop it: the later tasks are searched as well
             for (int ti = 0; ti < tasks.size() && end == State.COMPLETE; ti++) {
                 SearchTask task = tasks.get(ti);
-                Enumerator en = new Enumerator(snapshot, options.semantics, options.exact, cancel);
+                Enumerator en = new Enumerator(snapshot, options.semantics, options.exact, cancel, budget);
                 collector.task = task;
                 collector.taskIndex = ti;
                 boolean done = en.enumerate(task.template, task.source, collector::accept);
                 notes.addAll(en.notes);
                 assignments += en.assignments;
+                if (!done && budget.spent() && collector.limit == null) {
+                    collector.limit = "Search stopped after " + fmt(TemplateLimits.maxSteps) + " partial assignments; "
+                            + collector.count + " matches found so far.";
+                }
                 if (!done) end = cancel.get() && collector.limit == null ? State.CANCELLED : State.LIMITED;
-                if (!en.notes.isEmpty() && end == State.COMPLETE) end = State.LIMITED;
             }
+            if (end == State.COMPLETE && !notes.isEmpty()) end = State.LIMITED;
         } catch (Throwable t) {
             end = State.FAILED;
             notes.add("The search failed: " + t);
         }
         if (end == State.LIMITED && collector.limit == null && !notes.isEmpty()) limitMessage = notes.get(0);
         else if (collector.limit != null) limitMessage = collector.limit;
+        steps = budget.used();
         durationNanos = System.nanoTime() - start;
         collector.flush(true);
         State fin = end;
@@ -228,6 +239,7 @@ public final class SearchRun {
                 } else {
                     Match.Variant v = variant(m, sig);
                     b.bySignature.put(sig, v);
+                    b.symmetric.put(sig, 1);
                     b.variantCount++;
                     newVariants.add(new Object[]{b, v});
                 }

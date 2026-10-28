@@ -1,10 +1,12 @@
 package layout.template.model;
 
+import constraints.ConstraintKind;
 import constraints.spec.ConstraintSpec;
 import constraints.spec.ConstraintSpecs;
 
 import java.util.ArrayList;
 import java.util.ArrayDeque;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -222,6 +224,8 @@ public final class TemplateValidator {
                 for (LayoutRelation.PortRef pr : r.ports) checkPortRef(t, resolved, pr.component, pr.port, where, r.id, p, source);
             }
             if (!Double.isFinite(r.gap) || r.gap < 0) p.add(new Problem(Severity.ERROR, where, "needs a distance of at least 0 px.", r.id));
+            String against = r.enabled && r.type.onComponents() ? contradiction(t, r, source) : null;
+            if (against != null) p.add(new Problem(Severity.WARNING, where, against, r.id));
         }
         for (Port port : t.ports) {
             String where = prefix + "Port '" + port.name + "'";
@@ -250,6 +254,102 @@ public final class TemplateValidator {
                         "is not linked to another component: any occurrence anywhere combines with the others.", c.id));
             }
         }
+    }
+
+    /**
+     * Why the relation {@code r} between components cannot hold together with the constraints the template makes, or
+     * null: one of its dividing lines would have to pass between two nodes that those constraints keep with their
+     * centres on one line across it (e.g. rows joined at a shared node, and a relation that puts one below the other).
+     */
+    private static String contradiction(TemplateDef t, LayoutRelation r, TemplateSource source) {
+        Templates.Groups[] lines = new Templates.Groups[2];
+        for (LayoutRelation.Divide d : Templates.divides(t, r, source)) {
+            int axis = d.vertical ? 0 : 1;
+            if (lines[axis] == null) lines[axis] = centreLines(t, source, d.vertical);
+            Map<String, String> before = new HashMap<>();
+            for (String q : d.before) before.putIfAbsent(lines[axis].find(q), q);
+            for (String q : d.after) {
+                String a = before.get(lines[axis].find(q));
+                if (a == null) continue;
+                return "cannot hold: the constraints keep nodes of '" + componentName(t, a) + "' and of '"
+                        + componentName(t, q) + "' on one " + (d.vertical ? "vertical" : "horizontal") + " line"
+                        + (shareNode(t, source, a, q) ? ", joined at the node they share" : "")
+                        + ", so no line can separate them.";
+            }
+        }
+        return null;
+    }
+
+    /** Groups of qualified node ids whose centres the constraints of {@code t} keep on one vertical (horizontal) line. */
+    private static Templates.Groups centreLines(TemplateDef t, TemplateSource source, boolean vertical) {
+        Templates.Groups g = new Templates.Groups();
+        for (Map.Entry<String, String> e : Templates.sharedNodes(t, source).entrySet()) g.union(e.getValue(), e.getKey());
+        centreLines(t, source, "", true, Collections.emptySet(), vertical, g, 0);
+        return g;
+    }
+
+    /** Joins the nodes that {@code t} (as a use with these settings) aligns, as applying it would make them. */
+    private static void centreLines(TemplateDef t, TemplateSource source, String prefix, boolean withConstraints,
+                                    Set<String> off, boolean vertical, Templates.Groups g, int depth) {
+        if (t == null || depth > Templates.MAX_DEPTH) return;
+        for (ComponentUse c : t.components) {
+            centreLines(Templates.resolve(c, source), source, Templates.qualify(prefix, c.id),
+                    withConstraints && c.includeConstraints, c.disabledConstraints, vertical, g, depth + 1);
+        }
+        if (!withConstraints) return;
+        for (ConstraintSpec c : t.constraints) {
+            if (!c.enabled || off.contains(c.id)) continue;
+            String first = null;
+            for (String id : onOneLine(c, vertical)) {
+                if (id == null) continue;
+                if (first == null) first = Templates.qualify(prefix, id);
+                else g.union(first, Templates.qualify(prefix, id));
+            }
+        }
+        LayoutRelation.Type ports = vertical ? LayoutRelation.Type.ALIGN_PORTS_V : LayoutRelation.Type.ALIGN_PORTS_H;
+        for (LayoutRelation r : t.relations) {
+            if (!r.enabled || off.contains(r.id) || r.type != ports) continue;
+            String first = null;
+            for (LayoutRelation.PortRef pr : r.ports) {
+                String n = Templates.componentPortNode(t, pr.component, pr.port, source);
+                if (n == null) continue;
+                if (first == null) first = Templates.qualify(prefix, n);
+                else g.union(first, Templates.qualify(prefix, n));
+            }
+        }
+    }
+
+    /** The nodes {@code c} puts with their centres on one vertical (or horizontal) line. */
+    private static List<String> onOneLine(ConstraintSpec c, boolean vertical) {
+        ConstraintKind k = c.kind();
+        if (k == null) return Collections.emptyList();
+        switch (k) {
+            case ALIGN_CENTER: return vertical ? c.role("nodes") : Collections.emptyList();
+            case ALIGN_MIDDLE: return vertical ? Collections.emptyList() : c.role("nodes");
+            case COLUMN: return vertical ? c.role("ordered") : Collections.emptyList();
+            case ROW: return vertical ? Collections.emptyList() : c.role("ordered");
+            case EDGE_VERTICAL: return vertical ? c.role("ends") : Collections.emptyList();
+            case EDGE_HORIZONTAL: return vertical ? Collections.emptyList() : c.role("ends");
+            default: return Collections.emptyList();
+        }
+    }
+
+    /** The name of the component a qualified node id lies in. */
+    private static String componentName(TemplateDef t, String qualified) {
+        int at = qualified.indexOf(Templates.SEP);
+        ComponentUse c = t.component(at < 0 ? qualified : qualified.substring(0, at));
+        return c == null ? qualified : c.name;
+    }
+
+    /** True if the components of the two qualified ids share a node (a {@link StructureLink.Type#SAME_NODE} link). */
+    private static boolean shareNode(TemplateDef t, TemplateSource source, String a, String b) {
+        String ca = a.split(Templates.SEP)[0], cb = b.split(Templates.SEP)[0];
+        Map<String, Set<String>> byGroup = new HashMap<>();
+        for (Map.Entry<String, String> e : Templates.sharedNodes(t, source).entrySet()) {
+            byGroup.computeIfAbsent(e.getValue(), k -> new HashSet<>()).add(e.getKey().split(Templates.SEP)[0]);
+        }
+        for (Set<String> comps : byGroup.values()) if (comps.contains(ca) && comps.contains(cb)) return true;
+        return false;
     }
 
     private static String portText(TemplateDef t, Map<String, TemplateDef> resolved, String component, String port) {

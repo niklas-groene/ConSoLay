@@ -2,6 +2,8 @@ package layout.template.model;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -162,6 +164,122 @@ public final class Templates {
         TemplateDef inner = resolve(c, source);
         if (inner == null) return Collections.emptyList();
         return prefixed(c.id, flatNodes(inner, source).keySet());
+    }
+
+    /** The qualified id (relative to {@code composite}) of the node a component's port stands for, or null. */
+    static String componentPortNode(TemplateDef composite, String componentId, String portId, TemplateSource source) {
+        ComponentUse c = composite.component(componentId);
+        String inner = c == null ? null : portNode(resolve(c, source), portId, source);
+        return inner == null ? null : qualify(c.id, inner);
+    }
+
+    /**
+     * The qualified node ids of {@code t} that stand for one graph node because {@link StructureLink.Type#SAME_NODE}
+     * links join them (at every level): each such id → the same id of its group. Ids that share no node are absent.
+     */
+    public static Map<String, String> sharedNodes(TemplateDef t, TemplateSource source) {
+        Groups g = new Groups();
+        sharedNodes(t, source, "", g, 0);
+        return g.all();
+    }
+
+    private static void sharedNodes(TemplateDef t, TemplateSource source, String prefix, Groups g, int depth) {
+        if (t == null || !t.isComposite() || depth > MAX_DEPTH) return;
+        for (StructureLink l : t.links) {
+            if (l.type != StructureLink.Type.SAME_NODE) continue;
+            String a = componentPortNode(t, l.fromComponent, l.fromPort, source);
+            String b = componentPortNode(t, l.toComponent, l.toPort, source);
+            if (a != null && b != null) g.union(qualify(prefix, a), qualify(prefix, b));
+        }
+        for (ComponentUse c : t.components) sharedNodes(resolve(c, source), source, qualify(prefix, c.id), g, depth + 1);
+    }
+
+    /**
+     * The dividing lines a relation between components ({@link LayoutRelation.Type#onComponents()}) stands for, with
+     * the qualified node ids on either side. A node that both sides share (through {@link StructureLink.Type#SAME_NODE}
+     * links) lies on neither side, as no line can run through it; a line without nodes on one side is left out.
+     */
+    public static List<LayoutRelation.Divide> divides(TemplateDef t, LayoutRelation r, TemplateSource source) {
+        List<LayoutRelation.Divide> l = new ArrayList<>();
+        Map<String, String> shared = sharedNodes(t, source);
+        switch (r.type) {
+            case LEFT_OF:
+            case ROW:
+            case ABOVE:
+            case COLUMN: {
+                boolean vertical = r.type == LayoutRelation.Type.LEFT_OF || r.type == LayoutRelation.Type.ROW;
+                for (int i = 0; i + 1 < r.components.size(); i++) {
+                    addDivide(l, String.valueOf(i), vertical, componentNodes(t, r.components.get(i), source),
+                            componentNodes(t, r.components.get(i + 1), source), shared);
+                }
+                break;
+            }
+            case GRID: {
+                int cols = Math.max(1, r.columns), n = r.components.size();
+                int rows = (n + cols - 1) / cols;
+                for (int c = 0; c + 1 < cols; c++) {
+                    List<String> left = new ArrayList<>(), right = new ArrayList<>();
+                    for (int row = 0; row < rows; row++) {
+                        int a = row * cols + c, b = row * cols + c + 1;
+                        if (a < n) left.addAll(componentNodes(t, r.components.get(a), source));
+                        if (b < n) right.addAll(componentNodes(t, r.components.get(b), source));
+                    }
+                    addDivide(l, "c" + c, true, left, right, shared);
+                }
+                for (int row = 0; row + 1 < rows; row++) {
+                    List<String> top = new ArrayList<>(), bottom = new ArrayList<>();
+                    for (int c = 0; c < cols; c++) {
+                        int a = row * cols + c, b = (row + 1) * cols + c;
+                        if (a < n) top.addAll(componentNodes(t, r.components.get(a), source));
+                        if (b < n) bottom.addAll(componentNodes(t, r.components.get(b), source));
+                    }
+                    addDivide(l, "r" + row, false, top, bottom, shared);
+                }
+                break;
+            }
+            default:
+                break;
+        }
+        return l;
+    }
+
+    private static void addDivide(List<LayoutRelation.Divide> l, String key, boolean vertical, List<String> before,
+                                  List<String> after, Map<String, String> shared) {
+        Set<String> a = new HashSet<>(), b = new HashSet<>();
+        for (String q : before) a.add(shared.getOrDefault(q, q));
+        for (String q : after) b.add(shared.getOrDefault(q, q));
+        List<String> x = new ArrayList<>(), y = new ArrayList<>();
+        for (String q : before) if (!b.contains(shared.getOrDefault(q, q))) x.add(q);
+        for (String q : after) if (!a.contains(shared.getOrDefault(q, q))) y.add(q);
+        if (!x.isEmpty() && !y.isEmpty()) l.add(new LayoutRelation.Divide(key, vertical, x, y));
+    }
+
+    /** Groups of ids (union-find): ids put together with {@link #union} end up in one group. */
+    static final class Groups {
+        private final Map<String, String> parent = new HashMap<>();
+
+        void union(String a, String b) {
+            String ra = find(a), rb = find(b);
+            if (!ra.equals(rb)) parent.put(rb, ra);
+        }
+
+        /** The id that stands for the group of {@code id} ({@code id} itself if it was never joined). */
+        String find(String id) {
+            String r = id;
+            for (String p = parent.get(r); p != null && !p.equals(r); p = parent.get(r)) r = p;
+            if (!r.equals(id)) parent.put(id, r);
+            return r;
+        }
+
+        /** Every id that was joined → the id of its group. */
+        Map<String, String> all() {
+            Map<String, String> m = new LinkedHashMap<>();
+            for (String id : new ArrayList<>(parent.keySet())) {
+                m.put(id, find(id));
+                m.putIfAbsent(find(id), find(id));
+            }
+            return m;
+        }
     }
 
     private static List<String> prefixed(String prefix, Set<String> ids) {

@@ -37,6 +37,7 @@ public final class Json {
     }
 
     private static final class Parser {
+        private static final String HEX_DIGITS = "0123456789abcdefABCDEF";
         final String s;
         int i;
 
@@ -135,15 +136,18 @@ public final class Json {
                         case 'n': sb.append('\n'); break;
                         case 'r': sb.append('\r'); break;
                         case 't': sb.append('\t'); break;
-                        case 'u':
+                        case 'u': {
                             if (i + 4 > s.length()) throw error("Bad \\u escape");
-                            try {
-                                sb.append((char) Integer.parseInt(s.substring(i, i + 4), 16));
-                            } catch (NumberFormatException ex) {
-                                throw error("Bad \\u escape");
+                            int code = 0;
+                            for (int k = 0; k < 4; k++) {
+                                int d = HEX_DIGITS.indexOf(s.charAt(i + k));
+                                if (d < 0) throw error("Bad \\u escape");
+                                code = code * 16 + (d < 16 ? d : d - 6);
                             }
+                            sb.append((char) code);
                             i += 4;
                             break;
+                        }
                         default: throw error("Bad escape '\\" + e + "'");
                     }
                 } else {

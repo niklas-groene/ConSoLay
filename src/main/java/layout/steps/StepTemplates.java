@@ -132,7 +132,8 @@ public final class StepTemplates {
      * Searches {@code tasks} on {@code g}, among {@code scope} (null: the whole graph), synchronously. {@code semantics}:
      * the conditions on roles and attributes count (false: structure only); {@code exact}: no further edges among the
      * assigned nodes. The run collects at most {@link TemplateLimits#maxMatchesPerRun} matches and stops after
-     * {@link TemplateLimits#maxAssignments} partial assignments; {@link SearchRun#limitMessage()} says so.
+     * {@link TemplateLimits#maxAssignments} complete or {@link TemplateLimits#maxSteps} partial assignments;
+     * {@link SearchRun#limitMessage()} says so.
      */
     public static SearchRun search(Graph g, Collection<Node> scope, List<SearchTask> tasks, boolean semantics, boolean exact) {
         return search(g, scope, tasks, semantics, exact, TemplateLimits.maxMatchesPerRun);

@@ -56,6 +56,8 @@ final class RuleSetSection extends Section {
     private final VerticalStack editor = new VerticalStack();
     private final StatusLabel status = new StatusLabel(" ");
     private boolean updating;
+    /** The rule the editor fields show; their edits go to it, even when they are committed after the list moved on. */
+    private RuleSystem.Rule shown;
 
     RuleSetSection(TemplatePanel panel) {
         super("Rule set", true, false);
@@ -136,10 +138,8 @@ final class RuleSetSection extends Section {
     }
 
     private void edit(Consumer<RuleSystem.Rule> e) {
-        if (updating) return;
-        RuleSystem.Rule r = list.getSelectedValue();
-        if (r == null) return;
-        e.accept(r);
+        if (updating || shown == null) return;
+        e.accept(shown);
         list.repaint();
     }
 
@@ -165,6 +165,7 @@ final class RuleSetSection extends Section {
 
     private void showRule() {
         RuleSystem.Rule r = list.getSelectedValue();
+        shown = r;
         editor.setVisible(r != null);
         if (r == null) return;
         updating = true;
