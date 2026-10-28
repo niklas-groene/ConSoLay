@@ -11,6 +11,7 @@ import layout.template.apply.TemplateApplier;
 import layout.template.apply.TemplateInstance;
 
 import org.AttributeHelper;
+import org.Vector2d;
 import org.graffiti.graph.Edge;
 import org.graffiti.graph.Graph;
 import org.graffiti.graph.Node;
@@ -47,6 +48,8 @@ public abstract class StepLayout {
     private final String algorithmId;
     private final List<LayoutStep> steps = new ArrayList<>();
     private Map<Node, Point2D.Double> originalPositions;
+    /** The bends and the line shape of every edge before the first step, taken with {@link #originalPositions}. */
+    private final Map<Edge, Route> originalRoutes = new HashMap<>();
     private List<Constraint> constraintsBeforeStep;
     /** Template instances the steps applied ({@link StepTemplates}); a reset takes them out again. */
     private final List<TemplateInstance> instances = new ArrayList<>();
@@ -183,9 +186,9 @@ public abstract class StepLayout {
 
     /**
      * Back to the state before the first step: {@link #beforeReset()} (the subclass undoes what its steps changed in
-     * the structure of the graph), then the remembered positions, no edge bends, only the user's constraints of this
-     * graph in its store, the conflict log without the reports of the run (if the graph is the active one), then
-     * {@link #afterReset()}. The next step remembers the positions anew.
+     * the structure of the graph), then the remembered positions and edge bends (none on an edge the run made), only
+     * the user's constraints of this graph in its store, the conflict log without the reports of the run (if the graph
+     * is the active one), then {@link #afterReset()}. The next step remembers the positions anew.
      */
     public void resetToOriginal() {
         beforeReset();
@@ -199,8 +202,14 @@ public abstract class StepLayout {
         for (Edge e : graph.getEdges()) {
             try {
                 AttributeHelper.removeEdgeBends(e);
+                Route r = originalRoutes.get(e);
+                if (r == null) continue;
+                AttributeHelper.addEdgeBends(e, r.bends);
+                // a real attribute change, so that the view redraws the edge (removing bends fires no event)
+                AttributeHelper.setEdgeBendStyle(e, r.shape);
             } catch (Exception ignored) { }
         }
+        originalRoutes.clear();
         Constraints store = ConstraintStore.of(graph);
         for (TemplateInstance inst : instances) {
             if (store != null) TemplateApplier.remove(inst, store);
@@ -341,7 +350,22 @@ public abstract class StepLayout {
         for (Node n : graph.getNodes()) {
             originalPositions.put(n, new Point2D.Double(AttributeHelper.getPositionX(n), AttributeHelper.getPositionY(n)));
         }
+        originalRoutes.clear();
+        for (Edge e : graph.getEdges()) {
+            originalRoutes.put(e, new Route(AttributeHelper.getEdgeBends(e), AttributeHelper.getEdgeBendStyle(e)));
+        }
         onSnapshot();
+    }
+
+    /** The bends and the line shape of an edge. */
+    private static final class Route {
+        final List<Vector2d> bends;
+        final String shape;
+
+        Route(List<Vector2d> bends, String shape) {
+            this.bends = bends;
+            this.shape = shape;
+        }
     }
 
     /** The remembered position of a node from before the first step, or null. */

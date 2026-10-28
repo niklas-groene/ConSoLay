@@ -284,7 +284,7 @@ public class ConstraintSBGNLayout extends StepLayout {
     protected void afterReset() {
         clearOrientations();
         stepPorts.clear();
-        SbgnPortSync.apply(graph);   // the bends are gone; put the port markers back on the straight arcs
+        SbgnPortSync.apply(graph);   // the arcs have their input bends again; put the port markers back on them
     }
 
     /** Clears the stub sides and port hints the edge router reads. */

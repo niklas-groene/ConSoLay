@@ -42,9 +42,9 @@ import static org.junit.Assert.assertTrue;
 
 /**
  * Runs of the SBGN step layouts that a fresh "Run all steps" does not cover: steps run again without Reset, a reset
- * after several runs, an unfinished run that another one replaces, and user constraints on the glyphs, nodes and
- * edges that a step takes out of the graph for a while. The graphs listen to deletions as the add-on does inside
- * VANTED. Needs the Adaptagrams natives; run with {@code ant test}.
+ * after several runs (back to the input positions, docking and bends), an unfinished run that another one replaces,
+ * and user constraints on the glyphs, nodes and edges that a step takes out of the graph for a while. The graphs
+ * listen to deletions as the add-on does inside VANTED. Needs the Adaptagrams natives; run with {@code ant test}.
  */
 public class StepRunTest {
 
@@ -154,8 +154,12 @@ public class StepRunTest {
             if (ConstraintSBGNLayout.isCompartment(n)) continue;
             position.put(n, new double[]{ AttributeHelper.getPositionX(n), AttributeHelper.getPositionY(n) });
         }
-        Map<Edge, String> docking = new HashMap<>();
-        for (Edge e : g.getEdges()) docking.put(e, dockingOf(e));
+        Map<Edge, String> docking = new HashMap<>(), route = new HashMap<>();
+        for (Edge e : g.getEdges()) {
+            docking.put(e, dockingOf(e));
+            route.put(e, routeOf(e));
+        }
+        assertTrue("the map has bends", route.values().stream().anyMatch(r -> r.contains("Vector2d")));
         ConstraintSBGNLayout layout = layout(g, Language.PD);
         layout.runAll();
         layout.runAll();
@@ -165,6 +169,11 @@ public class StepRunTest {
             assertEquals(e.getValue()[1], AttributeHelper.getPositionY(e.getKey()), 1e-9);
         }
         for (Map.Entry<Edge, String> e : docking.entrySet()) assertEquals(e.getValue(), dockingOf(e.getKey()));
+        for (Map.Entry<Edge, String> e : route.entrySet()) assertEquals(e.getValue(), routeOf(e.getKey()));
+    }
+
+    private static String routeOf(Edge e) {
+        return AttributeHelper.getEdgeBendStyle(e) + AttributeHelper.getEdgeBends(e);
     }
 
     private static String dockingOf(Edge e) {
