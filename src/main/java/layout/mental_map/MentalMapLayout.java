@@ -110,18 +110,24 @@ public class MentalMapLayout {
     private boolean stable;
 
     /**
-     * Stable identity of a node: its label, or {@code "id#" + id} for an unlabelled node (the id follows the creation
-     * order, so it is only the fallback). Every derived order (ordering lists, MST, components, clusters) is fixed by
-     * this key, since the iteration order of {@code g.getNodes()} is not guaranteed to be the same between JVM runs;
-     * {@code ImprovedMentalMapLayout.keyOf} uses the same key.
+     * Sort key of a node: its label, or {@code "id#" + id} for an unlabelled node (the id follows the creation order,
+     * so it is only the fallback). Every derived order (ordering lists, MST, components, clusters) is fixed by
+     * {@link #BY_KEY}, since the iteration order of {@code g.getNodes()} is not guaranteed to be the same between JVM
+     * runs.
      */
-    private static String keyOf(Node n) {
+    static String keyOf(Node n) {
         String l = AttributeHelper.getLabel(n, "");
         return (l == null || l.isEmpty()) ? ("id#" + n.getID()) : l;
     }
 
-    /** Comparator on the stable key; the final tie-break behind every other criterion. */
-    private static final Comparator<Node> BY_KEY = Comparator.comparing(MentalMapLayout::keyOf);
+    /**
+     * Comparator on the sort key, nodes with the same label (frequent in SBGN maps) by their uid; the final tie-break
+     * behind every other criterion.
+     */
+    static final Comparator<Node> BY_KEY = Comparator.comparing(MentalMapLayout::keyOf).thenComparing(Snapshot::uidOf);
+
+    /** Comparator on the first members of node lists (components, clusters), see {@link #BY_KEY}. */
+    private static final Comparator<List<Node>> BY_FIRST = (a, b) -> BY_KEY.compare(a.get(0), b.get(0));
 
     /**
      * Derives mental-map constraints from {@code reference} and re-lays out the live graph so that the relative
@@ -940,7 +946,7 @@ public class MentalMapLayout {
         }
 
         // The cluster order is an input to the native layout: members and components both get a fixed order.
-        components.sort(Comparator.comparing(c -> keyOf(c.get(0))));
+        components.sort(BY_FIRST);
         return components;
     }
 
@@ -979,7 +985,7 @@ public class MentalMapLayout {
                 }
             }
         }
-        groups.sort(Comparator.comparing(c -> keyOf(c.get(0))));
+        groups.sort(BY_FIRST);
         clusters = groups;
     }
 

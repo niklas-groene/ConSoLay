@@ -64,11 +64,14 @@ public final class NextState {
 
     /**
      * Turns {@code live} into {@code state}: removes what the state no longer has and copies what it adds with its
-     * attributes (shape, colours, size). A new node gets the uid {@link #uidFor} (never the one the file may carry) and
-     * stands in a block right of the drawing until a layout run places it; {@link #problem} must be {@code null}.
+     * attributes (shape, colours, size). A new node gets the uid {@code earlier} holds for its label, so the timeline
+     * matches a returning node with its earlier self, else {@link #uidFor} (never the one the file may carry); it
+     * stands in a block right of the drawing until a layout run places it. {@link #problem} must be {@code null}.
      */
-    public static Change apply(Graph live, Graph state) {
+    public static Change apply(Graph live, Graph state, Map<String, String> earlier) {
         Map<String, Node> liveByLabel = byLabel(live.getNodes());
+        Set<String> liveUids = new HashSet<>();
+        for (Node n : live.getNodes()) liveUids.add(Snapshot.uidOf(n));
         Map<String, Node> stateByLabel = byLabel(state.getNodes());
 
         // A deleted node takes its edges along; they count as removed edges.
@@ -113,7 +116,9 @@ public final class NextState {
         for (Map.Entry<String, Node> e : stateByLabel.entrySet()) {   // TreeMap: the block is sorted by label
             if (liveByLabel.containsKey(e.getKey())) continue;
             Node n = live.addNodeCopy(e.getValue());
-            AttributeHelper.setAttribute(n, Snapshot.UID_PATH, "uid", uidFor(e.getKey()));
+            String uid = earlier.get(e.getKey());
+            if (uid == null || liveUids.contains(uid)) uid = uidFor(e.getKey());
+            AttributeHelper.setAttribute(n, Snapshot.UID_PATH, "uid", uid);
             liveByLabel.put(e.getKey(), n);
             added.add(n);
         }
@@ -132,9 +137,21 @@ public final class NextState {
         return new Change(added.size(), nodesRemoved, edgesAdded, edgesRemoved);
     }
 
+    /** Label &rarr; uid of the nodes of {@code snapshots}, a later snapshot winning. */
+    public static Map<String, String> uidsByLabel(List<Snapshot> snapshots) {
+        Map<String, String> uids = new HashMap<>();
+        for (Snapshot s : snapshots) {
+            for (Node n : s.referenceGraph.getNodes()) {
+                String l = label(n), uid = Snapshot.uidOf(n);
+                if (l != null && !l.isEmpty() && !uid.isEmpty()) uids.put(l, uid);
+            }
+        }
+        return uids;
+    }
+
     /**
-     * Uid of a node the state adds, derived from its label: the layout seeds new nodes with a jitter taken from the
-     * uid, so the same sequence gives the same layout on every run.
+     * Uid of a node the state adds for the first time, derived from its label: the layout seeds new nodes with a jitter
+     * taken from the uid, so the same sequence gives the same layout on every run.
      */
     static String uidFor(String label) {
         return UUID.nameUUIDFromBytes(("mentalmap.state:" + label).getBytes(StandardCharsets.UTF_8)).toString();

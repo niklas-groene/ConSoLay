@@ -745,7 +745,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         suppressLive = true;
         NextState.Change change;
         try {
-            change = NextState.apply(live, state);
+            change = NextState.apply(live, state, NextState.uidsByLabel(history.getAll()));
         } finally {
             suppressLive = false;
         }

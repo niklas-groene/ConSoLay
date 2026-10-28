@@ -17,8 +17,8 @@ import static org.junit.Assert.assertEquals;
 
 /**
  * {@link NextState#apply} matches the edges between two labels one by one: parallel and antiparallel arcs of the state
- * all arrive, surplus live edges go, and a live edge in the other direction still stands for a state edge. Needs no
- * natives; run with {@code ant test}.
+ * all arrive, surplus live edges go, and a live edge in the other direction still stands for a state edge. A node that
+ * returns gets its earlier uid. Needs no natives; run with {@code ant test}.
  */
 public class NextStateTest {
 
@@ -60,7 +60,7 @@ public class NextStateTest {
     @Test
     public void antiparallelArcsBothArrive() {
         Graph live = graph("A,B");
-        NextState.Change change = NextState.apply(live, graph("A,B", "A>B", "B>A"));
+        NextState.Change change = NextState.apply(live, graph("A,B", "A>B", "B>A"), Collections.emptyMap());
         assertEquals("[A>B, B>A]", edges(live).toString());
         assertEquals(2, change.edgesAdded);
         assertEquals(0, change.edgesRemoved);
@@ -69,7 +69,7 @@ public class NextStateTest {
     @Test
     public void parallelArcsCountOneByOne() {
         Graph live = graph("A,B", "A>B");
-        NextState.Change change = NextState.apply(live, graph("A,B", "A>B", "A>B", "A>B"));
+        NextState.Change change = NextState.apply(live, graph("A,B", "A>B", "A>B", "A>B"), Collections.emptyMap());
         assertEquals("[A>B, A>B, A>B]", edges(live).toString());
         assertEquals(2, change.edgesAdded);
     }
@@ -77,7 +77,7 @@ public class NextStateTest {
     @Test
     public void surplusEdgesGoThoseInTheStatesDirectionStay() {
         Graph live = graph("A,B", "A>B", "B>A", "A>B");
-        NextState.Change change = NextState.apply(live, graph("A,B", "B>A"));
+        NextState.Change change = NextState.apply(live, graph("A,B", "B>A"), Collections.emptyMap());
         assertEquals("[B>A]", edges(live).toString());
         assertEquals(2, change.edgesRemoved);
         assertEquals(0, change.edgesAdded);
@@ -86,10 +86,21 @@ public class NextStateTest {
     @Test
     public void anEdgeInTheOtherDirectionStillMatches() {
         Graph live = graph("A,B,C", "B>A", "B>C");
-        NextState.Change change = NextState.apply(live, graph("A,B", "A>B"));
+        NextState.Change change = NextState.apply(live, graph("A,B", "A>B"), Collections.emptyMap());
         assertEquals("[B>A]", edges(live).toString());
         assertEquals(0, change.edgesAdded);
         assertEquals(1, change.edgesRemoved);
         assertEquals(1, change.nodesRemoved);
+    }
+
+    @Test
+    public void aReturningNodeGetsItsEarlierUid() {
+        Graph live = graph("A,B", "A>B");
+        Snapshot first = Snapshot.capture(live, "first");
+        String uidB = Snapshot.uidOf(byLabel(live, "B"));
+        NextState.apply(live, graph("A"), NextState.uidsByLabel(Collections.singletonList(first)));
+        NextState.apply(live, graph("A,B,C", "A>B"), NextState.uidsByLabel(Collections.singletonList(first)));
+        assertEquals(uidB, Snapshot.uidOf(byLabel(live, "B")));
+        assertEquals(NextState.uidFor("C"), Snapshot.uidOf(byLabel(live, "C")));
     }
 }

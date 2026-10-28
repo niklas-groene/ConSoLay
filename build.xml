@@ -190,6 +190,7 @@ Looked in:
             <arg value="layout.mental_map.SnapshotTest"/>
             <arg value="layout.mental_map.NextStateTest"/>
             <arg value="layout.mental_map.ShengLayoutTest"/>
+            <arg value="layout.mental_map.ImprovedMentalMapTest"/>
             <arg value="adaptagrams_bridge.UserSolveTest"/>
             <arg value="gui.DragUndoTest"/>
             <arg value="layout.store.StoreInstancesTest"/>

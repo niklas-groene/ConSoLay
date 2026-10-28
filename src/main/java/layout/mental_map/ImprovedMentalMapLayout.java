@@ -30,9 +30,9 @@ public class ImprovedMentalMapLayout {
      */
     public double epsilon = 0.0;
     /**
-     * Upper bound of the gap between consecutive blocks of the order chain; the gap used is the smaller of this value
-     * and the smallest reference gap between consecutive blocks. It must stay positive (an exact order needs strictly
-     * increasing coordinates) and large enough for the native solver to tell it from equality.
+     * Gap between consecutive blocks of the order chain; blocks that the reference draws closer together are moved
+     * apart to it. It must stay positive (an exact order needs strictly increasing coordinates) and large enough for
+     * the native solver to tell it from equality.
      */
     public double orderTolerance = 0.01;
     /** Upper bound of the Java repair passes after the native solve (see {@link #postSolveOrderRepair}). */
@@ -82,20 +82,20 @@ public class ImprovedMentalMapLayout {
     /** Copy of what the last step applied, for display. */
     private DerivedConstraints derived = DerivedConstraints.NONE;
 
-    /** Age per node label, in steps survived (0 = inserted in the current step). */
-    private final Map<String, Integer> ageByKey = new HashMap<>();
+    /** Age per node ({@link #identityOf}), in steps survived (0 = inserted in the current step). */
+    private final Map<String, Integer> ageById = new HashMap<>();
     /**
-     * Previous clustering: node label -> cluster id, used for the hysteresis band. A step that clusters nothing (fewer
-     * than two eligible nodes) leaves it as it is, so it holds the last clustering made.
+     * Clustering of the previous step: node ({@link #identityOf}) -> cluster id, used for the hysteresis band. A step
+     * that clusters nothing records each eligible node alone.
      */
-    private final Map<String, Integer> prevClusterByKey = new HashMap<>();
+    private final Map<String, Integer> prevClusterById = new HashMap<>();
     /** True until the first step of a sequence; the nodes of its reference drawing start mature, not at age 1. */
     private boolean freshSequence = true;
 
     /** Clear all cross-step state. Call once per sequence so sequences are independent. */
     public void reset() {
-        ageByKey.clear();
-        prevClusterByKey.clear();
+        ageById.clear();
+        prevClusterById.clear();
         freshSequence = true;
     }
 
@@ -111,9 +111,10 @@ public class ImprovedMentalMapLayout {
         derived = DerivedConstraints.NONE;
     }
 
-    private static String keyOf(Node n) {
-        String l = AttributeHelper.getLabel(n, "");
-        return (l == null || l.isEmpty()) ? ("id#" + n.getID()) : l;
+    /** Identity of a node from step to step: its uid, or its sort key while it has none. */
+    private static String identityOf(Node n) {
+        String uid = Snapshot.uidOf(n);
+        return uid.isEmpty() ? "key:" + MentalMapLayout.keyOf(n) : uid;
     }
 
     /** Derive the constraints from {@code reference} and re-layout the live graph; without a reference, do nothing. */
@@ -139,7 +140,7 @@ public class ImprovedMentalMapLayout {
 
         // ref.getNodes() order is not stable across JVM runs, but centroid sums, the stable tie-class sort and with it
         // every emitted constraint depend on the survivor order; refPos is rebuilt in the same order.
-        survivors.sort(Comparator.comparing(ImprovedMentalMapLayout::keyOf));
+        survivors.sort(MentalMapLayout.BY_KEY);
         Map<Node, double[]> ordered = new LinkedHashMap<>();
         for (Node s : survivors) ordered.put(s, refPos.get(s));
         refPos = ordered;
@@ -257,28 +258,28 @@ public class ImprovedMentalMapLayout {
     private void updateAges(Graph live, Set<Node> survivors) {
         Set<String> present = new HashSet<>();
         for (Node n : live.getNodes()) {
-            String k = keyOf(n);
+            String k = identityOf(n);
             present.add(k);
             if (survivors.contains(n)) {
-                Integer prev = ageByKey.get(k);
+                Integer prev = ageById.get(k);
                 if (prev != null) {
-                    ageByKey.put(k, prev + 1);
+                    ageById.put(k, prev + 1);
                 } else {
                     // First sighting as a survivor: on the first step a node of the reference drawing (mature),
                     // later only after a skipped reset(), where 1 is the conservative choice.
-                    ageByKey.put(k, freshSequence ? eligibilityAge : 1);
+                    ageById.put(k, freshSequence ? eligibilityAge : 1);
                 }
             } else {
-                // Inserted. Plain put: a node reappearing under an earlier label is new and must not inherit its age.
-                ageByKey.put(k, 0);
+                // Inserted. Plain put: a node reappearing under an earlier uid is new and must not inherit its age.
+                ageById.put(k, 0);
             }
         }
-        ageByKey.keySet().retainAll(present);
+        ageById.keySet().retainAll(present);
         freshSequence = false;
     }
 
     private int ageOf(Node n) {
-        return ageByKey.getOrDefault(keyOf(n), 0);
+        return ageById.getOrDefault(identityOf(n), 0);
     }
 
     /**
@@ -364,16 +365,7 @@ public class ImprovedMentalMapLayout {
             for (int b = 0; b < blocks.size(); b++)
                 for (int i = blocks.get(b)[0]; i <= blocks.get(b)[1]; i++) blockOf[i] = b;
 
-            // gammaMin = smallest reference gap between the facing borders of two consecutive blocks; capping the gap
-            // by it keeps the reference drawing a feasible witness of the emitted chain.
-            double gammaMin = Double.POSITIVE_INFINITY;
-            for (int b = 1; b < blocks.size(); b++) {
-                double lo = classRef[blocks.get(b - 1)[1]];
-                double hi = classRef[blocks.get(b)[0]];
-                gammaMin = Math.min(gammaMin, hi - lo);
-            }
-            gMin = (blocks.size() < 2) ? orderTolerance
-                                       : Math.max(0.0, Math.min(orderTolerance, gammaMin));
+            gMin = orderTolerance;
 
             offset = new double[Math.max(1, blocks.size())];
             for (int b = 1; b < blocks.size(); b++) offset[b] = offset[b - 1] + gMin;
@@ -835,7 +827,7 @@ public class ImprovedMentalMapLayout {
                                       Map<Long, ClassSeparation> extraX,
                                       Map<Long, ClassSeparation> extraY) {
         List<Node> nodes = new ArrayList<>(eligible);
-        nodes.sort(Comparator.comparing(ImprovedMentalMapLayout::keyOf));
+        nodes.sort(MentalMapLayout.BY_KEY);
         Map<Node, Integer> clsX = orderX.classIndexByNode();
         Map<Node, Integer> clsY = orderY.classIndexByNode();
         int added = 0;
@@ -942,7 +934,10 @@ public class ImprovedMentalMapLayout {
     private double buildAndSetClusters(List<Node> eligible, Map<Node, double[]> refPos,
                                        Map<Node, Integer> blkX, Map<Node, Integer> blkY) {
         CBLayoutAlgorithm.allCluster = new ArrayList<>();
-        if (eligible.size() < 2) return defaultDelta;
+        if (eligible.size() < 2) {
+            recordClustering(components(eligible, Collections.emptyList()));   // this step clusters nothing
+            return defaultDelta;
+        }
 
         // Boxes from reference positions and live sizes; an eligible newcomer (immediate admission) has no reference
         // position and uses its current one.
@@ -955,7 +950,10 @@ public class ImprovedMentalMapLayout {
         }
 
         List<BoundaryMST.WeightedEdge> mst = BoundaryMST.computeMST(eligible, box);
-        if (mst.isEmpty()) return defaultDelta;
+        if (mst.isEmpty()) {
+            recordClustering(components(eligible, Collections.emptyList()));
+            return defaultDelta;
+        }
 
         double delta = 0;
         for (BoundaryMST.WeightedEdge e : mst) delta += e.w;
@@ -1037,20 +1035,20 @@ public class ImprovedMentalMapLayout {
     }
 
     private boolean knownPreviously(Node n) {
-        return prevClusterByKey.containsKey(keyOf(n));
+        return prevClusterById.containsKey(identityOf(n));
     }
 
     private boolean sameClusterPreviously(Node a, Node b) {
-        Integer ca = prevClusterByKey.get(keyOf(a));
-        Integer cb = prevClusterByKey.get(keyOf(b));
+        Integer ca = prevClusterById.get(identityOf(a));
+        Integer cb = prevClusterById.get(identityOf(b));
         return ca != null && ca.equals(cb);
     }
 
     private void recordClustering(List<List<Node>> clusters) {
-        prevClusterByKey.clear();
+        prevClusterById.clear();
         int id = 0;
         for (List<Node> c : clusters) {
-            for (Node n : c) prevClusterByKey.put(keyOf(n), id);
+            for (Node n : c) prevClusterById.put(identityOf(n), id);
             id++;
         }
     }
@@ -1141,7 +1139,7 @@ public class ImprovedMentalMapLayout {
                                                Map<Node, Integer> chainBlock) {
         List<Node> sorted = new ArrayList<>(nodes);
         sorted.sort(Comparator.comparingDouble((Node n) -> box.get(n)[axis])
-                .thenComparing(ImprovedMentalMapLayout::keyOf));
+                .thenComparing(MentalMapLayout.BY_KEY));
         Map<Node, Integer> idx = new LinkedHashMap<>();
         int c = -1;
         Integer prevBlock = null;
