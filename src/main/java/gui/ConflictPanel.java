@@ -144,12 +144,16 @@ public class ConflictPanel extends JPanel {
         discardButton.setEnabled(e != null && e.kind != ConflictLog.Kind.DROPPED);
     }
 
-    /** Restores a dropped constraint, or prefers one that is not applied (which solves again). */
+    /** Restores a dropped constraint or prefers one that is not applied, then solves the active graph again. */
     private void restoreOrPrefer() {
         ConflictLog.Entry en = list.getSelectedValue();
         if (en == null || en.constraint == null) return;
         if (en.kind == ConflictLog.Kind.DROPPED) {
             ConflictLog.restore(en);
+            if (!inActiveGraph(en.constraint)) return;
+            AddonTab.executeUserConstraints();
+            ListModels.updateAllLists();
+            DisplayConstraints.revalidateIndication();
         } else if (en.kind == ConflictLog.Kind.DEACTIVATED && canPrefer(en.constraint)) {
             ConstraintListSection.prefer(en.constraint);
         }
@@ -158,6 +162,11 @@ public class ConflictPanel extends JPanel {
     /** Prefer works on the active graph (it solves that one) and not for a constraint that contradicts itself. */
     private static boolean canPrefer(Constraint c) {
         if (c == null || c.getDeactivation() == null || c.getDeactivation().contradictsItself()) return false;
+        return inActiveGraph(c);
+    }
+
+    /** True if every node of {@code c} is in the graph of the active editor session. */
+    private static boolean inActiveGraph(Constraint c) {
         EditorSession session = MainFrame.getInstance() == null ? null : MainFrame.getInstance().getActiveEditorSession();
         if (session == null || session.getGraph() == null) return false;
         for (Node n : c.getNodes()) if (!session.getGraph().containsNode(n)) return false;

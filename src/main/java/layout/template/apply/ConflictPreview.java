@@ -15,6 +15,7 @@ import org.graffiti.graph.Node;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -97,10 +98,15 @@ public final class ConflictPreview {
         return new MatchCheck(MatchCheck.Status.CONFLICT, sum.append('.').toString(), details, version);
     }
 
-    /** Copies of the constraints of {@code existing} that lie on {@code g} (copy → original in {@code original}). */
+    /**
+     * Copies of the constraints of {@code existing} that lie on {@code g} (copy → original in {@code original}), made
+     * oldest first, so that their new ids keep the age that breaks ranking ties.
+     */
     static List<Constraint> copiesOn(Graph g, Collection<Constraint> existing, Map<Constraint, Constraint> original) {
         List<Constraint> copies = new ArrayList<>();
-        for (Constraint c : existing) {
+        List<Constraint> byAge = new ArrayList<>(existing);
+        byAge.sort(Comparator.comparingLong(Constraint::getId));
+        for (Constraint c : byAge) {
             if (!on(g, c) || !ConstraintSpecs.supports(c)) continue;
             try {
                 Constraint k = ConstraintSpecs.copy(c);

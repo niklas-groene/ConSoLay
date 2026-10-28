@@ -25,6 +25,9 @@ public final class ConstraintFeasibility {
     /** Contradictions among user constraints found by the last call; kept, but the solver will not satisfy all of them. */
     public static final List<String> lastWarnings = new ArrayList<>();
 
+    /** The user constraints each of {@link #lastWarnings} names, by warning. */
+    public static final Map<String, List<Constraint>> lastWarningConstraints = new HashMap<>();
+
     /**
      * -Dcblayout.feasPriority=class|age (default age): class drops the automatic constraint of the lowest
      * {@link Constraint#getRank rank} on a cycle, the youngest among equals, and also offers the alignments joining the
@@ -67,6 +70,7 @@ public final class ConstraintFeasibility {
         lastDeactivated.clear();
         List<Dropped> dropped = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
+        Map<String, List<Constraint>> named = new HashMap<>();
         Set<String> warned = new HashSet<>();
         for (int guard = 0; guard < 10000; guard++) {
             Model m = Model.build(constraints);
@@ -103,7 +107,9 @@ public final class ConstraintFeasibility {
                     dropped.add(new Dropped(victim, (dim == 0 ? "x" : "y") + " contradiction: separations and alignments form a cycle"));
                     changed = true;
                 } else if (warned.add(dim + ":" + ids(cycle))) {
-                    warnings.add("User constraints contradict each other (" + (dim == 0 ? "x" : "y") + "): " + cycle);
+                    String w = "User constraints contradict each other (" + (dim == 0 ? "x" : "y") + "): " + cycle;
+                    warnings.add(w);
+                    named.put(w, users(cycle));
                 }
             }
             if (changed) continue;
@@ -115,7 +121,14 @@ public final class ConstraintFeasibility {
                     continue;
                 }
                 if (warned.add("coincide:" + pair[0].getID() + ":" + pair[1].getID())) {
-                    warnings.add("User alignments make " + pair[0] + " and " + pair[1] + " coincide");
+                    String w = "User alignments make " + pair[0] + " and " + pair[1] + " coincide";
+                    warnings.add(w);
+                    List<Constraint> joining = new ArrayList<>();
+                    for (int dim = 0; dim < 2; dim++) {
+                        List<Constraint> path = m.alignmentPath(dim, pair[0], pair[1]);
+                        if (path != null) joining.addAll(path);
+                    }
+                    named.put(w, users(joining));
                 }
                 // nothing droppable: the remaining coincidences are left to the solver
             }
@@ -123,7 +136,15 @@ public final class ConstraintFeasibility {
         }
         lastWarnings.clear();
         lastWarnings.addAll(warnings);
+        lastWarningConstraints.clear();
+        lastWarningConstraints.putAll(named);
         return dropped;
+    }
+
+    private static List<Constraint> users(List<Constraint> cs) {
+        List<Constraint> l = new ArrayList<>();
+        for (Constraint c : cs) if (!c.isAutomatic() && !l.contains(c)) l.add(c);
+        return l;
     }
 
     private static String ids(List<Constraint> cs) {

@@ -29,7 +29,7 @@ public final class ConflictLog {
         public final Constraint constraint;   // null for warnings
         public final String phase;
         public final String reason;
-        /** DEACTIVATED: the applied constraints it contradicts; else empty. */
+        /** DEACTIVATED: the applied constraints it contradicts; WARNING: the user constraints it names, if known. */
         public final List<Constraint> partners;
 
         Entry(Kind kind, Constraint constraint, String phase, String reason) {
@@ -106,11 +106,19 @@ public final class ConflictLog {
         if (replaceDeactivated(cs)) fire();
     }
 
-    /** Clears the deactivations naming a deleted constraint and lists the rest; true if one was cleared. */
+    /**
+     * Clears the deactivations naming a deleted constraint and lists the rest, and drops the warnings naming a deleted
+     * constraint; true if a deactivation was cleared.
+     */
     private static boolean syncDeactivated() {
         List<Constraint> all = ConstraintStore.constraints == null ? Collections.<Constraint>emptyList()
                 : ConstraintStore.constraints.getAllConstraints();
         boolean freed = ConstraintConflicts.forgetStale(all);
+        Set<Constraint> present = Collections.newSetFromMap(new IdentityHashMap<>());
+        present.addAll(all);
+        synchronized (ConflictLog.class) {
+            entries.removeIf(e -> e.kind == Kind.WARNING && !present.containsAll(e.partners));
+        }
         replaceDeactivated(all);
         return freed;
     }
@@ -196,6 +204,11 @@ public final class ConflictLog {
         fire();
     }
 
+    /**
+     * Records dropped constraints and warnings. A warning of the last {@link ConstraintFeasibility} check keeps the
+     * constraints it names ({@link ConstraintFeasibility#lastWarningConstraints}) and goes when one of them is deleted;
+     * any other warning stays until {@link #clear()}.
+     */
     public static void addDropped(String phase, List<ConstraintFeasibility.Dropped> dropped, List<String> warnings) {
         if (dropped.isEmpty() && warnings.isEmpty()) return;
         synchronized (ConflictLog.class) {
@@ -203,7 +216,9 @@ public final class ConflictLog {
             for (String w : warnings) {
                 boolean known = false;
                 for (Entry e : entries) if (e.kind == Kind.WARNING && e.reason.equals(w)) known = true;
-                if (!known) entries.add(new Entry(Kind.WARNING, null, phase, w));
+                List<Constraint> named = ConstraintFeasibility.lastWarningConstraints.get(w);
+                if (!known) entries.add(new Entry(Kind.WARNING, null, phase, w,
+                        named == null ? Collections.<Constraint>emptyList() : new ArrayList<>(named)));
             }
         }
         fire();
@@ -246,7 +261,10 @@ public final class ConflictLog {
      * because of them is free now: a solve should decide again.
      */
     public static boolean forget(Collection<? extends Constraint> cs) {
-        synchronized (ConflictLog.class) { entries.removeIf(e -> e.constraint != null && cs.contains(e.constraint)); }
+        synchronized (ConflictLog.class) {
+            entries.removeIf(e -> (e.constraint != null && cs.contains(e.constraint))
+                    || (e.kind == Kind.WARNING && !Collections.disjoint(e.partners, cs)));
+        }
         boolean freed = syncDeactivated();
         fire();
         return freed;

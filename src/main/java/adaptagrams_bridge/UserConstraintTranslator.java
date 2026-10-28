@@ -44,8 +44,10 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Turns model constraints into cola objects for one solve of {@link CBLayoutAlgorithm#executeUserConstraints}: an
@@ -89,6 +91,11 @@ final class UserConstraintTranslator {
         this.forceDirected = forceDirected;
     }
 
+    /** The nodes of the solve. */
+    Collection<Node> nodes() {
+        return index.keySet();
+    }
+
     /** The model constraint a cola constraint (e.g. from a solver report) was made for, or null. */
     Constraint ownerOf(CompoundConstraint cc) {
         return cc == null ? null : owner.get(pointer(cc));
@@ -99,32 +106,35 @@ final class UserConstraintTranslator {
     /**
      * Moves the rectangles before any constraint reads them. A rigid group is put back into its shape, anchored on a
      * pinned member if it has one, else (without a force-directed run) on its members' targets, else on its current
-     * centroid. Then, without a run, nodes with a target move towards it (the run would pull them there), and pinned
-     * nodes go onto their pins.
+     * centroid. Then, without a run, the other nodes with a target are put on it (the run would pull them there), and
+     * pinned nodes go onto their pins. A node with several targets takes the one of the highest
+     * {@link ConstraintConflicts#RANK rank}, as the conflict decision does.
      */
     void prepare(Collection<Constraint> cs) {
         Map<Node, double[]> pins = new HashMap<>(), targets = new HashMap<>();
-        Map<Node, Double> strength = new HashMap<>();
+        List<Constraint> wishes = new ArrayList<>();
         for (Constraint c : cs) {
             if (!known(c)) continue;
             if (c instanceof LockConstraintGraph) {
                 for (Node n : c.getNodes()) pins.put(n, ((LockConstraintGraph) c).getPosition(n));
             } else if (c instanceof DesiredPositionConstraintGraph) {
-                DesiredPositionConstraintGraph d = (DesiredPositionConstraintGraph) c;
-                for (Node n : c.getNodes()) { targets.put(n, d.getTarget(n)); strength.put(n, d.getWeight()); }
+                wishes.add(c);
             }
         }
+        wishes.sort(ConstraintConflicts.RANK);
+        for (Constraint c : wishes) {
+            for (Node n : c.getNodes()) targets.putIfAbsent(n, ((DesiredPositionConstraintGraph) c).getTarget(n));
+        }
+        Set<Node> placed = new HashSet<>();
         for (Constraint c : cs) {
-            if (known(c) && c instanceof FixedRelativeConstraintGraph) placeRigid((FixedRelativeConstraintGraph) c, pins, forceDirected ? null : targets);
+            if (known(c) && c instanceof FixedRelativeConstraintGraph) {
+                placeRigid((FixedRelativeConstraintGraph) c, pins, forceDirected ? null : targets, placed);
+            }
         }
         if (!forceDirected) {
-            // Without the run's pull, a target moves its node part of the way: strength s gives s / (1 + s).
+            // placeRigid has taken a group member's target into account; moving the member alone would bend the shape
             for (Map.Entry<Node, double[]> e : targets.entrySet()) {
-                double[] t = e.getValue();
-                if (t == null) continue;
-                Rectangle r = rects.get(index.get(e.getKey()));
-                double f = strength.get(e.getKey()) / (1 + strength.get(e.getKey()));
-                r.moveCentre(r.getCentreX() + (t[0] - r.getCentreX()) * f, r.getCentreY() + (t[1] - r.getCentreY()) * f);
+                if (!placed.contains(e.getKey())) moveTo(e.getKey(), e.getValue());
             }
         }
         for (Map.Entry<Node, double[]> e : pins.entrySet()) moveTo(e.getKey(), e.getValue());
@@ -133,9 +143,11 @@ final class UserConstraintTranslator {
     /**
      * Puts the members of a rigid group into their stored arrangement: the shape (offsets from the group centroid at
      * creation) is moved so that a pinned member sits on its pin, or else the targeted members' mean sits on their
-     * targets' mean, or else the shape keeps the group's current centroid.
+     * targets' mean, or else the shape keeps the group's current centroid. The members put into the shape are added to
+     * {@code placed}.
      */
-    private void placeRigid(FixedRelativeConstraintGraph f, Map<Node, double[]> pins, Map<Node, double[]> targets) {
+    private void placeRigid(FixedRelativeConstraintGraph f, Map<Node, double[]> pins, Map<Node, double[]> targets,
+                            Set<Node> placed) {
         double cx = 0, cy = 0, mx = 0, my = 0;
         int k = 0;
         for (Node n : f.getNodes()) {
@@ -174,7 +186,9 @@ final class UserConstraintTranslator {
         }
         for (Node n : f.getNodes()) {
             double[] o = f.getOffset(n);
-            if (o != null) rects.get(index.get(n)).moveCentre(ox + o[0] - mx, oy + o[1] - my);
+            if (o == null) continue;
+            rects.get(index.get(n)).moveCentre(ox + o[0] - mx, oy + o[1] - my);
+            placed.add(n);
         }
     }
 

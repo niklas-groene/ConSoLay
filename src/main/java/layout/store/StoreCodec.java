@@ -14,6 +14,7 @@ import layout.template.apply.TemplateInstance;
 import layout.template.io.TemplateCodec;
 import layout.template.model.TemplateRef;
 import layout.template.model.TemplateSource;
+import layout.template.model.Templates;
 
 import org.AttributeHelper;
 import org.graffiti.graph.Edge;
@@ -22,6 +23,7 @@ import org.graffiti.graph.Node;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -144,11 +146,13 @@ public final class StoreCodec {
             insts.add(o);
             instIds.put(inst, id);
         }
-        // oldest first: the order of the constraints is their age
+        // oldest first (by id, the age that breaks ranking ties): reading gives them new ids in this order
+        List<Constraint> byAge = new ArrayList<>(store.getAllConstraints());
+        byAge.sort(Comparator.comparingLong(Constraint::getId));
         Map<ConstraintGroup, String> groupIds = new IdentityHashMap<>();
         List<Object> groups = new ArrayList<>();
         List<Object> cs = new ArrayList<>();
-        for (Constraint c : store.getAllConstraints()) {
+        for (Constraint c : byAge) {
             if (c.getNodes() == null || !ConstraintSpecs.supports(c)) continue;
             boolean in = !c.getNodes().isEmpty();
             for (Node n : c.getNodes()) in &= g.containsNode(n);
@@ -177,6 +181,7 @@ public final class StoreCodec {
                     origin.put("templateId", or.getTemplateId());
                     origin.put("revision", (double) or.getTemplateRevision());
                     o.put("origin", origin);
+                    o.put("enabled", c.isEnabled());   // the instance's switches are not saved with it
                 }
                 o.put("path", new ArrayList<Object>(or.getPath()));
                 if (or.getSpecId() != null) o.put("specId", or.getSpecId());
@@ -273,6 +278,7 @@ public final class StoreCodec {
             groups.put(str(m, "id"), new ConstraintGroup(str(m, "kind"), str(m, "label"), str(m, "step")));
         }
         Map<String, TemplateInstance> insts = new LinkedHashMap<>();
+        Map<String, Map<String, Object>> incomplete = new LinkedHashMap<>();
         for (Object o : list(doc, "instances")) {
             Map<String, Object> m = map(o);
             if (m == null || str(m, "id") == null) continue;
@@ -289,6 +295,7 @@ public final class StoreCodec {
             complete &= resolve(map(m.get("links")), edges, al);
             if (!complete) {
                 r.problems.add("Instance " + str(m, "label") + " refers to nodes or edges that are not in the graph.");
+                incomplete.put(str(m, "id"), m);
                 continue;
             }
             List<String> off = new ArrayList<>();
@@ -335,8 +342,15 @@ public final class StoreCodec {
             List<String> path = new ArrayList<>();
             for (Object p : list(m, "path")) if (p != null) path.add(String.valueOf(p));
             TemplateInstance inst = insts.get(str(m, "instance"));
+            Map<String, Object> lost = inst == null ? incomplete.get(str(m, "instance")) : null;
             if (inst != null) {
                 InstanceRestorer.attach(inst, c, str(m, "part"), path, str(m, "specId"));
+            } else if (lost != null) {
+                // the instance is not restored: the constraint keeps its template origin and the switch it had
+                Map<String, Object> t = map(lost.get("template"));
+                c.setOrigin(new ConstraintOrigin(null, str(lost, "label"), str(t, "id"), (int) num(t, "revision", 1),
+                        path.isEmpty() ? Collections.singletonList(str(t, "id")) : path, str(m, "specId"), null));
+                if (!partOn(lost, str(m, "part"))) c.setEnabled(false);
             } else {
                 Map<String, Object> origin = map(m.get("origin"));
                 if (origin != null) {
@@ -360,6 +374,19 @@ public final class StoreCodec {
         }
         if (!r.restored.isEmpty()) InstanceRegistry.fire();
         return r;
+    }
+
+    /** Whether the saved instance {@code inst} has {@code part} on: it and every component on the way to the part. */
+    private static boolean partOn(Map<String, Object> inst, String part) {
+        if (!bool(inst, "on", true)) return false;
+        if (part == null || part.isEmpty()) return true;
+        List<?> off = list(inst, "partsOff");
+        String prefix = "";
+        for (String seg : part.split(Templates.SEP)) {
+            prefix = prefix.isEmpty() ? seg : prefix + Templates.SEP + seg;
+            if (off.contains(prefix)) return false;
+        }
+        return true;
     }
 
     /** Puts the elements {@code names} refers to into {@code into}; false if one of them is missing. */

@@ -230,7 +230,8 @@ public final class ConstraintConflicts {
         final AxisGraph x = new AxisGraph(Axis.X), y = new AxisGraph(Axis.Y);
         /**
          * Where a held rigid group is placed, as UserConstraintTranslator.prepare() does: the pins applied so far (only
-         * pins ranked above the group, the highest one per node), and without a run the targets (soft, never left out).
+         * pins ranked above the group, the highest one per node), and without a run the targets (soft, never left out;
+         * the highest-ranked one per node).
          */
         final Map<Node, double[]> pins = new HashMap<>(), targets = new HashMap<>();
         /** The equalities of the applied constraints, per axis: {u, v, d} for x_v − x_u = d, and their owners. */
@@ -248,7 +249,8 @@ public final class ConstraintConflicts {
             if (!scope.forceDirected) {
                 for (Constraint c : candidates) {
                     if (c instanceof DesiredPositionConstraintGraph) {
-                        for (Node n : c.getNodes()) targets.put(n, ((DesiredPositionConstraintGraph) c).getTarget(n));
+                        DesiredPositionConstraintGraph d = (DesiredPositionConstraintGraph) c;
+                        for (Node n : c.getNodes()) targets.putIfAbsent(n, d.getTarget(n));
                     }
                 }
             }

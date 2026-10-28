@@ -1,11 +1,13 @@
 package gui;
 
+import adaptagrams_bridge.CBLayoutAlgorithm;
 import constraints.ConflictLog;
 import constraints.Constraint;
 import constraints.ConstraintConflicts;
 import constraints.ConstraintGroup;
 import constraints.ConstraintKind;
 import constraints.ConstraintStore;
+import constraints.Constraints;
 import constraints.Deactivation;
 import constraints.Priority;
 import gui.components.CardPanel;
@@ -14,6 +16,7 @@ import gui.components.SvgIcon;
 import gui.components.SwitchToggle;
 import gui.components.Ui;
 import gui.components.VerticalStack;
+import layout.store.GraphConstraints;
 
 import de.ipk_gatersleben.ag_nw.graffiti.GraphHelper;
 import org.graffiti.graph.Graph;
@@ -120,6 +123,8 @@ final class ConstraintListSection extends Section {
     /** True while the card shows a constraint's state: the controls' listeners must not write it back. */
     private boolean updatingEditor;
     private final Timer resolveTimer;
+    /** The constraint whose value edit {@link #resolveTimer} solves. */
+    private Constraint resolveEdited;
     private final JLabel emptyHint = Ui.hint(" ");
     /** The constraint the editor card is bound to, or null. */
     private Constraint editing;
@@ -197,10 +202,7 @@ final class ConstraintListSection extends Section {
         addRow(Ui.row(deleteButton, deleteAllButton), Ui.GAP_S);
         addRow(editorCard, Ui.GAP_M);
 
-        resolveTimer = new Timer(200, e -> {
-            AddonTab.executeUserConstraints();
-            ListModels.updateAllLists();   // the edited values reach the store saved with the graph
-        });
+        resolveTimer = new Timer(200, e -> resolveEdited());
         resolveTimer.setRepeats(false);
         refresh();
     }
@@ -509,11 +511,40 @@ final class ConstraintListSection extends Section {
             }
             list.repaint();
             DisplayConstraints.revalidateIndication();
+            if (resolveEdited != null && graphOf(resolveEdited) != graphOf(c)) resolveEdited();
+            resolveEdited = c;
             resolveTimer.restart();
         });
         editorForm.add(form[0], BorderLayout.CENTER);
         revalidate();
         repaint();
+    }
+
+    /**
+     * The solve after a value edit, of the edited constraint's graph: with its own store if the user has gone to
+     * another graph meanwhile (its decisions then show once it is active again).
+     */
+    private void resolveEdited() {
+        resolveTimer.stop();
+        Constraint c = resolveEdited;
+        resolveEdited = null;
+        Graph g = graphOf(c);
+        if (g == null) return;
+        if (g == ConstraintStore.activeGraph()) {
+            CBLayoutAlgorithm.executeUserConstraints(g, ConstraintsTab.isForceDirected(),
+                    ConstraintsTab.isAvoidOverlaps());
+            ListModels.updateAllLists();   // the edited values reach the store saved with the graph
+            return;
+        }
+        Constraints store = ConstraintStore.of(g);
+        if (!store.getAllConstraints().contains(c)) return;   // deleted, or its graph was closed
+        CBLayoutAlgorithm.solveUserConstraints(g, store.getAllConstraints(), ConstraintsTab.isForceDirected(),
+                ConstraintsTab.isAvoidOverlaps(), false);
+        GraphConstraints.sync(g, store);
+    }
+
+    private static Graph graphOf(Constraint c) {
+        return c == null || c.getNodes() == null || c.getNodes().isEmpty() ? null : c.getNodes().get(0).getGraph();
     }
 
     /** The card follows the constraint's state: the reason it is not applied, on / off, priority, "Prefer this". */

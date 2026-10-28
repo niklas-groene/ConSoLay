@@ -28,6 +28,8 @@ import layout.template.model.TemplateSource;
 import org.BackgroundTaskStatusProviderSupportingExternalCall;
 import org.ErrorMsg;
 import org.adaptagrams.NativeLoader;
+import org.graffiti.attributes.Attribute;
+import org.graffiti.attributes.AttributeNotFoundException;
 import org.graffiti.editor.GravistoService;
 import org.graffiti.editor.MainFrame;
 import org.graffiti.editor.MessageType;
@@ -36,6 +38,9 @@ import org.graffiti.event.GraphListener;
 import org.graffiti.event.ListenerNotFoundException;
 import org.graffiti.event.TransactionEvent;
 import org.graffiti.graph.Graph;
+import org.graffiti.graph.GraphElement;
+import org.graffiti.graphics.CoordinateAttribute;
+import org.graffiti.graphics.GraphicAttributeConstants;
 import org.graffiti.plugin.inspector.InspectorTab;
 import org.graffiti.plugin.view.View;
 import org.graffiti.plugin.view.ViewListener;
@@ -45,15 +50,21 @@ import org.graffiti.selection.SelectionListener;
 import org.graffiti.session.EditorSession;
 import org.graffiti.session.Session;
 import org.graffiti.session.SessionListener;
+import org.graffiti.undo.ChangeAttributesEdit;
 import org.vanted.plugins.layout.adaptagrams.AdaptagramsLibrary;
 import javax.swing.*;
+import javax.swing.undo.AbstractUndoableEdit;
+import javax.swing.undo.UndoableEdit;
 import java.awt.*;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -150,7 +161,7 @@ public class AddonTab extends InspectorTab implements ViewListener, SessionListe
         gui.template.TemplateWorkbench.get().activeViewChanged();   // matches and instances belong to their graph
     }
 
-    /** Drops the stores of graphs whose sessions are closed. */
+    /** Drops the stores and the solve state of graphs whose sessions are closed. */
     private static void forgetClosedStores() {
         List<Graph> open = new ArrayList<>();
         try {
@@ -160,6 +171,8 @@ public class AddonTab extends InspectorTab implements ViewListener, SessionListe
         }
         ConstraintStore.retainOnly(open);
         InstanceRegistry.retainOnly(open);
+        if (ConstraintStore.pinnedGraph() == null) CBLayoutAlgorithm.releaseSolveState(open);
+        if (drag != null && !open.contains(drag.graph)) drag = null;
     }
 
     /**
@@ -379,8 +392,9 @@ public class AddonTab extends InspectorTab implements ViewListener, SessionListe
 
     /**
      * Re-solves the constraints after each step of an interactive move (VANTED's move tool wraps every drag step in a
-     * transaction), so they hold while the user drags. Other transactions (file loading, undo, layout algorithms such
-     * as VANTED's NoOverlap in SBGN step 3) are ignored: a solve there would discard the routed edges.
+     * transaction), so they hold while the user drags; the nodes the solves move are undone with the drag. Other
+     * transactions (file loading, undo, layout algorithms such as VANTED's NoOverlap in SBGN step 3) are ignored: a
+     * solve there would discard the routed edges.
      */
     static void afterMoveTransaction(Graph g, TransactionEvent e) {
         if (g == null || e == null || !(e.getSource() instanceof MegaMoveTool)) return;
@@ -394,10 +408,106 @@ public class AddonTab extends InspectorTab implements ViewListener, SessionListe
                 moved = de.ipk_gatersleben.ag_nw.graffiti.GraphHelper.getSelectedNodes(MainFrame.getInstance().getActiveEditorSession());
             } catch (Exception ignored) { }
             CBLayoutAlgorithm.executeUserConstraintsAround(g, moved, ConstraintsTab.isForceDirected(), ConstraintsTab.isAvoidOverlaps());
+            recordDragMoves(g, moved);
         } catch (Exception ex) {
             ErrorMsg.addErrorMessage(ex);
         } finally {
             resolvingMove = false;
+        }
+    }
+
+    /** The undo step of the drag in progress; null once another edit was posted (the next drag posts its own). */
+    private static DragEdit drag;
+    private static boolean watchingUndo;
+
+    /**
+     * Adds the nodes the last solve of a drag moved, except the dragged ones (the move tool's edit has those), to the
+     * drag's undo step; the first such move of a drag posts the step.
+     */
+    private static void recordDragMoves(Graph g, List<org.graffiti.graph.Node> dragged) {
+        Map<org.graffiti.graph.Node, double[]> moves = CBLayoutAlgorithm.movedByLastSolve();
+        MainFrame mf = MainFrame.getInstance();
+        EditorSession session = mf == null ? null : mf.getActiveEditorSession();
+        if (moves.isEmpty() || session == null || session.getGraph() != g) return;
+        if (!watchingUndo) {
+            mf.getUndoSupport().addUndoableEditListener(e -> { if (!(e.getEdit() instanceof DragEdit)) drag = null; });
+            watchingUndo = true;
+        }
+        Set<org.graffiti.graph.Node> own = dragged == null ? Collections.<org.graffiti.graph.Node>emptySet()
+                : new HashSet<>(dragged);
+        DragEdit edit = drag != null && drag.graph == g ? drag : new DragEdit(g, session.getGraphElementsMap());
+        for (Map.Entry<org.graffiti.graph.Node, double[]> m : moves.entrySet()) {
+            if (!own.contains(m.getKey())) edit.moved(m.getKey(), m.getValue()[0], m.getValue()[1]);
+        }
+        if (edit != drag && !edit.isEmpty()) {
+            mf.getUndoSupport().postEdit(edit);
+            drag = edit;
+        }
+    }
+
+    /**
+     * The undo step of a drag with constraints: the move tool's edit of the dragged nodes, taken over in
+     * {@link #replaceEdit} (the tool posts it when the drag starts), and the positions before the drag of the other
+     * nodes its solves moved. One undo puts the whole drawing back.
+     */
+    static final class DragEdit extends AbstractUndoableEdit {
+        private static final long serialVersionUID = 1L;
+        final Graph graph;
+        private final Map<Attribute, Object> before = new LinkedHashMap<>();
+        private final ChangeAttributesEdit others;
+        private UndoableEdit move;
+
+        DragEdit(Graph graph, Map<GraphElement, GraphElement> geMap) {
+            this.graph = graph;
+            others = new ChangeAttributesEdit(graph, before, geMap);
+        }
+
+        /** {@code n} was at ({@code x}, {@code y}) before the drag; only the first call per node counts. */
+        void moved(org.graffiti.graph.Node n, double x, double y) {
+            Attribute a;
+            try {
+                a = n.getAttribute(GraphicAttributeConstants.COORD_PATH);
+            } catch (AttributeNotFoundException e) {
+                return;
+            }
+            if (!before.containsKey(a)) before.put(a, new CoordinateAttribute(a.getId(), x, y).getValue());
+        }
+
+        boolean isEmpty() {
+            return before.isEmpty();
+        }
+
+        @Override
+        public boolean replaceEdit(UndoableEdit anEdit) {
+            if (move != null || !(anEdit instanceof ChangeAttributesEdit)) return false;
+            move = anEdit;
+            return true;
+        }
+
+        @Override
+        public void undo() {
+            super.undo();
+            others.undo();
+            if (move != null) move.undo();
+        }
+
+        @Override
+        public void redo() {
+            super.redo();
+            if (move != null) move.redo();
+            others.redo();
+        }
+
+        @Override
+        public void die() {
+            super.die();
+            if (move != null) move.die();
+            others.die();
+        }
+
+        @Override
+        public String getPresentationName() {
+            return move != null ? move.getPresentationName() : others.getPresentationName();
         }
     }
 

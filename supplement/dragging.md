@@ -53,12 +53,14 @@ of which the GUI refresh is about 0.3 ms.
    rebuilt only when something changed; per step only the overlay is repainted.
 2. **Only the affected part is solved** (`-Dcblayout.dragSolve=component`; `all` solves the whole graph): with the
    force-directed run and the overlap removal off, a drag step solves only the constraint components of the dragged
-   nodes (`CBLayoutAlgorithm.executeUserConstraintsAround`). No constraint links the other nodes to the dragged ones, so
-   a projection cannot move them; the result equals the full solve (test `DragSolveTest`: positions within 1e-6 px, the
-   same decisions, on the TRN example). A cluster in the component (its sides concern every other node), FD on or
-   overlaps on fall back to the whole graph. On (a) and (b) the components of the dragged nodes are the whole graph
-   (every TRN node is in a row of a local regulator or above one; the PD skeleton alignments chain the map); on (c) the
-   thousand local instances form small components, so a step takes 5 ms instead of 5.1 s.
+   nodes (`CBLayoutAlgorithm.executeUserConstraintsAround`), and those of the nodes with a target, which a full solve
+   puts back on their targets. No constraint links the other nodes to the dragged ones, so a projection cannot move
+   them; the result equals the full solve (tests `DragSolveTest`: positions within 1e-6 px, the same decisions, on the
+   TRN example; `UserSolveTest`: a target outside the dragged component). A cluster in the component (its sides
+   concern every other node), FD on or overlaps on fall back to the whole graph. On (a) and (b) the components of the
+   dragged nodes are the whole graph (every TRN node is in a row of a local regulator or above one; the PD skeleton
+   alignments chain the map); on (c) the thousand local instances form small components, so a step takes 5 ms instead
+   of 5.1 s.
 3. **Optional: the dragged node stays under the cursor** (`-Dcblayout.dragPin=true`, default off): the dragged nodes get
    a pin at the cursor of the lowest rank (very low priority, automatic, youngest) for the solve of the step. If a
    constraint ranked above contradicts it, the pin is not applied and the node moves as without it; the pin is not in

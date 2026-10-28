@@ -453,12 +453,12 @@ public final class ConstraintCatalog {
                 "The nodes stay exactly where they are now (for a single node, edit the position in the list).", "Lock (+ fixed guidelines)", 1, 0, params(), editables(),
                 (s, v) -> one(new LockConstraintGraph(positions(s.nodes)))));
         Param weight = new Param("weight", "Strength", ParamType.DECIMAL, 1, 0.1, 50, 0.5, null, null,
-                "How strongly the nodes are pulled: with force-directed against the edges; without it every solve moves "
-                        + "them strength / (1 + strength) of the way.");
+                "How strongly the nodes are pulled against the edges in a force-directed run; without it the nodes are put "
+                        + "on their targets and only other constraints hold them away.");
         put(new Info(ConstraintKind.TARGET, "Target", "Pull towards position",
                 "The nodes are pulled softly towards their target, which is where they are now (for a single node, edit it in the list). "
                         + "Unlike a pin, edges and other constraints can hold them away.",
-                "DesiredPosition in the force-directed run; otherwise a move towards the point", 1, 0, params(weight),
+                "DesiredPosition in the force-directed run; otherwise a move onto the point", 1, 0, params(weight),
                 editables(edit(weight, DesiredPositionConstraintGraph.class, DesiredPositionConstraintGraph::getWeight, (c, val) -> c.setWeight((Double) val))),
                 (s, v) -> one(new DesiredPositionConstraintGraph(positions(s.nodes), num(v, "weight", 1)))));
 

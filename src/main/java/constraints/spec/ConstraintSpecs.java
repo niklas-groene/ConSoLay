@@ -534,12 +534,13 @@ public final class ConstraintSpecs {
      * coordinates), with the definition's priority and switch. No origin is set.
      *
      * @throws IllegalArgumentException with a readable reason if the type is unknown, an element is not assigned or a
-     *                                  value is missing
+     *                                  value is missing or invalid
      */
     public static Constraint create(ConstraintSpec s, Binding binding) {
         Adapter a = adapter(s.kind());
         if (a == null) throw new IllegalArgumentException("Unknown constraint type '" + s.type + "': this version cannot apply it.");
         List<String> problems = validateValues(s, a);
+        if (problems.isEmpty()) a.checkMore(s, problems);
         if (!problems.isEmpty()) throw new IllegalArgumentException(problems.get(0));
         Constraint c = a.build(s, new Resolver(s, binding));
         c.setPriority(s.priority == null ? Priority.NORMAL : s.priority);
@@ -758,8 +759,10 @@ public final class ConstraintSpecs {
             else if (v instanceof Map) {
                 List<String> entries = new ArrayList<>();
                 for (Map.Entry<?, ?> e : ((Map<?, ?>) v).entrySet()) {
-                    double[] q = (double[]) e.getValue();
-                    entries.add(ref.apply(String.valueOf(e.getKey())) + ":" + fmt3(q[0]) + "," + fmt3(q[1]));
+                    Object q = e.getValue();   // validate() reports a malformed value; the key just marks it
+                    String at = q instanceof double[] && ((double[]) q).length == 2
+                            ? fmt3(((double[]) q)[0]) + "," + fmt3(((double[]) q)[1]) : "?";
+                    entries.add(ref.apply(String.valueOf(e.getKey())) + ":" + at);
                 }
                 Collections.sort(entries);
                 sb.append(entries);

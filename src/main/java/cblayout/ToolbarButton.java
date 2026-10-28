@@ -26,6 +26,8 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.beans.PropertyVetoException;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * A toolbar button that arranges the open graph windows side by side, one above the other or as a grid
@@ -106,65 +108,66 @@ public class ToolbarButton extends JToolBar
 		return prefComp;
 	}
 
-	/** Arranges the windows as {@link #order} says; Shift restores and Ctrl minimises windows first. */
+	/**
+	 * Arranges the windows as {@link #order} says; Shift restores and Ctrl minimises windows first. Minimised windows
+	 * keep their place.
+	 */
 	private void arrangeIt(ActionEvent actionEvent) {
-		for (EditorSession es : MainFrame.getEditorSessions()) {
-			if (es.getGraph() != null) {
-				if ((actionEvent.getModifiers() & ActionEvent.SHIFT_MASK) > 0)
-					restoreFrames();
-				if ((actionEvent.getModifiers() & ActionEvent.CTRL_MASK) > 0)
-					iconizeFrames();
+		boolean anyGraph = false;
+		for (EditorSession es : MainFrame.getEditorSessions())
+			anyGraph |= es.getGraph() != null;
+		if (!anyGraph)
+			return;
+		if ((actionEvent.getModifiers() & ActionEvent.SHIFT_MASK) > 0)
+			restoreFrames();
+		if ((actionEvent.getModifiers() & ActionEvent.CTRL_MASK) > 0)
+			iconizeFrames();
 
-				Dimension desktopdim = MainFrame.getInstance().getDesktop()
-									.getSize();
+		Dimension desktopdim = MainFrame.getInstance().getDesktop()
+							.getSize();
 
-				int number = getOpenFrameCnt(), cnt = 0;
+		List<JInternalFrame> open = new ArrayList<>();
+		for (JInternalFrame jf : MainFrame.getInstance().getDesktop().getAllFrames())
+			if (!jf.isIcon())
+				open.add(jf);
+		int number = Math.max(1, open.size()), cnt = 0;
 
-				if (number == 0)
-					number = 1;
-
-				switch (order) {
-					case HORIZONTAL:
-						for (JInternalFrame jf : MainFrame.getInstance()
-											.getDesktop().getAllFrames()) {
-							unmaximize(jf);
-							jf.setBounds(desktopdim.width * (cnt++) / number,
-												0, desktopdim.width / number,
-												desktopdim.height);
-						}
-						break;
-					case VERTICAL:
-						for (JInternalFrame jf : MainFrame.getInstance()
-											.getDesktop().getAllFrames()) {
-							unmaximize(jf);
-							jf.setBounds(0, desktopdim.height * (cnt++)
-												/ number, desktopdim.width,
-												desktopdim.height / number);
-						}
-						break;
-					case QUADRATIC:
-						int inRow = (int) Math.ceil(Math.sqrt(number));
-						int rows = (int) Math.ceil((double) number
-											/ (double) inRow);
-						int row = 0,
-						col = 0;
-						for (JInternalFrame jf : MainFrame.getInstance()
-											.getDesktop().getAllFrames()) {
-							unmaximize(jf);
-							jf.setBounds(desktopdim.width * col / inRow,
-												row * desktopdim.height / rows,
-												desktopdim.width / inRow, desktopdim.height
-																	/ rows);
-							col++;
-							if (col >= inRow) {
-								col = 0;
-								row++;
-							}
-						}
-						break;
+		switch (order) {
+			case HORIZONTAL:
+				for (JInternalFrame jf : open) {
+					unmaximize(jf);
+					jf.setBounds(desktopdim.width * (cnt++) / number,
+										0, desktopdim.width / number,
+										desktopdim.height);
 				}
-
-			}
+				break;
+			case VERTICAL:
+				for (JInternalFrame jf : open) {
+					unmaximize(jf);
+					jf.setBounds(0, desktopdim.height * (cnt++)
+										/ number, desktopdim.width,
+										desktopdim.height / number);
+				}
+				break;
+			case QUADRATIC:
+				int inRow = (int) Math.ceil(Math.sqrt(number));
+				int rows = (int) Math.ceil((double) number
+									/ (double) inRow);
+				int row = 0,
+				col = 0;
+				for (JInternalFrame jf : open) {
+					unmaximize(jf);
+					jf.setBounds(desktopdim.width * col / inRow,
+										row * desktopdim.height / rows,
+										desktopdim.width / inRow, desktopdim.height
+															/ rows);
+					col++;
+					if (col >= inRow) {
+						col = 0;
+						row++;
+					}
+				}
+				break;
 		}
 	}
 
@@ -192,17 +195,6 @@ public class ToolbarButton extends JToolBar
 				}
 			}
 		}
-	}
-
-	/** The number of windows that are not minimised. */
-	private int getOpenFrameCnt() {
-		int res = 0;
-		for (JInternalFrame jf : MainFrame.getInstance().getDesktop()
-							.getAllFrames()) {
-			if (!jf.isIcon())
-				res++;
-		}
-		return res;
 	}
 
 	/**

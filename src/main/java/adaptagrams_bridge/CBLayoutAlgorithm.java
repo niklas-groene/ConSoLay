@@ -15,6 +15,7 @@ import constraints.ConflictLog;
 import constraints.ConstraintConflicts;
 import constraints.ConstraintCheck;
 import constraints.Deactivation;
+import constraints.DesiredPositionConstraintGraph;
 import constraints.ClusterConstraintGraph;
 import constraints.LockConstraintGraph;
 import constraints.Priority;
@@ -34,6 +35,7 @@ import org.Vector2d;
 import org.graffiti.graph.Edge;
 import org.graffiti.graph.Graph;
 import org.graffiti.graph.Node;
+import org.adaptagrams.CompoundConstraint;
 import org.adaptagrams.CompoundConstraintPtrs;
 import org.adaptagrams.RectanglePtrs;
 import org.adaptagrams.ConstrainedFDLayout;
@@ -152,6 +154,42 @@ public class CBLayoutAlgorithm {
     }
 
     /**
+     * Drops the static solve state that belongs to a graph not in {@code open} (its window was closed), so that it does
+     * not keep that graph alive. Never during a solve or a layout run.
+     */
+    public static void releaseSolveState(Collection<Graph> open) {
+        java.util.function.Predicate<Collection<Node>> closed = ns -> {
+            for (Node n : ns) return !open.contains(n.getGraph());
+            return false;
+        };
+        if (lastUserScope != null && (lastUserScope.graph != null ? !open.contains(lastUserScope.graph)
+                : closed.test(lastUserScope.nodes))) lastUserScope = null;
+        if (sbgnExtras != null && closed.test(sbgnExtras.nodes())) {
+            sbgnExtras = null;
+            sbgnExtrasPre = null;
+            sbgnExtrasConvergence = null;
+        }
+        if (userSolve != null && closed.test(userSolve.nodes())) {
+            userSolve = null;
+            userPreIteration = null;
+            userConvergence = null;
+        }
+        if (closed.test(nodeIndex.keySet())) {
+            nodeIndex = new HashMap<>();
+            rectPtrVector = null;
+            constraintFDLayout = null;
+            constraints = null;
+        }
+        if (clusterMap != null && closed.test(clusterMap.keySet())) clusterMap = new HashMap<>();
+        if (clusterBounds != null && closed.test(clusterBounds.keySet())) clusterBounds = new HashMap<>();
+        if (!rigidGroups.isEmpty() && closed.test(rigidGroups.get(0))) {
+            rigidGroups = new ArrayList<>();
+            rigidSnap = null;
+        }
+        if (closed.test(lastMoves.keySet())) lastMoves = new LinkedHashMap<>();
+    }
+
+    /**
      * The graph's nodes sorted by label (else by id), the stable node key of the mental-map layout. The position becomes
      * the solver variable index, by which the solver breaks ties; {@code Graph.getNodes()} has no fixed order.
      */
@@ -164,8 +202,15 @@ public class CBLayoutAlgorithm {
         return nodes;
     }
 
-    /** Builds the layout object; the plain 3-argument constructor unless a switch needs edge lengths or a convergence test. */
+    /** The edge lengths of the last {@link #newLayout}, or null if it took the default ones. */
+    private static Doubles newLayoutLengths;
+
+    /**
+     * Builds the layout object; the plain 3-argument constructor unless a switch needs edge lengths or a convergence
+     * test. Its lengths stay in {@link #newLayoutLengths}, its test (fdConverge=reset) in {@link #convergence}.
+     */
     private static ConstrainedFDLayout newLayout(RectanglePtrs rects, ColaEdges edges, List<Edge> graphEdges) {
+        newLayoutLengths = null;
         if (LEAF_LENGTH == 1 && !FD_CONVERGE_RESET) return new ConstrainedFDLayout(rects, edges, dist);
         Doubles lengths = new Doubles();
         if (LEAF_LENGTH != 1) {
@@ -174,6 +219,7 @@ public class CBLayoutAlgorithm {
                 lengths.add(leaf ? LEAF_LENGTH : 1.0);
             }
         }
+        newLayoutLengths = lengths;
         if (!FD_CONVERGE_RESET) return new ConstrainedFDLayout(rects, edges, dist, lengths);
         convergence = new TestConvergence(1e-4, 100);
         return new ConstrainedFDLayout(rects, edges, dist, lengths, convergence);
@@ -200,8 +246,8 @@ public class CBLayoutAlgorithm {
         return l;
     }
 
-    /** Equal spacing: one guideline per node and a cola DistributionConstraint over consecutive pairs. */
-    private static void addDistribution(DistributionConstraintGraph c) {
+    /** Equal spacing into {@code to}: a guideline per node and a cola DistributionConstraint over consecutive pairs. */
+    private static void addDistribution(DistributionConstraintGraph c, CompoundConstraintPtrs to) {
         int dim = c.getType() == SeparationConstraintGraph.SeparationConstraintType.HORIZONTAL
                 ? org.adaptagrams.Dim.XDIM : org.adaptagrams.Dim.YDIM;
         List<AlignmentConstraint> guides = new ArrayList<>();
@@ -210,14 +256,14 @@ public class CBLayoutAlgorithm {
             if (i == null) continue;
             AlignmentConstraint a = new AlignmentConstraint(dim);
             a.addShape(i, 0);
-            constraints.add(a);
+            to.add(a);
             guides.add(a);
         }
         if (guides.size() < 2) return;
         DistributionConstraint d = new DistributionConstraint(dim);
         for (int i = 1; i < guides.size(); i++) d.addAlignmentPair(guides.get(i - 1), guides.get(i));
         d.setSeparation(c.getSpacing());
-        constraints.add(d);
+        to.add(d);
     }
 
     /** Solver variable index of every node of the current solve. */
@@ -262,7 +308,9 @@ public class CBLayoutAlgorithm {
     /**
      * Map cola's unsatisfiable-constraint reports (variable indices + gap + equality flag) back to
      * the registered {@link Constraint} objects and record them in {@link ConflictLog}. Reports about
-     * solver-generated constraints (non-overlap, clusters) carry other compound types and are skipped.
+     * solver-generated constraints (non-overlap, clusters) carry other compound types and are skipped. A report between
+     * two nodes comes from a separation, an exact one if it is an equality; an alignment's reports start at its
+     * guideline, which is no node, so they cannot be traced back here.
      */
     private static void collectUnsatisfied(String phase, Map<Node, Integer> index) {
         if (unsatX == null || unsatY == null || ConstraintStore.constraints == null) return;
@@ -282,16 +330,12 @@ public class CBLayoutAlgorithm {
                 if (!seen.add(dim + ":" + a.getID() + ":" + b.getID() + ":" + equality)) continue;
                 for (Constraint c : ConstraintStore.constraints.getAllConstraints()) {
                     if (!c.isActive() || !c.getNodes().contains(a) || !c.getNodes().contains(b)) continue;
-                    boolean match;
-                    if (equality) {
-                        match = dim == 0 ? c instanceof VerticalConstraint : c instanceof HorizontalConstraint;
-                    } else {
-                        match = c instanceof SeparationConstraintGraph
-                                && ((SeparationConstraintGraph) c).getType() == (dim == 0
-                                    ? SeparationConstraintGraph.SeparationConstraintType.HORIZONTAL
-                                    : SeparationConstraintGraph.SeparationConstraintType.VERTICAL)
-                                && Math.abs(((SeparationConstraintGraph) c).getDistance() - info.getSeparation()) < 1e-6;
-                    }
+                    boolean match = c instanceof SeparationConstraintGraph
+                            && ((SeparationConstraintGraph) c).isFixed() == equality
+                            && ((SeparationConstraintGraph) c).getType() == (dim == 0
+                                ? SeparationConstraintGraph.SeparationConstraintType.HORIZONTAL
+                                : SeparationConstraintGraph.SeparationConstraintType.VERTICAL)
+                            && Math.abs(((SeparationConstraintGraph) c).getDistance() - info.getSeparation()) < 1e-6;
                     if (match) {
                         ConflictLog.addUnsatisfied(c, phase, "the solver could not satisfy it (" + (dim == 0 ? "x" : "y")
                                 + "); it contradicts other constraints");
@@ -491,12 +535,13 @@ public class CBLayoutAlgorithm {
             constraints.add(separationConstraint);
         }
         for (DistributionConstraintGraph c : ConstraintStore.constraints.getDistributionConstraints()) {
-            if (c.isActive()) addDistribution(c);
+            if (c.isActive()) addDistribution(c, constraints);
         }
         if (rigidGroupsIn(g)) for (FixedRelativeConstraint c : rigidConstraints()) constraints.add(c);
         UserConstraintTranslator extras = sbgnUserExtras(nodeIndex, rectPtrVector, true, false);
         if (extras != null) {
-            constraintFDLayout = withLocks(constraintFDLayout, extras, rectPtrVector, edges, null, null);
+            constraintFDLayout = withLocks(constraintFDLayout, extras, rectPtrVector, edges, newLayoutLengths,
+                    FD_CONVERGE_RESET ? convergence : null);
             armUnsatisfiable(constraintFDLayout);
         }
         return extras;
@@ -987,6 +1032,8 @@ public class CBLayoutAlgorithm {
         Map<Node, double[]> localCenter = new HashMap<>();
         Map<Node, Map<Node, double[]>> localMemberPos = new HashMap<>();
         Map<Node, Map<Node, double[]>> localChildPos = new HashMap<>();
+        Set<Node> anchored = absoluteUserConstraintsOn(g) ? anchoredCompartments(compOf, parent)
+                : Collections.<Node>emptySet();
 
         // lay out compartments deepest-first so a child box exists before its parent needs it
         List<Node> order = new ArrayList<>(parent.keySet());
@@ -996,7 +1043,8 @@ public class CBLayoutAlgorithm {
             for (Node m : clusterMap.get(c)) if (g.containsNode(m)) members.add(m);
             List<Node> childComps = children.getOrDefault(c, Collections.<Node>emptyList());
             Map<Node, double[]> mPos = new HashMap<>(), cPos = new HashMap<>();
-            double[] bbox = layoutLevel(g, members, childComps, c, compOf, parent, boxSize, mPos, cPos);
+            double[] bbox = layoutLevel(g, members, childComps, c, compOf, parent, boxSize, localCenter, anchored,
+                    mPos, cPos);
             localMemberPos.put(c, mPos);
             localChildPos.put(c, cPos);
             boxSize.put(c, new double[]{ bbox[2] - bbox[0], bbox[3] - bbox[1] });
@@ -1007,7 +1055,8 @@ public class CBLayoutAlgorithm {
         List<Node> freeNodes = new ArrayList<>();
         for (Node n : ConstraintSBGNLayout.layoutNodes(g)) if (!compOf.containsKey(n)) freeNodes.add(n);
         Map<Node, double[]> topMemberPos = new HashMap<>(), topChildPos = new HashMap<>();
-        layoutLevel(g, freeNodes, roots, null, compOf, parent, boxSize, topMemberPos, topChildPos);
+        layoutLevel(g, freeNodes, roots, null, compOf, parent, boxSize, localCenter, anchored,
+                topMemberPos, topChildPos);
 
         // compose absolute positions: free nodes are already absolute; place each root box and recurse
         Map<Node, double[]> abs = new HashMap<>(topMemberPos);
@@ -1042,6 +1091,21 @@ public class CBLayoutAlgorithm {
                 absCx + sz[0] / 2.0, absCy + sz[1] / 2.0 });
     }
 
+    /**
+     * The compartments holding a node of an active pin, area or target of the user, and every compartment around them:
+     * their boxes keep the place of their content, so that composing the levels does not move those nodes.
+     */
+    private static Set<Node> anchoredCompartments(Map<Node, Node> compOf, Map<Node, Node> parent) {
+        Set<Node> anchored = new HashSet<>();
+        for (Constraint c : ConstraintStore.constraints.getAllConstraints()) {
+            if (c.isAutomatic() || !c.isActive()) continue;
+            if (!(c instanceof LockConstraintGraph || c instanceof constraints.PageBoundaryConstraintGraph
+                    || c instanceof DesiredPositionConstraintGraph)) continue;
+            for (Node n : c.getNodes()) for (Node x = compOf.get(n); x != null; x = parent.get(x)) anchored.add(x);
+        }
+        return anchored;
+    }
+
     private static int depth(Node c, Map<Node, Node> parent) {
         int d = 0;
         for (Node x = parent.get(c); x != null; x = parent.get(x)) d++;
@@ -1065,10 +1129,12 @@ public class CBLayoutAlgorithm {
      * Lay out one flat level: {@code members} (real nodes) plus {@code childComps} (each as a solid box
      * sized to {@code boxSize[child]}). Fills {@code outMemberPos}/{@code outChildPos} with the resulting
      * local positions and returns the level bounding box {minX,minY,maxX,maxY}. {@code levelComp} is the
-     * compartment being laid out, or {@code null} for the top level.
+     * compartment being laid out, or {@code null} for the top level. The box of an {@code anchored} child stays at the
+     * centre of its own level ({@code localCenter}).
      */
     private static double[] layoutLevel(Graph g, List<Node> members, List<Node> childComps, Node levelComp,
             Map<Node, Node> compOf, Map<Node, Node> parent, Map<Node, double[]> boxSize,
+            Map<Node, double[]> localCenter, Set<Node> anchored,
             Map<Node, double[]> outMemberPos, Map<Node, double[]> outChildPos) {
 
         RectanglePtrs rects = new RectanglePtrs();
@@ -1083,7 +1149,7 @@ public class CBLayoutAlgorithm {
             double h = (sz != null) ? sz[1] : AttributeHelper.getHeight(c);
             // Seed the child box at the actual centroid of its content in the (structured) global
             // layout, so it nests where the pathway already is instead of shoving members aside.
-            double[] ctr = subtreeCentroid(g, c, compOf, parent);
+            double[] ctr = anchored.contains(c) ? localCenter.get(c) : subtreeCentroid(g, c, compOf, parent);
             rects.add(new Rectangle(ctr[0] - w / 2, ctr[0] + w / 2, ctr[1] - h / 2, ctr[1] + h / 2));
         }
 
@@ -1118,6 +1184,17 @@ public class CBLayoutAlgorithm {
                 if (c.getNodes().size() != 2 || !memberIndex.keySet().containsAll(c.getNodes())) continue;
                 ccs.add(separationOf(c));
             }
+            // the user's equal spacing only, so that a run without user constraints stays as it is
+            for (DistributionConstraintGraph c : ConstraintStore.constraints.getDistributionConstraints()) {
+                if (!c.isActive() || c.isAutomatic() || !memberIndex.keySet().containsAll(c.getNodes())) continue;
+                addDistribution(c, ccs);
+            }
+        }
+        for (Node c : childComps) {
+            if (!anchored.contains(c)) continue;
+            double[] at = localCenter.get(c);
+            ccs.add(fixedAt(childIdx.get(c), org.adaptagrams.Dim.XDIM, at[0]));
+            ccs.add(fixedAt(childIdx.get(c), org.adaptagrams.Dim.YDIM, at[1]));
         }
 
         // sbgnUserTypes=all: the user's other kinds whose nodes are all on this level (nothing changes without them)
@@ -1161,6 +1238,14 @@ public class CBLayoutAlgorithm {
         }
         if (minX == Double.POSITIVE_INFINITY) { minX = minY = 0; maxX = maxY = 1; } // empty-level guard
         return new double[]{ minX, minY, maxX, maxY };
+    }
+
+    /** A guideline through the centre of rectangle {@code i}, fixed at {@code pos}. */
+    private static AlignmentConstraint fixedAt(int i, int dim, double pos) {
+        AlignmentConstraint a = new AlignmentConstraint(dim, pos);
+        a.addShape(i, 0);
+        a.fixPos(pos);
+        return a;
     }
 
     /** Adaptagrams unit index that node {@code u} maps to at {@code levelComp}'s level, or -1 if {@code u}
@@ -1230,8 +1315,9 @@ public class CBLayoutAlgorithm {
 
     /**
      * -Dcblayout.dragSolve=component|all (default component): component: a drag step without force-directed run and
-     * overlap removal solves only the constraint components of the dragged nodes (same result, nothing links the other
-     * nodes to them); all: every drag step solves the whole graph.
+     * overlap removal solves only the constraint components of the dragged nodes and of the nodes with a target (same
+     * result: nothing links the other nodes to them, and a full solve puts every targeted node back on its target);
+     * all: every drag step solves the whole graph.
      */
     public static final boolean DRAG_SOLVE_COMPONENT = !"all".equalsIgnoreCase(System.getProperty("cblayout.dragSolve", "component"));
 
@@ -1243,8 +1329,8 @@ public class CBLayoutAlgorithm {
 
     /**
      * The user solve after a drag step of {@code moved}. With the force-directed run and the overlap removal off only
-     * the constraint components of the moved nodes are solved (a cluster among them makes it the whole graph), else the
-     * whole graph as {@link #executeUserConstraints}.
+     * the constraint components of the moved nodes and of the nodes with a target are solved (a cluster among them
+     * makes it the whole graph), else the whole graph as {@link #executeUserConstraints}.
      */
     public static void executeUserConstraintsAround(Graph g, Collection<Node> moved, boolean withEdges, boolean avoidOverlaps) {
         if (g == null || ConstraintStore.constraints == null) return;
@@ -1284,6 +1370,10 @@ public class CBLayoutAlgorithm {
         if (roots.isEmpty()) {
             solveUserConstraints(g, all, withEdges, avoidOverlaps, true);
             return;
+        }
+        for (Constraint c : all) {
+            if (!(c instanceof DesiredPositionConstraintGraph) || !c.isEnabled()) continue;
+            for (Node n : c.getNodes()) if (solvable.contains(n)) roots.add(find(parent, n));
         }
         List<Node> component = new ArrayList<>();
         for (Node n : solvable) if (roots.contains(find(parent, n))) component.add(n);
@@ -1339,6 +1429,7 @@ public class CBLayoutAlgorithm {
             else ConflictLog.clearUnsatisfied(cs);
         }
         Map<Node, Node> complexOf = complexChildren(g);
+        lastMoves = new LinkedHashMap<>();
         nodeIndex = new HashMap<>();
         rectPtrVector = new RectanglePtrs();
         List<Node> solved = new ArrayList<>();
@@ -1413,6 +1504,7 @@ public class CBLayoutAlgorithm {
             constraintFDLayout = new ConstrainedFDLayout(rectPtrVector, edges, dist, new Doubles(), userConvergence, userPreIteration);
         }
         armUnsatisfiable(constraintFDLayout);
+        ConstrainedFDLayout layout = constraintFDLayout;
         phase(3);
         try {
             if (ccs.size() > 0) constraintFDLayout.setConstraints(ccs);
@@ -1447,6 +1539,7 @@ public class CBLayoutAlgorithm {
             }
             unmetNow = unmet(tr);
         }
+        freeUserSolve(layout, tr);
         phase(9);
         // makeFeasible drops the parts of constraints it cannot satisfy without a report: list the ones that do not hold.
         for (Map.Entry<Constraint, String> en : unmetNow.entrySet()) {
@@ -1482,8 +1575,10 @@ public class CBLayoutAlgorithm {
         for (Map.Entry<Node, Integer> en : nodeIndex.entrySet()) {
             Rectangle r = rectPtrVector.get(en.getValue());
             Node n = en.getKey();
-            double dx = r.getCentreX() - AttributeHelper.getPositionX(n), dy = r.getCentreY() - AttributeHelper.getPositionY(n);
+            double x = AttributeHelper.getPositionX(n), y = AttributeHelper.getPositionY(n);
+            double dx = r.getCentreX() - x, dy = r.getCentreY() - y;
             if (Math.abs(dx) < 1e-9 && Math.abs(dy) < 1e-9) continue;   // no attribute event for a node that did not move
+            lastMoves.putIfAbsent(n, new double[]{x, y});
             AttributeHelper.setPosition(n, r.getCentreX(), r.getCentreY());
             shift.put(n, new double[]{dx, dy});
         }
@@ -1491,7 +1586,51 @@ public class CBLayoutAlgorithm {
             double[] d = shift.get(en.getValue());
             if (d == null) continue;
             Node child = en.getKey();
-            AttributeHelper.setPosition(child, AttributeHelper.getPositionX(child) + d[0], AttributeHelper.getPositionY(child) + d[1]);
+            double x = AttributeHelper.getPositionX(child), y = AttributeHelper.getPositionY(child);
+            lastMoves.putIfAbsent(child, new double[]{x, y});
+            AttributeHelper.setPosition(child, x + d[0], y + d[1]);
+        }
+    }
+
+    /** See {@link #movedByLastSolve()}. */
+    private static Map<Node, double[]> lastMoves = new LinkedHashMap<>();
+
+    /** The nodes the last user solve moved, glyphs inside a complex included, each with its position before it. */
+    public static Map<Node, double[]> movedByLastSolve() {
+        return Collections.unmodifiableMap(lastMoves);
+    }
+
+    /**
+     * Frees the native rectangles and constraints of a finished user solve, which SWIG gives no finalizer, and drops
+     * the references to them. libcola frees the constraints of the last {@code setConstraints}: both lists, once each.
+     */
+    private static void freeUserSolve(ConstrainedFDLayout layout, UserConstraintTranslator tr) {
+        CompoundConstraintPtrs all = new CompoundConstraintPtrs();
+        Set<Long> seen = new HashSet<>();
+        for (CompoundConstraintPtrs l : Arrays.asList(tr.runConstraints, tr.finalConstraints)) {
+            for (int i = 0; i < l.size(); i++) {
+                CompoundConstraint cc = l.get(i);
+                long p = UserConstraintTranslator.pointer(cc);
+                if (p == 0) return;   // without the pointers a constraint in both lists would be freed twice
+                if (seen.add(p)) all.add(cc);
+            }
+        }
+        try {
+            layout.setConstraints(all);
+            layout.freeAssociatedObjects();
+        } catch (Exception e) {
+            ErrorMsg.addErrorMessage(e);
+            return;
+        }
+        if (constraintFDLayout == layout) {
+            constraintFDLayout = null;
+            rectPtrVector = null;
+            constraints = null;
+        }
+        if (userSolve == tr) {
+            userSolve = null;
+            userPreIteration = null;
+            userConvergence = null;
         }
     }
 
