@@ -149,10 +149,11 @@ public class AddonTab extends InspectorTab implements ViewListener, SessionListe
         } else {
             graph = null; // free sessions, views, or graphs to avoid memory leaks
         }
-        // One store per graph: the active graph's store becomes ConstraintStore.constraints, those of closed graphs go.
+        // One store per graph: those of closed graphs go (first, so a closed map's store does not stay active behind
+        // its skeleton window), the active graph's store becomes ConstraintStore.constraints.
         Graph before = ConstraintStore.activeGraph();
-        ConstraintStore.activate(graph);
         forgetClosedStores();
+        ConstraintStore.activate(graph);
         if (ConstraintStore.activeGraph() != before) ConflictLog.graphChanged();
         else ConflictLog.storeReplaced();
         if (graph != null && !ConstraintStore.isSideGraph(graph)) attachSavedConstraints(s);
@@ -226,9 +227,11 @@ public class AddonTab extends InspectorTab implements ViewListener, SessionListe
         ConstraintConflicts.Scope scope = CBLayoutAlgorithm.userScope(g, ConstraintsTab.isForceDirected(), ConstraintsTab.isAvoidOverlaps());
         if (scope != null) ConstraintConflicts.resolve(all, scope);
         ConflictLog.setDeactivated(all);
+        // a cluster keeps out the nodes the solve moves, not the glyphs inside a complex or the compartments
+        Set<org.graffiti.graph.Node> others = CBLayoutAlgorithm.userSolveNodes(g);
         for (Constraint c : r.added) {
             if (c.isAutomatic() || !c.isActive()) continue;
-            String why = ConstraintCheck.violation(c, g.getNodes(), ConstraintCheck.TOLERANCE);
+            String why = ConstraintCheck.violation(c, others, ConstraintCheck.TOLERANCE);
             if (why != null) ConflictLog.addUnsatisfied(c, "Loaded", "does not hold in the loaded drawing (" + why + "); \"Apply constraints\" solves it");
         }
         ListModels.updateAllLists();

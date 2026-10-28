@@ -36,6 +36,12 @@ public class LockConstraintGraph extends Constraint {
     }
 
     @Override
+    public void replaceNode(Node n, Node copy) {
+        super.replaceNode(n, copy);
+        replaceKey(positions, n, copy);
+    }
+
+    @Override
     public int getMinNodes() {
         return 1;
     }

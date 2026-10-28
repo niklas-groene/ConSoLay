@@ -417,25 +417,45 @@ final class TopologySkeleton {
         }
     }
 
-    private void strongConnect(Block b, Map<Block, Integer> index, Map<Block, Integer> low,
+    /** Tarjan's search from {@code root} with a call stack of its own, so a long chain of blocks cannot overflow. */
+    private void strongConnect(Block root, Map<Block, Integer> index, Map<Block, Integer> low,
                                List<Block> stack, Set<Block> onStack, int[] next, List<List<Block>> components) {
-        index.put(b, next[0]); low.put(b, next[0]++);
-        stack.add(b); onStack.add(b);
-        for (Arc arc : outgoing.get(b)) {
-            Block to = arc.to;
-            if (!index.containsKey(to)) {
-                strongConnect(to, index, low, stack, onStack, next, components);
-                low.put(b, Math.min(low.get(b), low.get(to)));
-            } else if (onStack.contains(to)) low.put(b, Math.min(low.get(b), index.get(to)));
+        List<Block> path = new ArrayList<>();
+        List<Integer> cursor = new ArrayList<>();   // per block on the path: its next outgoing arc
+        index.put(root, next[0]); low.put(root, next[0]++);
+        stack.add(root); onStack.add(root);
+        path.add(root); cursor.add(0);
+        while (!path.isEmpty()) {
+            int top = path.size() - 1;
+            Block b = path.get(top);
+            List<Arc> out = outgoing.get(b);
+            int i = cursor.get(top);
+            if (i < out.size()) {
+                cursor.set(top, i + 1);
+                Block to = out.get(i).to;
+                if (!index.containsKey(to)) {
+                    index.put(to, next[0]); low.put(to, next[0]++);
+                    stack.add(to); onStack.add(to);
+                    path.add(to); cursor.add(0);
+                } else if (onStack.contains(to)) low.put(b, Math.min(low.get(b), index.get(to)));
+                continue;
+            }
+            path.remove(top);
+            cursor.remove(top);
+            if (low.get(b).equals(index.get(b))) {
+                List<Block> component = new ArrayList<>();
+                Block popped;
+                do {
+                    popped = stack.remove(stack.size() - 1); onStack.remove(popped); component.add(popped);
+                } while (popped != b);
+                component.sort(BY_KEY);
+                components.add(component);
+            }
+            if (top > 0) {
+                Block parent = path.get(top - 1);
+                low.put(parent, Math.min(low.get(parent), low.get(b)));
+            }
         }
-        if (!low.get(b).equals(index.get(b))) return;
-        List<Block> component = new ArrayList<>();
-        Block popped;
-        do {
-            popped = stack.remove(stack.size() - 1); onStack.remove(popped); component.add(popped);
-        } while (popped != b);
-        component.sort(BY_KEY);
-        components.add(component);
     }
 
     /** Weighted source/sink peeling, then maximum outgoing-minus-incoming flow weight. */

@@ -56,6 +56,12 @@ public class FixedRelativeConstraintGraph extends Constraint {
     }
 
     @Override
+    public void replaceNode(Node n, Node copy) {
+        super.replaceNode(n, copy);
+        replaceKey(offsets, n, copy);
+    }
+
+    @Override
     public ConstraintKind getKind() {
         return ConstraintKind.RIGID;
     }

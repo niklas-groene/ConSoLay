@@ -16,7 +16,7 @@ import java.util.List;
  */
 public class StarPattern extends Constraint {
 
-    private final Node hub;
+    private Node hub;
     private final List<Node> ring;
     private double radius;
     private final double startAngle;
@@ -75,6 +75,14 @@ public class StarPattern extends Constraint {
         }
         boolean tooFew = super.removeNode(n);
         return n == hub || ring.isEmpty() || tooFew;
+    }
+
+    @Override
+    public void replaceNode(Node n, Node copy) {
+        super.replaceNode(n, copy);
+        if (hub == n) hub = copy;
+        int at = ring.indexOf(n);
+        if (at >= 0) ring.set(at, copy);
     }
 
     @Override

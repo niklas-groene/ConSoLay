@@ -7,7 +7,9 @@ import org.graffiti.graph.Graph;
 import org.graffiti.graph.Node;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Keeps SBGN-ED's port markers (SBGN.BendOut / SBGN.BendIn, which its SBGN-ML writers expect as the first / last bend)
@@ -32,6 +34,11 @@ public final class SbgnPortSync {
 
     /** Updates the port markers of every edge of {@code graph}, inserting a port bend where needed. */
     public static void apply(Graph graph) {
+        apply(graph, null);
+    }
+
+    /** {@link #apply(Graph)}; the points it inserts are added to {@code inserted} (if not null), per edge. */
+    static void apply(Graph graph, Map<Edge, List<Vector2d>> inserted) {
         for (Edge e : graph.getEdges()) {
             boolean src = marked(e, "BendOut") && !docked(e, "source");
             boolean tgt = marked(e, "BendIn") && !docked(e, "target");
@@ -54,6 +61,11 @@ public final class SbgnPortSync {
                 if (tgt && !tgtStub) updated.add(in);
                 AttributeHelper.removeEdgeBends(e);
                 AttributeHelper.addEdgeBends(e, updated);
+                if (inserted != null) {
+                    List<Vector2d> points = inserted.computeIfAbsent(e, k -> new ArrayList<>());
+                    if (src && !srcStub) points.add(out);
+                    if (tgt && !tgtStub) points.add(in);
+                }
             }
             if (out != null) setMarker(e, "BendOut", out);
             if (in != null) setMarker(e, "BendIn", in);

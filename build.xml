@@ -194,6 +194,8 @@ Looked in:
             <arg value="gui.DragUndoTest"/>
             <arg value="layout.store.StoreInstancesTest"/>
             <arg value="constraints.ConflictLogTest"/>
+            <arg value="layout.sbgn.StepRunTest"/>
+            <arg value="constraints.StoreAndGuardTest"/>
         </java>
     </target>
 

@@ -66,6 +66,10 @@ public class ConstraintSBGNLayout extends StepLayout {
     private final List<Node> deletedCompartments = new ArrayList<>();
     /** Member-fitted compartment copies the last step re-inserted; dropped on reset to avoid duplicates. */
     private final List<Node> restoredCompartments = new ArrayList<>();
+    /** Every compartment copy the last step made since the last reset -&gt; the original it stands for. */
+    private final Map<Node, Node> originalOf = new HashMap<>();
+    /** The port points {@link #afterStep} inserted into the arcs, so the next step starts without them. */
+    private final Map<Edge, List<org.Vector2d>> stepPorts = new HashMap<>();
 
     /** Node pairs whose relative position an embedded cycle rectangle already fixes (both directions). */
     private final Map<Node, Set<Node>> cycleFixed = new HashMap<>();
@@ -164,6 +168,12 @@ public class ConstraintSBGNLayout extends StepLayout {
         return layoutNodes(graph);
     }
 
+    /** The nodes the solves hold out of a user's cluster: no compartments, no glyphs drawn inside a complex. */
+    @Override
+    protected Collection<Node> checkedNodes() {
+        return CBLayoutAlgorithm.userSolveNodes(graph);
+    }
+
     /**
      * Which of the user's constraints the SBGN solves apply. With {@code -Dcblayout.sbgnUserTypes=all} every kind
      * (CBLayoutAlgorithm translates them as the user solve does); with {@code hvsd} only alignments, gaps and, in the
@@ -209,11 +219,45 @@ public class ConstraintSBGNLayout extends StepLayout {
         reportUserConstraints();
     }
 
-    /** After a single step: as after the whole run (SBGN-ED can save the map after any step). */
+    /**
+     * After a single step: as after the whole run (SBGN-ED can save the map after any step). The port points this
+     * inserts go again before the next step: the AF and ER solves keep the bends, and the next sync would leave them
+     * behind where the nodes were.
+     */
     @Override
     protected void afterStep(int index, List<Constraint> created) {
-        SbgnPortSync.apply(graph);
+        SbgnPortSync.apply(graph, stepPorts);
         reportUserConstraints();
+    }
+
+    /** Before the steps: the port points of the last single step go ({@link #afterStep}), then as the base class. */
+    @Override
+    protected void beforeRun() {
+        dropStepPorts();
+        super.beforeRun();
+    }
+
+    /** Takes the port points {@link #afterStep} inserted out of the arcs again, where they still are. */
+    private void dropStepPorts() {
+        for (Map.Entry<Edge, List<org.Vector2d>> en : stepPorts.entrySet()) {
+            Edge e = en.getKey();
+            if (!graph.containsEdge(e)) continue;
+            ArrayList<org.Vector2d> bends = AttributeHelper.getEdgeBends(e);
+            List<org.Vector2d> kept = new ArrayList<>(bends);
+            for (org.Vector2d port : en.getValue()) {
+                for (Iterator<org.Vector2d> it = kept.iterator(); it.hasNext(); ) {
+                    org.Vector2d b = it.next();
+                    if (b.x == port.x && b.y == port.y) {
+                        it.remove();
+                        break;
+                    }
+                }
+            }
+            if (kept.size() == bends.size()) continue;
+            AttributeHelper.removeEdgeBends(e);
+            if (!kept.isEmpty()) AttributeHelper.addEdgeBends(e, kept);
+        }
+        stepPorts.clear();
     }
 
     /**
@@ -227,6 +271,7 @@ public class ConstraintSBGNLayout extends StepLayout {
     protected void beforeReset() {
         restoreDeletedCompartments();
         restoreRewiredTagEdges();
+        tagBindings.clear();
         TopologyReversibleNormalizer.restore(topologyReversibleChanges);
         topologyReversibleChanges.clear();
         topologyPlan = null;
@@ -238,6 +283,7 @@ public class ConstraintSBGNLayout extends StepLayout {
     @Override
     protected void afterReset() {
         clearOrientations();
+        stepPorts.clear();
         SbgnPortSync.apply(graph);   // the bends are gone; put the port markers back on the straight arcs
     }
 
@@ -254,21 +300,31 @@ public class ConstraintSBGNLayout extends StepLayout {
      * Re-insert the compartment glyphs that step 1 ({@link #deleteCompartmentNodes()}) detached.
      * Member-fitted copies the last step re-created are dropped first, so no compartment gets two
      * frames. The re-added glyphs keep their original geometry, styling and label because
-     * {@code addNodeCopy} copies them straight from the still-detached original.
+     * {@code addNodeCopy} copies them straight from the still-detached original. The user's constraints on a
+     * compartment move on to the glyph that comes back for it.
      */
     private void restoreDeletedCompartments() {
         for (Node copy : restoredCompartments) {
             try {
-                if (graph.containsNode(copy)) graph.deleteNode(copy);
+                if (graph.containsNode(copy)) {
+                    holdUserConstraints(copy, c -> true);
+                    graph.deleteNode(copy);
+                }
             } catch (Exception ignored) { }
         }
         restoredCompartments.clear();
         for (Node original : deletedCompartments) {
             try {
-                if (!graph.containsNode(original)) graph.addNodeCopy(original);
+                if (graph.containsNode(original)) continue;
+                Node back = graph.addNodeCopy(original);
+                releaseUserConstraints(original, back);
+                for (Map.Entry<Node, Node> e : originalOf.entrySet()) {
+                    if (e.getValue() == original) releaseUserConstraints(e.getKey(), back);
+                }
             } catch (Exception ignored) { }
         }
         deletedCompartments.clear();
+        originalOf.clear();
     }
 
     /** Put every tag edge that step 1 rerouted to a submap back onto its original endpoints. */
@@ -276,11 +332,21 @@ public class ConstraintSBGNLayout extends StepLayout {
         for (TagBinding b : tagBindings.values()) {
             for (RewiredEdge rw : b.rewired) {
                 try {
-                    rw.edge.setSource(rw.origSource);
-                    rw.edge.setTarget(rw.origTarget);
+                    // setting the same end again would still move the edge in the node's edge list
+                    if (rw.edge.getSource() != rw.origSource) rw.edge.setSource(rw.origSource);
+                    if (rw.edge.getTarget() != rw.origTarget) rw.edge.setTarget(rw.origTarget);
                 } catch (Exception ignored) { }
             }
         }
+    }
+
+    /**
+     * Step 1 runs again without a reset: what the last step 1 took out of the graph comes back first, so this one
+     * starts from the structure of the map (compartment frames the last step re-inserted stay, they fit the drawing).
+     */
+    private void undoPreparation() {
+        restoreRewiredTagEdges();
+        if (restoredCompartments.isEmpty()) restoreDeletedCompartments();
     }
 
     /** Restore the edge docking captured by {@link #onSnapshot()} before step 1. */
@@ -293,6 +359,11 @@ public class ConstraintSBGNLayout extends StepLayout {
                 ega.getDocking().setTarget(en.getValue()[1]);
             } catch (Exception ignored) { }
         }
+    }
+
+    /** Where {@code n} stood before the first step of the run (null if it was not in the graph then). */
+    Point2D.Double inputPosition(Node n) {
+        return originalPosition(n);
     }
 
     /** Capture the docking now (still intact) so a reset can undo removeDocking(). */
@@ -340,6 +411,7 @@ public class ConstraintSBGNLayout extends StepLayout {
                 "Prepare the graph (docking, compartments, tags, complex containment), " +
                         "build the skeleton graph and open it in a new window.",
                 () -> {
+                    undoPreparation();
                     removeDocking();
                     refreshView();
                     setClusterMap();
@@ -497,6 +569,7 @@ public class ConstraintSBGNLayout extends StepLayout {
 
     /** AF and ER step 1, the preparation PD step 1 does as well: docking, view, compartments, tags inside submaps. */
     void prepareActivityFlow() {
+        undoPreparation();
         removeDocking();
         // The PD solver calls drop the bends of every edge they see; the AF solver calls see only part of the graph.
         for (Edge e : graph.getEdges()) AttributeHelper.removeEdgeBends(e);
@@ -878,7 +951,7 @@ public class ConstraintSBGNLayout extends StepLayout {
     /** Modulator leaf -> side the process star placed it on; the stub step reuses that side. */
     private final Map<Node, String> starSides = new HashMap<>();
     /** -Dcblayout.starRadius=px (100): centre distance of the process star (larger only where the nodes need it). */
-    public static double STAR_RADIUS = Double.parseDouble(System.getProperty("cblayout.starRadius", "100"));
+    public static double STAR_RADIUS = doubleProperty("cblayout.starRadius", 100);
 
     /**
      * -Dcblayout.alignSides=off|drop|rotate (default off): two skeleton neighbours that step 2 would align to the same
@@ -2049,6 +2122,7 @@ public class ConstraintSBGNLayout extends StepLayout {
         for (Edge edge : candidates) {
             Node a = edge.getSource(), b = edge.getTarget();
             boolean horizontal = axisOf.get(edge);
+            boolean rotated = false;
             if (!"off".equals(SIDE_POLICY)) {
                 String sideA = alignmentSide(a, b, horizontal);
                 String sideB = alignmentSide(b, a, horizontal);
@@ -2062,6 +2136,7 @@ public class ConstraintSBGNLayout extends StepLayout {
                         String altB = alignmentSide(b, a, !horizontal);
                         if (!usedA.contains(altA) && !usedB.contains(altB)) {
                             horizontal = !horizontal;
+                            rotated = true;
                             sideA = altA;
                             sideB = altB;
                             placed = true;
@@ -2082,7 +2157,8 @@ public class ConstraintSBGNLayout extends StepLayout {
             } else {
                 ConstraintStore.constraints.addConstraint(new VerticalConstraint(toAdd, VerticalConstraint.VerticalConstraintType.MIDDLE));
             }
-            Node[] ord = sepOrder.get(edge);   // only filled with -Dcblayout.skelSep=moved
+            // only filled with -Dcblayout.skelSep=moved; the order was taken along the axis before a rotation
+            Node[] ord = rotated ? null : sepOrder.get(edge);
             if (ord != null) {
                 addGapSeparation(skeletonNodeLookup.get(ord[0]), skeletonNodeLookup.get(ord[1]), horizontal, CYCLE_GAP);
             } else if (SKEL_SEP_ALL && fdVariant() && CycleSelector.isFlowEdge(edge) && a != b) {
@@ -3123,18 +3199,21 @@ public class ConstraintSBGNLayout extends StepLayout {
 
     private void deleteCompartmentNodes()
     {
-        deletedCompartments.clear();
         // Every compartment glyph goes, not only those that ended up in the cluster map: one that is
         // left behind takes part in the force-directed layout as a very large box and pushes the
-        // whole drawing apart.
+        // whole drawing apart. The user's constraints on it wait outside the store until it is back.
         for (Node node : new ArrayList<>(graph.getNodes())) {
             if (!isCompartment(node)) continue;
+            holdUserConstraints(node, c -> true);
             try {
                 graph.deleteNode(node);
-                // Remember it so resetToOriginal() can re-insert it.
-                deletedCompartments.add(node);
-            } catch (Exception ignored) {
+            } catch (Exception e) {
+                releaseUserConstraints(node, node);
+                continue;
             }
+            // Remember it so resetToOriginal() can re-insert it; a frame the last step re-inserted stands for an
+            // original that is remembered already.
+            if (!restoredCompartments.remove(node)) deletedCompartments.add(node);
         }
     }
 
@@ -3165,6 +3244,8 @@ public class ConstraintSBGNLayout extends StepLayout {
             // its original bbox for compartments whose members could not be resolved.
             Node compartment = graph.addNodeCopy(original);
             restored.add(compartment);
+            originalOf.put(compartment, originalOf.containsKey(original) ? originalOf.get(original) : original);
+            releaseUserConstraints(original, compartment);
 
             // the cluster rectangle the solver computed contains exactly the members and overlaps no other one; the
             // member bounding box below is the fallback (e.g. ER/AF runs without a cluster hierarchy)

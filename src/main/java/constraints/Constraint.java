@@ -3,7 +3,9 @@ package constraints;
 import org.graffiti.graph.Node;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -65,6 +67,23 @@ public abstract class Constraint {
     public boolean removeNode(Node n){
         this.nodes.remove(n);
         return this.nodes.size() < getMinNodes();
+    }
+
+    /**
+     * Puts {@code copy} in the place of {@code n}, with everything the constraint keeps for {@code n}: a layout took
+     * {@code n} out of the graph for some steps and inserted {@code copy} for it.
+     */
+    public void replaceNode(Node n, Node copy) {
+        int i = nodes.indexOf(n);
+        if (i >= 0) nodes.set(i, copy);
+    }
+
+    /** The entry of {@code n} in {@code map} under the key {@code copy}, at the same place in the iteration order. */
+    protected static <V> void replaceKey(Map<Node, V> map, Node n, Node copy) {
+        if (!map.containsKey(n)) return;
+        Map<Node, V> entries = new LinkedHashMap<>(map);
+        map.clear();
+        for (Map.Entry<Node, V> e : entries.entrySet()) map.put(e.getKey() == n ? copy : e.getKey(), e.getValue());
     }
 
     @Override

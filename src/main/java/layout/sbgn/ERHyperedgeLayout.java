@@ -7,6 +7,7 @@ import constraints.ConstraintFeasibility;
 import constraints.ConstraintCheck;
 import constraints.ConstraintConflicts;
 import constraints.ConstraintStore;
+import constraints.Constraints;
 import constraints.HorizontalConstraint;
 import constraints.OrthogonalEdgeConstraintGraph;
 import constraints.SeparationConstraintGraph;
@@ -25,6 +26,7 @@ import org.graffiti.graphics.GraphicAttributeConstants;
 import org.graffiti.plugin.view.ArrowShape;
 import org.graffiti.plugins.views.defaults.SupportsHollowDrawing;
 
+import java.awt.geom.Point2D;
 import java.util.*;
 
 /**
@@ -133,8 +135,9 @@ final class ERHyperedgeLayout {
     private final List<Node> removedNodes = new ArrayList<>();
     private final List<Edge> removedEdges = new ArrayList<>();
     private final Map<Edge, Node[]> endsOf = new HashMap<>();
-    /** Position the removed nodes had before step 1 (for Reset only). */
-    private final Map<Node, double[]> inputPosition = new HashMap<>();
+    /** A copy an earlier run without Reset inserted -&gt; the node or edge of the input map it stands for (for Reset). */
+    private final Map<Node, Node> inputNodeOf = new HashMap<>();
+    private final Map<Edge, Edge> inputEdgeOf = new HashMap<>();
     /** The connected parts of the whole map as step 1 found it, hyperedges included: what packing moves as one. */
     private final List<List<Node>> parts = new ArrayList<>();
     /** Removed node / edge -> its copy in the graph once it is inserted again. */
@@ -142,6 +145,8 @@ final class ERHyperedgeLayout {
     private final Map<Edge, Edge> liveEdge = new LinkedHashMap<>();
     /** The user's constraints on what step 1 removed; they move on to the copies. */
     private final List<Membership> memberships = new ArrayList<>();
+    /** Constraints of {@link #memberships} that the removal of their nodes made void (the add-on dropped them). */
+    private final Set<Constraint> voidedByRemoval = new HashSet<>();
     private final Map<Edge, List<OrthogonalEdgeConstraintGraph>> edgeConstraints = new HashMap<>();
     /** Steps 2 and 3: the neighbours that have an alignment, by {@link #pairKey}. */
     private final Map<Long, Aligned> aligned = new LinkedHashMap<>();
@@ -257,9 +262,6 @@ final class ERHyperedgeLayout {
         removeCreated();
 
         parts.addAll(ERLayout.componentsOf(graph));
-        // Reset puts a removed node back where the map had it, not where the start run leaves it
-        Map<Node, double[]> before = new HashMap<>();
-        for (Node n : graph.getNodes()) before.put(n, new double[]{ x(n), y(n) });
         if (START_FROM_GRAPH) startRun();
 
         ERLayout reader = new ERLayout(host);
@@ -282,11 +284,14 @@ final class ERHyperedgeLayout {
         for (int i = 0; i < point.length; i++) point[i] = ERLayout.isPoint(nodes.get(i));
         for (int i : ERAlignmentPlan.peel(nodes.size(), ends, point)) {
             Node n = nodes.get(i);
-            inputPosition.put(n, before.get(n));
             rememberUserConstraints(n);
+            host.holdUserConstraints(n, ERHyperedgeLayout::keepsNodeData);
             for (Edge e : new ArrayList<>(n.getEdges())) remove(e);
             removedNodes.add(n);
             graph.deleteNode(n);
+        }
+        for (Membership m : memberships) {
+            if (!ConstraintStore.of(graph).getAllConstraints().contains(m.constraint)) voidedByRemoval.add(m.constraint);
         }
         int others = removedEdges.size() - ofHyperedges;
         log("step 1: removed " + hyperedges.size() + " hyperedges (" + ofHyperedges + " edges) and " + removedNodes.size()
@@ -707,8 +712,11 @@ final class ERHyperedgeLayout {
         created.addAll(cs);
     }
 
+    /** The constraints of the last run go; one the user has taken over since (ConflictLog.restore) stays. */
     private void removeCreated() {
-        if (ConstraintStore.constraints != null) for (Constraint c : created) ConstraintStore.constraints.removeConstraint(c);
+        if (ConstraintStore.constraints != null) {
+            for (Constraint c : created) if (c.isAutomatic()) ConstraintStore.constraints.removeConstraint(c);
+        }
         created.clear();
     }
 
@@ -731,10 +739,11 @@ final class ERHyperedgeLayout {
                 it.remove();
                 lost++;
                 for (Constraint c : a.own) {
+                    created.remove(c);
+                    if (!c.isAutomatic()) continue;   // taken over by the user
                     // another pair may have leaned on a constraint that goes now: look at all of them again
                     again |= ConstraintStore.constraints.getAllConstraints().contains(c);
                     ConstraintStore.constraints.removeConstraint(c);
-                    created.remove(c);
                 }
             }
         }
@@ -1006,6 +1015,7 @@ final class ERHyperedgeLayout {
             keepSbgnAttributes(removed, copy);
             live.put(removed, copy);
             restoreUserConstraints(removed, copy);
+            host.releaseUserConstraints(removed, copy);
         }
         return copy;
     }
@@ -1030,7 +1040,8 @@ final class ERHyperedgeLayout {
     /**
      * Step 1 deletes {@code n}, and the copy that comes back is another node. The user's constraints on {@code n} are
      * remembered so that the copy takes its place in them; without that they are lost (inside VANTED the add-on takes a
-     * deleted node out of every constraint). Only constraints that keep nothing per node but their list of nodes.
+     * deleted node out of every constraint). Only constraints that keep nothing per node but their list of nodes; the
+     * others wait outside the store ({@link #keepsNodeData}).
      */
     private void rememberUserConstraints(Node n) {
         if (ConstraintStore.constraints == null) return;
@@ -1038,6 +1049,13 @@ final class ERHyperedgeLayout {
             int i = c.getNodes().indexOf(n);
             if (i >= 0 && !c.isAutomatic() && plainNodeList(c)) memberships.add(new Membership(c, n, i));
         }
+    }
+
+    /** A pin, target, rigid group, area, grid or star: the deletion would lose what it keeps for the node. */
+    private static boolean keepsNodeData(Constraint c) {
+        boolean edgeBound = c instanceof OrthogonalEdgeConstraintGraph
+                && ((OrthogonalEdgeConstraintGraph) c).getEdge() != null;
+        return !edgeBound && !plainNodeList(c);
     }
 
     private static boolean plainNodeList(Constraint c) {
@@ -1050,8 +1068,11 @@ final class ERHyperedgeLayout {
     }
 
     private void restoreUserConstraints(Node removed, Node copy) {
+        Constraints store = ConstraintStore.of(graph);
         for (Membership m : memberships) {
             if (m.node != removed) continue;
+            // gone from the store, not by the removal: the user deleted it since, and it stays deleted
+            if (!voidedByRemoval.contains(m.constraint) && !store.getAllConstraints().contains(m.constraint)) continue;
             List<Node> nodes = m.constraint.getNodes();
             int at = nodes.indexOf(removed);
             if (at >= 0) nodes.set(at, copy);   // nobody took the deleted node out of the constraint
@@ -1061,15 +1082,14 @@ final class ERHyperedgeLayout {
         }
     }
 
-    /** A constraint on a removed edge (horizontal / vertical edge) is bound to that edge: the copy gets one like it. */
+    /**
+     * A constraint on a removed edge (horizontal / vertical edge) is bound to that edge: it moves on to the copy, as the
+     * same constraint (its id, and so its rank among the user's constraints, stays).
+     */
     private void restoreUserConstraints(Edge removed, Edge copy) {
         for (OrthogonalEdgeConstraintGraph c : edgeConstraints.getOrDefault(removed, Collections.<OrthogonalEdgeConstraintGraph>emptyList())) {
-            if (ConstraintStore.constraints != null) ConstraintStore.constraints.removeConstraint(c);
-            OrthogonalEdgeConstraintGraph again = new OrthogonalEdgeConstraintGraph(copy, c.isHorizontal());
-            again.setPriority(c.getPriority());
-            again.setEnabled(c.isSwitchedOnItself());
-            again.setOrigin(c.getOrigin());
-            host.keepUserConstraint(again);
+            c.rebind(copy);
+            host.keepUserConstraint(c);
             listsChanged = true;
         }
     }
@@ -1458,21 +1478,29 @@ final class ERHyperedgeLayout {
     }
 
     /**
-     * Undoes the removal and forgets the run. {@code toInputPositions}: the inserted nodes return to the place they had
-     * before step 1; not for a new run on the drawing as it is, which starts from where the nodes are now.
+     * Undoes the removal and forgets the run. {@code toInputPositions} (Reset): the inserted nodes return to the place
+     * the nodes they stand for had before the first step; not for a new run on the drawing as it is, which starts from
+     * where the nodes are now (the copies then stand for the input map's nodes and edges until Reset).
      */
     private void putBack(boolean toInputPositions) {
         stage = 0;
         for (Node n : removedNodes) insert(n);
         for (Edge e : removedEdges) insert(e);
         for (Map.Entry<Node, Node> en : live.entrySet()) {
-            double[] p = inputPosition.get(en.getKey());
-            if (toInputPositions && p != null && graph.containsNode(en.getValue())) AttributeHelper.setPosition(en.getValue(), p[0], p[1]);
+            Node input = inputNodeOf.getOrDefault(en.getKey(), en.getKey());
+            if (!toInputPositions) {
+                inputNodeOf.put(en.getValue(), input);
+                continue;
+            }
+            Point2D.Double p = host.inputPosition(input);
+            if (p != null && graph.containsNode(en.getValue())) AttributeHelper.setPosition(en.getValue(), p.x, p.y);
         }
-        // the docking of the input map sits on the removed edges (ConstraintSBGNLayout.restoreDocking); hand it on
+        // the docking of the input map sits on its edges (ConstraintSBGNLayout.restoreDocking); hand it on
         for (Map.Entry<Edge, Edge> en : liveEdge.entrySet()) {
+            Edge input = inputEdgeOf.getOrDefault(en.getKey(), en.getKey());
+            if (!toInputPositions) inputEdgeOf.put(en.getValue(), input);
             if (!graph.containsEdge(en.getValue())) continue;
-            EdgeGraphicAttribute from = (EdgeGraphicAttribute) en.getKey().getAttribute(GraphicAttributeConstants.GRAPHICS);
+            EdgeGraphicAttribute from = (EdgeGraphicAttribute) input.getAttribute(GraphicAttributeConstants.GRAPHICS);
             EdgeGraphicAttribute to = (EdgeGraphicAttribute) en.getValue().getAttribute(GraphicAttributeConstants.GRAPHICS);
             to.getDocking().setSource(from.getDocking().getSource());
             to.getDocking().setTarget(from.getDocking().getTarget());
@@ -1484,11 +1512,15 @@ final class ERHyperedgeLayout {
         removedNodes.clear();
         removedEdges.clear();
         endsOf.clear();
-        inputPosition.clear();
+        if (toInputPositions) {
+            inputNodeOf.clear();
+            inputEdgeOf.clear();
+        }
         parts.clear();
         live.clear();
         liveEdge.clear();
         memberships.clear();
+        voidedByRemoval.clear();
         edgeConstraints.clear();
         aligned.clear();
         taken.clear();

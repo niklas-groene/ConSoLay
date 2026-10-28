@@ -86,6 +86,15 @@ public class GridPattern extends Constraint {
     }
 
     @Override
+    public void replaceNode(Node n, Node copy) {
+        super.replaceNode(n, copy);
+        for (List<Node> r : cells) {
+            int i = r.indexOf(n);
+            if (i >= 0) r.set(i, copy);
+        }
+    }
+
+    @Override
     public ConstraintKind getKind() {
         return ConstraintKind.GRID;
     }

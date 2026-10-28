@@ -1065,7 +1065,8 @@ final class AFLayout {
     /**
      * Moves every node beyond a bundle of parallel arc segments the router could not nudge {@link #NUDGING} apart away
      * by the missing width (vertical bundles to the right, horizontal ones down), so no two nodes get closer; an exact
-     * gap across a widened channel gets its new value. True if the arcs are to be routed again.
+     * gap of the steps across a widened channel gets its new value. A bundle that an exact gap of the user spans is not
+     * widened (no solve follows that could keep the gap). True if the arcs are to be routed again.
      * <p>
      * A bundle that comes back unchanged after it was widened does not lack room and gets no more. Pins fix the order
      * of the arc ends on a node, so once only such bundles are left, the arcs are routed once more without
@@ -1089,6 +1090,8 @@ final class AFLayout {
             }
         }
         List<Bundle> cutsX = narrowBundles(vertical), cutsY = narrowBundles(horizontal);
+        keepUserGaps(cutsX, true);
+        keepUserGaps(cutsY, false);
         if (cutsX.isEmpty() && cutsY.isEmpty()) return false;
         if (WIDEN_COLLAPSED) {
             for (Iterator<Bundle> it = cutsX.iterator(); it.hasNext(); ) if (!widened.add("x" + it.next().arcs)) it.remove();
@@ -1118,6 +1121,37 @@ final class AFLayout {
             if (a[axis] != b[axis]) sep.setDistance(sep.getDistance() + b[axis] - a[axis]);
         }
         return true;
+    }
+
+    /**
+     * Drops the bundles across which an active exact gap of the user lies ({@code alongX}: vertical bundles and
+     * horizontal gaps), so widening does not break it; the conflict log says so once per bundle.
+     */
+    private void keepUserGaps(List<Bundle> cuts, boolean alongX) {
+        if (cuts.isEmpty()) return;
+        SeparationConstraintGraph.SeparationConstraintType type = alongX
+                ? SeparationConstraintGraph.SeparationConstraintType.HORIZONTAL
+                : SeparationConstraintGraph.SeparationConstraintType.VERTICAL;
+        Set<Node> nodes = new HashSet<>(ConstraintSBGNLayout.layoutNodes(graph));
+        List<SeparationConstraintGraph> gaps = new ArrayList<>();
+        for (SeparationConstraintGraph sep : ConstraintStore.constraints.getConstraints(SeparationConstraintGraph.class)) {
+            if (sep.isAutomatic() || !sep.isActive() || !sep.isFixed() || sep.getType() != type) continue;
+            if (sep.getNodes().size() == 2 && nodes.containsAll(sep.getNodes())) gaps.add(sep);
+        }
+        for (Iterator<Bundle> it = cuts.iterator(); it.hasNext(); ) {
+            Bundle b = it.next();
+            for (SeparationConstraintGraph sep : gaps) {
+                Node a = sep.getNodes().get(0), c = sep.getNodes().get(1);
+                if ((alongX ? x(a) > b.middle : y(a) > b.middle) == (alongX ? x(c) > b.middle : y(c) > b.middle)) continue;
+                it.remove();
+                if (widened.add("user" + (alongX ? "x" : "y") + b.arcs)) {
+                    String why = "An arc bundle was not widened: an exact gap of yours lies across it.";
+                    ConflictLog.addDropped("SBGN", Collections.<ConstraintFeasibility.Dropped>emptyList(),
+                            Collections.singletonList(why));
+                }
+                break;
+            }
+        }
     }
 
     /**
@@ -1230,14 +1264,13 @@ final class AFLayout {
 
     /**
      * cola exerts no force between components, so they are shelved next to each other (largest first) after every
-     * solve. Nothing constrains two components against each other, so a translation keeps every constraint satisfied.
+     * solve. Components joined by a constraint of the store (a user's or a template's) move as one unit, so a
+     * translation keeps every constraint satisfied.
      */
     private void packComponents() {
         if (components.size() < 2) return;
         if (positionsFixed("The components of the map were not packed")) return;
         List<List<Node>> placed = new ArrayList<>();
-        List<double[]> boxes = new ArrayList<>();
-        double widest = 0;
         for (int i = 0; i < components.size(); i++) {
             List<Node> nodes = new ArrayList<>();
             for (Node u : components.get(i)) {
@@ -1246,6 +1279,12 @@ final class AFLayout {
                 if (expanded && t != null) nodes.addAll(t.members);
                 else nodes.add(u);
             }
+            placed.add(nodes);
+        }
+        placed = joinedByConstraints(placed);
+        List<double[]> boxes = new ArrayList<>();
+        double widest = 0;
+        for (List<Node> nodes : placed) {
             double[] b = { Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY };
             for (Node n : nodes) {
                 b[0] = Math.min(b[0], x(n) - w(n) / 2);
@@ -1253,7 +1292,6 @@ final class AFLayout {
                 b[2] = Math.max(b[2], x(n) + w(n) / 2);
                 b[3] = Math.max(b[3], y(n) + h(n) / 2);
             }
-            placed.add(nodes);
             boxes.add(b);
             if (!nodes.isEmpty()) widest = Math.max(widest, b[2] - b[0]);
         }
@@ -1272,5 +1310,40 @@ final class AFLayout {
             left += bw + COMPONENT_GAP;
             rowHeight = Math.max(rowHeight, bh);
         }
+    }
+
+    /** The placed components with those an active constraint joins merged into one, in the order of their first. */
+    private List<List<Node>> joinedByConstraints(List<List<Node>> parts) {
+        Map<Node, Integer> partOf = new HashMap<>();
+        for (int i = 0; i < parts.size(); i++) for (Node n : parts.get(i)) partOf.put(n, i);
+        int[] parent = new int[parts.size()];
+        for (int i = 0; i < parent.length; i++) parent[i] = i;
+        boolean joined = false;
+        for (Constraint c : ConstraintStore.constraints.getAllConstraints()) {
+            if (!c.isActive()) continue;
+            int first = -1;
+            for (Node n : c.getNodes()) {
+                Integer p = partOf.containsKey(n) ? partOf.get(n) : partOf.get(unit(n));
+                if (p == null) continue;
+                int r = root(parent, p);
+                if (first < 0) first = r;
+                else if (r != first) {
+                    parent[Math.max(r, first)] = Math.min(r, first);
+                    first = Math.min(r, first);
+                    joined = true;
+                }
+            }
+        }
+        if (!joined) return parts;
+        Map<Integer, List<Node>> byRoot = new LinkedHashMap<>();
+        for (int i = 0; i < parts.size(); i++) {
+            byRoot.computeIfAbsent(root(parent, i), k -> new ArrayList<>()).addAll(parts.get(i));
+        }
+        return new ArrayList<>(byRoot.values());
+    }
+
+    private static int root(int[] parent, int i) {
+        while (parent[i] != i) i = parent[i];
+        return i;
     }
 }

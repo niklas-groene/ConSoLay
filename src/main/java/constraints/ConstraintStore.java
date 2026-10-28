@@ -28,7 +28,9 @@ public final class ConstraintStore {
     private static int pinDepth;
     private static boolean hasPending;
     private static Graph pending;
-    /** Graphs shown beside their original (the PD skeleton window): activating one changes nothing. */
+    /** The graph that was active when a run on a side graph began: it is active again when the run ends. */
+    private static Graph sideRunFrom;
+    /** Graphs shown beside their original (the PD skeleton window): activating one keeps the active graph's store. */
     private static final Set<Graph> SIDE = Collections.newSetFromMap(new WeakHashMap<>());
 
     /**
@@ -38,7 +40,7 @@ public final class ConstraintStore {
      * {@link #constraints} directly.
      */
     public static synchronized void activate(Graph g) {
-        if (g != null && SIDE.contains(g)) return;
+        if (g != null && SIDE.contains(g) && active != null) return;
         if (pinned != null && g != pinned) {
             // a layout run is in progress (PD step 1 opens the skeleton in a window of its own, which VANTED makes
             // active): the run keeps its graph's store, the switch is made when the run ends
@@ -47,12 +49,18 @@ public final class ConstraintStore {
             return;
         }
         if (g != null && g == active) return;
-        if (active != null && constraints != null) BY_GRAPH.put(active, constraints);
         if (g == null) {
+            if (active != null && constraints != null) BY_GRAPH.put(active, constraints);
             active = null;
             constraints = new Constraints();
             return;
         }
+        switchTo(g);
+    }
+
+    /** {@link #constraints} becomes the store of {@code g}; the previous active graph's store is kept for it. */
+    private static void switchTo(Graph g) {
+        if (active != null && constraints != null) BY_GRAPH.put(active, constraints);
         Constraints s = BY_GRAPH.get(g);
         if (s == null) {
             s = active == null && constraints != null ? constraints : new Constraints();
@@ -82,12 +90,20 @@ public final class ConstraintStore {
     /**
      * Holds the store of {@code g} active while a layout run works on it (nested calls are counted): an activation of
      * another graph during the run (a window the run opens) does not swap {@link #constraints} away from the graph whose
-     * steps are adding constraints. Headless runs (no active graph) are not affected: nothing is activated.
+     * steps are adding constraints. A run on a side graph works on the side graph's own store; the graph that was active
+     * before is active again when the run ends. Headless runs (no active graph) are not affected: nothing is activated.
      */
     public static synchronized void pin(Graph g) {
         if (g == null) return;
         if (pinDepth == 0) {
-            if (active != null && active != g) activate(g);
+            if (active != null && active != g) {
+                if (SIDE.contains(g)) {
+                    sideRunFrom = active;
+                    switchTo(g);
+                } else {
+                    activate(g);
+                }
+            }
             pinned = g;
             pending = null;
             hasPending = false;
@@ -100,6 +116,10 @@ public final class ConstraintStore {
         if (pinDepth == 0) return;
         if (--pinDepth > 0) return;
         pinned = null;
+        if (sideRunFrom != null) {
+            switchTo(sideRunFrom);
+            sideRunFrom = null;
+        }
         if (hasPending) {
             Graph p = pending;
             pending = null;
@@ -110,9 +130,9 @@ public final class ConstraintStore {
 
     /**
      * Marks {@code g} as a side view of another graph (the skeleton a PD run shows in a window of its own): when its
-     * window becomes active, {@link #constraints} stays the store of the graph the user was working on.
-     * {@link #of(Graph)} gives such a graph a store of its own, so a layout started on it touches nothing of the
-     * original.
+     * window becomes active, {@link #constraints} stays the store of the graph the user was working on (while one is
+     * active). {@link #of(Graph)} gives such a graph a store of its own, and a layout run on it works on that store
+     * ({@link #pin}), so it touches nothing of the original.
      */
     public static synchronized void markSideGraph(Graph g) {
         if (g != null) SIDE.add(g);
@@ -133,10 +153,16 @@ public final class ConstraintStore {
     }
 
     /**
-     * Forgets the stores of the graphs not in {@code open}; the active graph's store stays. A store references its nodes
-     * and they their graph, so the weak keys alone would never let a closed graph go.
+     * Forgets the stores of the graphs not in {@code open}. A store references its nodes and they their graph, so the
+     * weak keys alone would never let a closed graph go. If the active graph is closed (its side view may still be
+     * shown), its store goes as well and no graph is active until the next {@link #activate}.
      */
     public static synchronized void retainOnly(Collection<Graph> open) {
+        if (active != null && pinned == null && !open.contains(active)) {
+            BY_GRAPH.remove(active);
+            active = null;
+            constraints = new Constraints();
+        }
         BY_GRAPH.keySet().removeIf(g -> g != active && !open.contains(g));
     }
 

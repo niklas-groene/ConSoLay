@@ -72,8 +72,10 @@ public class ConstraintSBGNLayoutAlgorithm extends AbstractAlgorithm {
 
     @Override
     public void execute() {
-        // Keep only the user's constraints on this map, as the SBGN panel does: the automatic constraints of an
-        // earlier run (possibly of another map) would reference nodes the solver does not know.
+        // What an unfinished run took out of its map comes back first. Then keep only the user's constraints on this
+        // map, as the SBGN panel does: the automatic constraints of an earlier run (possibly of another map) would
+        // reference nodes the solver does not know.
+        StepLayoutPanel.discardActiveRun();
         ConstraintStore.of(graph).retainUserConstraintsOf(graph);
         ConflictLog.storeReplaced();
         ConstraintStore.onListsChanged.run();

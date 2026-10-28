@@ -15,10 +15,13 @@ import layout.steps.StepLayout;
 
 import org.AttributeHelper;
 import org.graffiti.editor.GravistoService;
+import org.graffiti.editor.MainFrame;
 import org.graffiti.graph.Edge;
 import org.graffiti.graph.Graph;
 import org.graffiti.graphics.EdgeGraphicAttribute;
 import org.graffiti.graphics.GraphicAttributeConstants;
+import org.graffiti.session.Session;
+import org.graffiti.session.SessionListenerExt;
 
 import javax.swing.*;
 import java.awt.*;
@@ -54,6 +57,44 @@ public class StepLayoutPanel extends JPanel {
     public static StepLayout getActiveLayout() {
         return activeLayout;
     }
+
+    /**
+     * Before another layout replaces the active one: an unfinished run is undone, so what its first steps took out of
+     * its map (compartments, hyperedges, tag edges) comes back; a finished run stays as it is
+     * ({@link StepLayout#discardRun}).
+     */
+    public static void discardActiveRun() {
+        StepLayout old = activeLayout;
+        if (old != null && isOpen(old.graph)) old.discardRun();
+    }
+
+    /** True if a session of the main frame shows {@code g}. */
+    private static boolean isOpen(Graph g) {
+        try {
+            for (Session s : MainFrame.getSessions()) if (s.getGraph() == g) return true;
+        } catch (Exception ignored) { }
+        return false;
+    }
+
+    /** Session events: the step list follows the active map, and the run of a closed map is dropped. */
+    private static final SessionListenerExt SESSIONS = new SessionListenerExt() {
+        @Override
+        public void sessionChanged(Session s) {
+            for (StepLayoutPanel instance : new ArrayList<>(instances)) {
+                SwingUtilities.invokeLater(instance::rebuildStepButtons);
+            }
+        }
+
+        @Override
+        public void sessionDataChanged(Session s) { }
+
+        @Override
+        public void sessionClosed(Session s) {
+            // the skeleton window is a side view of a map that is still open: its run stays
+            if (s != null && activeLayout != null && activeLayout.graph == s.getGraph()) setActiveLayout(null);
+        }
+    };
+    private static boolean sessionsListened;
 
     private final StepAlgorithm algorithm;
     private final Map<String, JComboBox<String>> optionBoxes = new LinkedHashMap<>();
@@ -108,7 +149,8 @@ public class StepLayoutPanel extends JPanel {
 
         newLayoutButton = Ui.button("New run",
                 "Prepare a fresh run on the active map" + (optionRows.isEmpty() ? "" : " with the selected options") + ", to execute the steps one at a "
-                        + "time. The constraints of an earlier run are dropped; your own constraints on this map stay.",
+                        + "time. An unfinished earlier run is undone first; the constraints of an earlier run are "
+                        + "dropped, your own constraints on this map stay.",
                 this::onNewLayout);
         newLayoutButton.setName("newRun");
 
@@ -162,6 +204,15 @@ public class StepLayoutPanel extends JPanel {
         rebuildStepButtons();
     }
 
+    @Override
+    public void addNotify() {
+        super.addNotify();
+        MainFrame mainFrame = MainFrame.getInstance();
+        if (sessionsListened || mainFrame == null) return;
+        mainFrame.addSessionListener(SESSIONS);
+        sessionsListened = true;
+    }
+
     /**
      * Every panel shows the steps of the new active layout as not executed, except the panel that prepared it itself
      * (see {@link #preparedLayout}).
@@ -204,6 +255,13 @@ public class StepLayoutPanel extends JPanel {
         return l != null && algorithm.id().equals(l.getAlgorithmId()) ? l : null;
     }
 
+    /** {@link #ownLayout()} if it works on the active map (or its skeleton window is active), else null. */
+    private StepLayout ownLayoutOnActiveMap() {
+        StepLayout l = ownLayout();
+        Graph g = activeGraph();
+        return l != null && g != null && (l.graph == g || isSkeletonOf(l, g)) ? l : null;
+    }
+
     /** The chosen value per option. */
     private Map<String, String> chosenOptions() {
         Map<String, String> m = new LinkedHashMap<>();
@@ -235,8 +293,11 @@ public class StepLayoutPanel extends JPanel {
     }
 
     private void onReset(ActionEvent e) {
-        StepLayout layout = ownLayout();
-        if (layout == null) return;
+        StepLayout layout = ownLayoutOnActiveMap();
+        if (layout == null) {
+            if (ownLayout() != null) status("The run belongs to another map; switch to that map to reset it.");
+            return;
+        }
         try {
             layout.resetToOriginal();
             executedSteps.clear();
@@ -265,6 +326,7 @@ public class StepLayoutPanel extends JPanel {
             return true;
         }
         DisplayConstraints.clearMarkings();
+        discardActiveRun();
         ConstraintStore.of(current).retainUserConstraintsOf(current);
         ConflictLog.storeReplaced();
         ListModels.updateAllLists();
@@ -372,11 +434,12 @@ public class StepLayoutPanel extends JPanel {
     // --- step list build ---
 
     /**
-     * Rebuilds the step list from the active layout: executed steps are done, the first step not executed yet is the
-     * next one. Also updates the "k / n done" counter, the hint under the list and whether Reset is enabled.
+     * Rebuilds the step list from the active layout if it works on the active map: executed steps are done, the first
+     * step not executed yet is the next one. Also updates the "k / n done" counter, the hint under the list and whether
+     * Reset is enabled.
      */
     private void rebuildStepButtons() {
-        StepLayout layout = ownLayout();
+        StepLayout layout = ownLayoutOnActiveMap();
         List<StepList.Step> steps = new ArrayList<>();
         int done = 0;
         if (layout != null) {

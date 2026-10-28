@@ -1,6 +1,7 @@
 package layout.sbgn;
 
 import adaptagrams_bridge.CBLayoutAlgorithm;
+import constraints.ConflictLog;
 import constraints.Constraint;
 import constraints.ConstraintConflicts;
 import constraints.ConstraintFeasibility;
@@ -284,7 +285,8 @@ final class ERLayout {
      * order. Arcs with more nodes first, then shorter ones. Constrained force-directed run on the contracted graph.
      */
     void contractedSkeleton() {
-        for (Constraint c : lastSkeleton) ConstraintStore.constraints.removeConstraint(c);
+        // one the user has taken over since (ConflictLog.restore) is the user's and stays
+        for (Constraint c : lastSkeleton) if (c.isAutomatic()) ConstraintStore.constraints.removeConstraint(c);
         lastSkeleton.clear();
         arcAxis.clear();
         arcForward.clear();
@@ -586,7 +588,7 @@ final class ERLayout {
 
     private void clearPlan() {
         clearSides();
-        for (Constraint c : lastCreated) ConstraintStore.constraints.removeConstraint(c);
+        for (Constraint c : lastCreated) if (c.isAutomatic()) ConstraintStore.constraints.removeConstraint(c);
         lastCreated.clear();
         Arrays.fill(tierAccepted, 0);
         Arrays.fill(tierDropped, 0);
@@ -1414,9 +1416,17 @@ final class ERLayout {
 
     /**
      * cola exerts no force between components, so they are shelved next to each other (largest first) after every
-     * solve. Components joined by a constraint (a user's) move as one unit, so every translation keeps the constraints.
+     * solve. Components joined by a constraint (a user's) move as one unit, so every translation keeps the constraints;
+     * a pin, area or target of the user (no translation keeps it) leaves the components where they are.
      */
     private void packComponents(Collection<Constraint> cs) {
+        if (components.size() < 2) return;
+        if (CBLayoutAlgorithm.absoluteUserConstraintsOn(graph)) {
+            String why = "The parts of the map were not packed: a pin, area or target of yours fixes positions.";
+            ConflictLog.addDropped("SBGN", Collections.<ConstraintFeasibility.Dropped>emptyList(),
+                    Collections.singletonList(why));
+            return;
+        }
         packComponents(components, cs);
     }
 

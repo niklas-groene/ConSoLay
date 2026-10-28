@@ -33,8 +33,9 @@ public class OrthogonalEdgeConstraintGraph extends Constraint {
     public Edge getEdge() { return edge; }
 
     /**
-     * Binds the constraint to {@code copy}, an edge that takes the place of its edge (the edge is deleted and
-     * re-created), so that the deletion does not take the constraint along; its nodes become the ends of the copy.
+     * Binds the constraint to {@code copy}, an edge that takes the place of its edge (a snapshot restore or a layout
+     * step deletes the edge and inserts a copy). The constraint stays the same object, with its id and settings; its
+     * nodes become the ends of the copy.
      */
     public void rebind(Edge copy) {
         edge = copy;

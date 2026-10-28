@@ -46,11 +46,12 @@ public final class ConstraintFeasibility {
     }
 
     /**
-     * Drops automatic constraints until the set is feasible (see the class comment). The one exception follows the
-     * priorities: a user constraint whose {@link Priority} is below that of a step constraint on the cycle loses to it.
-     * With {@code live} ({@code constraints} is the store) it is then deactivated, kept with its settings and its
-     * reason ({@link #lastDeactivated}); on a copy it is taken out like a dropped one. With the default priorities the
-     * user's constraints always win.
+     * Drops automatic constraints until the set is feasible (see the class comment): of the automatic constraints the
+     * guard can drop on a contradiction, one of the lowest priority. The one exception follows the priorities: a user
+     * constraint whose {@link Priority} is below that of every step constraint the guard could drop on the cycle loses
+     * to them. With {@code live} ({@code constraints} is the store) it is then deactivated, kept with its settings and
+     * its reason ({@link #lastDeactivated}); on a copy it is taken out like a dropped one. With the default priorities
+     * the user's constraints always win.
      */
     public static List<Dropped> enforce(Constraints constraints, boolean live) {
         List<Dropped> dropped = new ArrayList<>();
@@ -86,12 +87,14 @@ public final class ConstraintFeasibility {
                     List<Constraint> path = m.alignmentPath(dim, ns.get(0), ns.get(1));
                     if (path != null) { whole = new ArrayList<>(cycle); whole.addAll(path); }
                 }
-                Constraint weak = weakerUser(whole);
+                // what the guard may drop: with feasPriority=class any automatic constraint, else no alignment
+                List<Constraint> droppable = automatic(BY_CLASS ? whole : cycle);
+                Constraint weak = weakerUser(whole, droppable);
                 if (weak != null) {
                     String why = (dim == 0 ? "x" : "y") + " contradiction with step constraints of a higher priority";
                     if (live) {
-                        List<Constraint> others = new ArrayList<>(whole);
-                        others.remove(weak);
+                        List<Constraint> others = new ArrayList<>();
+                        for (Constraint o : whole) if (ConstraintConflicts.RANK.compare(o, weak) < 0) others.add(o);
                         weak.setDeactivation(new Deactivation(weak, others, dim == 0 ? Axis.X : Axis.Y, Double.NaN));
                         lastDeactivated.add(weak);
                     } else {
@@ -101,7 +104,8 @@ public final class ConstraintFeasibility {
                     changed = true;
                     continue;
                 }
-                Constraint victim = BY_CLASS ? lowestRanked(whole) : latestAutomatic(cycle);
+                List<Constraint> lowest = ofLowestPriority(droppable);
+                Constraint victim = BY_CLASS ? lowestRanked(lowest) : latestAutomatic(lowest);
                 if (victim != null) {
                     constraints.removeConstraint(victim);
                     dropped.add(new Dropped(victim, (dim == 0 ? "x" : "y") + " contradiction: separations and alignments form a cycle"));
@@ -153,19 +157,41 @@ public final class ConstraintFeasibility {
         return sb.toString();
     }
 
-    /** The lowest ranked user constraint of {@code cycle} if its priority is below that of a step constraint on it. */
-    private static Constraint weakerUser(List<Constraint> cycle) {
-        Priority top = null;
-        for (Constraint c : cycle) {
-            if (c.isAutomatic() && (top == null || c.getPriority().compareTo(top) > 0)) top = c.getPriority();
+    /**
+     * The lowest ranked user constraint of {@code cycle} if its priority is below that of every constraint of
+     * {@code droppable} (if none can be dropped: below that of a step constraint on the cycle), else null.
+     */
+    private static Constraint weakerUser(List<Constraint> cycle, List<Constraint> droppable) {
+        Priority bar = null;
+        if (droppable.isEmpty()) {
+            for (Constraint c : cycle) {
+                if (c.isAutomatic() && (bar == null || c.getPriority().compareTo(bar) > 0)) bar = c.getPriority();
+            }
+        } else {
+            for (Constraint c : droppable) if (bar == null || c.getPriority().compareTo(bar) < 0) bar = c.getPriority();
         }
-        if (top == null) return null;
+        if (bar == null) return null;
         Constraint weakest = null;
         for (Constraint c : cycle) {
-            if (c.isAutomatic() || c.getPriority().compareTo(top) >= 0) continue;
+            if (c.isAutomatic() || c.getPriority().compareTo(bar) >= 0) continue;
             if (weakest == null || ConstraintConflicts.RANK.compare(c, weakest) > 0) weakest = c;
         }
         return weakest;
+    }
+
+    private static List<Constraint> automatic(List<Constraint> cs) {
+        List<Constraint> l = new ArrayList<>();
+        for (Constraint c : cs) if (c.isAutomatic()) l.add(c);
+        return l;
+    }
+
+    /** The constraints of {@code cs} that have the lowest priority among them. */
+    private static List<Constraint> ofLowestPriority(List<Constraint> cs) {
+        Priority low = null;
+        for (Constraint c : cs) if (low == null || c.getPriority().compareTo(low) < 0) low = c.getPriority();
+        List<Constraint> l = new ArrayList<>();
+        for (Constraint c : cs) if (c.getPriority() == low) l.add(c);
+        return l;
     }
 
     private static Constraint latestAutomatic(List<Constraint> cs) {
@@ -201,7 +227,8 @@ public final class ConstraintFeasibility {
             constraints.removeConstraint(c);
             Model m = Model.build(constraints);
             if (!m.coincide(pair[0], pair[1])) return c;
-            constraints.addConstraint(c);   // re-add; order among equals does not matter for feasibility
+            // re-added at the end: the order does not matter for feasibility, but the solve gets it in a new order
+            constraints.addConstraint(c);
         }
         return null;
     }

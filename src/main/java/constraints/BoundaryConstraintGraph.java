@@ -52,6 +52,14 @@ public class BoundaryConstraintGraph extends Constraint {
     }
 
     @Override
+    public void replaceNode(Node n, Node copy) {
+        super.replaceNode(n, copy);
+        int i = before.indexOf(n), j = after.indexOf(n);
+        if (i >= 0) before.set(i, copy);
+        if (j >= 0) after.set(j, copy);
+    }
+
+    @Override
     public ConstraintKind getKind() {
         return axis == Axis.X ? ConstraintKind.DIVIDE_X : ConstraintKind.DIVIDE_Y;
     }

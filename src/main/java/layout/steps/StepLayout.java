@@ -20,8 +20,13 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * A layout algorithm written as a list of {@link LayoutStep steps} that add constraints to the store instead of
@@ -45,6 +50,12 @@ public abstract class StepLayout {
     private List<Constraint> constraintsBeforeStep;
     /** Template instances the steps applied ({@link StepTemplates}); a reset takes them out again. */
     private final List<TemplateInstance> instances = new ArrayList<>();
+    /** Per step index, the constraints that step added in this run; a step that runs again replaces its own. */
+    private final Map<Integer, List<Constraint>> createdBySteps = new HashMap<>();
+    /** True from the first step of a run until its last step has run, or until a reset. */
+    private boolean unfinished;
+    /** User constraints held out of the store while nodes of theirs are out of the graph, with those nodes. */
+    private final Map<Constraint, List<Node>> held = new LinkedHashMap<>();
 
     /**
      * @param algorithmId the id of the {@link StepAlgorithm} that made this layout (the Algorithms page shows the run
@@ -80,34 +91,49 @@ public abstract class StepLayout {
         return Collections.unmodifiableList(steps);
     }
 
-    /** Runs every step in order. */
+    /**
+     * Runs every step in order. The positions are remembered by the first step after the layout was made or reset, so
+     * a reset after several runs returns to the drawing before the first; the constraints of an earlier run go.
+     */
     public void runAll() {
         ConstraintStore.pin(graph);   // a window a step opens must not swap the store away from this graph
         try {
-            snapshotOriginalPositions();
+            if (originalPositions == null) snapshotOriginalPositions();
+            unfinished = true;
+            dropEarlierConstraints(0);
             beforeRun();
-            for (LayoutStep s : steps) {
+            for (int i = 0; i < steps.size(); i++) {
                 beginStepCapture();
-                s.action.run();
-                markAutomatic(endStepCapture());
+                steps.get(i).action.run();
+                List<Constraint> created = endStepCapture();
+                markAutomatic(created);
+                createdBySteps.put(i, created);
             }
+            unfinished = false;
             afterRun();
         } finally {
             ConstraintStore.unpin();
         }
     }
 
-    /** Runs one step by index; returns the constraints it added (for the Algorithms page to draw). */
+    /**
+     * Runs one step by index; returns the constraints it added (for the Algorithms page to draw). A step that ran
+     * before replaces the constraints it added then; the first step replaces those of every step.
+     */
     public List<Constraint> runStep(int index) {
         ConstraintStore.pin(graph);
         try {
             if (originalPositions == null) snapshotOriginalPositions();
+            if (index == 0) unfinished = true;
+            dropEarlierConstraints(index);
             beforeRun();
             LayoutStep s = steps.get(index);
             beginStepCapture();
             s.action.run();
             List<Constraint> created = endStepCapture();
             markAutomatic(created);
+            createdBySteps.put(index, created);
+            if (index == steps.size() - 1) unfinished = false;
             afterStep(index, created);
             return created;
         } finally {
@@ -116,12 +142,54 @@ public abstract class StepLayout {
     }
 
     /**
+     * Takes the constraints that step {@code index} added in an earlier run out of the store, those of every step for
+     * the first step (with the template instances the steps applied). One the user has taken over since
+     * ({@link ConflictLog#restore}) is no longer automatic and stays.
+     */
+    private void dropEarlierConstraints(int index) {
+        List<Constraint> earlier = new ArrayList<>();
+        if (index == 0) {
+            for (List<Constraint> l : createdBySteps.values()) earlier.addAll(l);
+            createdBySteps.clear();
+        } else if (createdBySteps.containsKey(index)) {
+            earlier.addAll(createdBySteps.remove(index));
+        }
+        Constraints store = ConstraintStore.constraints;
+        if (store == null) return;
+        boolean changed = false;
+        if (index == 0) {
+            for (TemplateInstance inst : instances) TemplateApplier.remove(inst, store);
+            changed = !instances.isEmpty();
+            instances.clear();
+        }
+        Set<Constraint> drop = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Constraint c : earlier) if (c.isAutomatic()) drop.add(c);
+        List<Constraint> gone = new ArrayList<>();
+        for (Constraint c : store.getAllConstraints()) if (drop.contains(c)) gone.add(c);
+        for (Constraint c : gone) store.removeConstraint(c);
+        if (changed || !gone.isEmpty()) ConstraintStore.onListsChanged.run();
+    }
+
+    /**
+     * For a layout that another layout replaces (a new run, another map): an unfinished run is undone
+     * ({@link #resetToOriginal()}), so what its first steps took out of the graph comes back. A finished run stays as
+     * it is; the user's constraints that still wait for nodes it left out of the graph (compartment frames with
+     * {@code -Dcblayout.compartments=drop}) return to the store without them, as after a deletion.
+     */
+    public void discardRun() {
+        if (unfinished) resetToOriginal();
+        else releaseHeldConstraints();
+    }
+
+    /**
      * Back to the state before the first step: {@link #beforeReset()} (the subclass undoes what its steps changed in
      * the structure of the graph), then the remembered positions, no edge bends, only the user's constraints of this
-     * graph in the store, the conflict log without the reports of the run, then {@link #afterReset()}.
+     * graph in its store, the conflict log without the reports of the run (if the graph is the active one), then
+     * {@link #afterReset()}. The next step remembers the positions anew.
      */
     public void resetToOriginal() {
         beforeReset();
+        releaseHeldConstraints();
         if (originalPositions != null) {
             for (Map.Entry<Node, Point2D.Double> e : originalPositions.entrySet()) {
                 Node n = e.getKey();
@@ -143,8 +211,12 @@ public abstract class StepLayout {
             store.retainUserConstraintsOf(graph);
             ConstraintStore.onListsChanged.run();
         }
-        ConflictLog.clear();
+        // the conflict log shows the active graph: a reset of another map leaves it alone
+        if (ConstraintStore.activeGraph() == null || ConstraintStore.activeGraph() == graph) ConflictLog.clear();
+        createdBySteps.clear();
+        unfinished = false;
         afterReset();
+        originalPositions = null;
     }
 
     /** Before the steps of {@link #runAll()} and before every {@link #runStep(int)}: decides the user's constraints. */
@@ -198,6 +270,14 @@ public abstract class StepLayout {
     }
 
     /**
+     * The nodes a user's cluster must keep out when the constraints are measured after a step: the nodes the solves
+     * hold out of clusters (default: {@link #solvedNodes()}).
+     */
+    protected Collection<Node> checkedNodes() {
+        return solvedNodes();
+    }
+
+    /**
      * The scope the user's constraints are decided in before a run: by default the {@link #solvedNodes()} without
      * clusters and overlaps. A layout whose solves hold the other nodes out of the user's clusters and remove overlaps
      * returns a scope with the rectangle padding and {@code avoidOverlaps}.
@@ -234,6 +314,7 @@ public abstract class StepLayout {
      */
     protected void reportUserConstraints() {
         if (ConstraintStore.constraints == null) return;
+        Collection<Node> others = null;
         for (Constraint c : ConstraintStore.constraints.getAllConstraints()) {
             if (c.isAutomatic() || !c.isActive()) continue;
             boolean applies = appliesUserConstraint(c);
@@ -241,7 +322,8 @@ public abstract class StepLayout {
             boolean inGraph = !c.getNodes().isEmpty();
             for (Node n : c.getNodes()) inGraph &= graph.containsNode(n);
             if (!inGraph) continue;
-            String why = ConstraintCheck.violation(c, graph.getNodes(), ConstraintCheck.TOLERANCE);
+            if (others == null) others = checkedNodes();
+            String why = ConstraintCheck.violation(c, others, ConstraintCheck.TOLERANCE);
             if (why == null) continue;
             if (applies) ConflictLog.addUnsatisfied(c, phaseName(), "not satisfied after the step (" + why + ")");
             else ConflictLog.addUnsatisfied(c, phaseName(), "not applied by the " + phaseName() + " layout (" + why
@@ -310,12 +392,56 @@ public abstract class StepLayout {
     }
 
     /**
-     * A constraint of the user that a step puts back into the store (e.g. its node was removed for some steps and is
-     * back). It stays the user's: the step capture would otherwise take it for a constraint the step created.
+     * A constraint of the user that a step puts back into the store of this graph (e.g. its node was removed for some
+     * steps and is back; a reset may run while another graph is active). It stays the user's: the step capture would
+     * otherwise take it for a constraint the step created.
      */
     public void keepUserConstraint(Constraint c) {
-        if (ConstraintStore.constraints == null) return;
-        if (!ConstraintStore.constraints.getAllConstraints().contains(c)) ConstraintStore.constraints.addConstraint(c);
+        Constraints store = ConstraintStore.of(graph);
+        if (!store.getAllConstraints().contains(c)) store.addConstraint(c);
         if (constraintsBeforeStep != null && !constraintsBeforeStep.contains(c)) constraintsBeforeStep.add(c);
+    }
+
+    /**
+     * Before a step takes {@code n} out of the graph for some steps: the user's constraints on it that {@code which}
+     * accepts leave the store, so that the deletion (the add-on takes a deleted node out of every constraint in the
+     * store) leaves them as they are and no solve sees the missing node. {@link #releaseUserConstraints} puts them
+     * back once every node of theirs is back.
+     */
+    public void holdUserConstraints(Node n, Predicate<Constraint> which) {
+        Constraints store = ConstraintStore.of(graph);
+        for (Constraint c : new ArrayList<>(store.getAllConstraints())) {
+            if (c.isAutomatic() || !c.getNodes().contains(n) || !which.test(c)) continue;
+            store.removeConstraint(c);
+            held.put(c, new ArrayList<>());
+        }
+        for (Map.Entry<Constraint, List<Node>> e : held.entrySet()) {
+            if (e.getKey().getNodes().contains(n) && !e.getValue().contains(n)) e.getValue().add(n);
+        }
+    }
+
+    /**
+     * {@code copy} takes the place of {@code removed} in the constraints {@link #holdUserConstraints} took out of the
+     * store; one whose nodes are all back returns to the store.
+     */
+    public void releaseUserConstraints(Node removed, Node copy) {
+        for (Iterator<Map.Entry<Constraint, List<Node>>> it = held.entrySet().iterator(); it.hasNext(); ) {
+            Map.Entry<Constraint, List<Node>> e = it.next();
+            if (!e.getValue().remove(removed)) continue;
+            e.getKey().replaceNode(removed, copy);
+            if (!e.getValue().isEmpty()) continue;
+            keepUserConstraint(e.getKey());
+            it.remove();
+        }
+    }
+
+    /** The held constraints return to the store without the nodes that did not come back. */
+    private void releaseHeldConstraints() {
+        for (Map.Entry<Constraint, List<Node>> e : held.entrySet()) {
+            boolean voided = false;
+            for (Node n : e.getValue()) voided |= e.getKey().removeNode(n);
+            if (!voided) keepUserConstraint(e.getKey());
+        }
+        held.clear();
     }
 }
