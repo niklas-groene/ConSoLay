@@ -1,0 +1,77 @@
+{
+  "format": "cbl-template",
+  "formatVersion": 1,
+  "id": "trn:regulation",
+  "revision": 1,
+  "name": "Regulation",
+  "description": "A transcription factor and a gene it regulates: the regulator above the target (Shen-Orr et al. 2002 draw regulating transcription factors above the regulated operons).",
+  "kind": "pattern",
+  "source": "file",
+  "coordinates": "local: origin = top-left corner of the pattern's bounding box when the template was made; x to the right, y downwards, in px; node positions are centres. Positions in constraint definitions use the same coordinates; applying a template moves them with the instance.",
+  "nodes": [
+    {
+      "id": "n1",
+      "label": "Regulator",
+      "role": "",
+      "x": 35,
+      "y": 13,
+      "width": 70.0,
+      "height": 26.0,
+      "conditions": []
+    },
+    {
+      "id": "n2",
+      "label": "Target",
+      "role": "",
+      "x": 35,
+      "y": 93,
+      "width": 70.0,
+      "height": 26.0,
+      "conditions": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "n1",
+      "target": "n2",
+      "directed": true,
+      "role": "",
+      "conditions": []
+    }
+  ],
+  "ports": [
+    {
+      "id": "p1",
+      "name": "Regulator",
+      "node": "n1"
+    },
+    {
+      "id": "p2",
+      "name": "Target",
+      "node": "n2"
+    }
+  ],
+  "constraints": [
+    {
+      "id": "k1",
+      "type": "SEPARATION_Y",
+      "name": "Regulator above target",
+      "priority": "NORMAL",
+      "enabled": true,
+      "roles": {
+        "first": [
+          "n1"
+        ],
+        "second": [
+          "n2"
+        ]
+      },
+      "params": {
+        "axis": "y",
+        "distance": 70.0,
+        "exact": false
+      }
+    }
+  ]
+}

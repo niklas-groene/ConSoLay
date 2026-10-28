@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sbgn xmlns="http://sbgn.org/libsbgn/0.3" xmlns:ns2="http://www.sbml.org/sbml/level3/version1/render/version1">
+    <map language="activity flow">
+        <glyph id="glyph4" class="perturbation">
+            <label text="&lt;html&gt;&lt;center&gt;Membrane&#xA;potential &#xA;activity&lt;br&gt;[increase in&#xA;membrane&#xA;potential]"/>
+            <bbox y="50.0" x="290.0" h="100.0" w="120.0"/>
+        </glyph>
+        <glyph id="glyph3" class="perturbation">
+            <label text="&lt;html&gt;&lt;center&gt;Membrane&#xA;potential &#xA;activity&lt;br&gt;[increase in&#xA;membrane&#xA;potential]"/>
+            <bbox y="50.0" x="50.0" h="100.0" w="120.0"/>
+        </glyph>
+        <glyph id="glyph5" class="biological activity">
+            <label text="gating&#xA;activity"/>
+            <bbox y="250.0" x="56.0" h="60.0" w="108.0"/>
+            <glyph id="glyph5a" class="unit of information">
+                <label text="sodium&#xA;channel"/>
+                <entity name="macromolecule"/>
+                <bbox y="236.0" x="60.0" h="28.0" w="46.0"/>
+            </glyph>
+        </glyph>
+        <glyph id="glyph6" class="biological activity">
+            <label text="conductance&#xA;activity"/>
+            <bbox y="410.0" x="56.0" h="60.0" w="108.0"/>
+            <glyph id="glyph6a" class="unit of information">
+                <label text="sodium&#xA;channel"/>
+                <entity name="macromolecule"/>
+                <bbox y="396.0" x="60.0" h="28.0" w="46.0"/>
+            </glyph>
+        </glyph>
+        <glyph id="glyph1" class="phenotype">
+            <label text="depolarization"/>
+            <bbox y="570.0" x="50.0" h="60.0" w="120.0"/>
+        </glyph>
+        <glyph id="glyph0" class="biological activity">
+            <label text="sodium&#xA;channel&#xA;activity"/>
+            <bbox y="250.0" x="296.0" h="75.0" w="108.0"/>
+            <glyph id="glyph0a" class="unit of information">
+                <label text="sodium&#xA;channel"/>
+                <entity name="macromolecule"/>
+                <bbox y="236.0" x="300.0" h="28.0" w="46.0"/>
+            </glyph>
+        </glyph>
+        <glyph id="glyph2" class="phenotype">
+            <label text="depolarization"/>
+            <bbox y="425.0" x="290.0" h="60.0" w="120.0"/>
+        </glyph>
+        <arc target="glyph0" source="glyph4" id="arc0" class="positive influence">
+            <start y="150.0" x="350.0"/>
+            <end y="250.0" x="350.0"/>
+        </arc>
+        <arc target="glyph5" source="glyph3" id="arc1" class="positive influence">
+            <start y="150.0" x="110.0"/>
+            <end y="250.0" x="110.0"/>
+        </arc>
+        <arc target="glyph6" source="glyph5" id="arc2" class="positive influence">
+            <start y="310.0" x="110.0"/>
+            <end y="410.0" x="110.0"/>
+        </arc>
+        <arc target="glyph1" source="glyph6" id="arc3" class="necessary stimulation">
+            <start y="470.0" x="110.0"/>
+            <end y="570.0" x="110.0"/>
+        </arc>
+        <arc target="glyph2" source="glyph0" id="arc4" class="necessary stimulation">
+            <start y="325.0" x="350.0"/>
+            <end y="425.0" x="350.0"/>
+        </arc>
+    </map>
+</sbgn>

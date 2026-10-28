@@ -1,0 +1,248 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--
+  Build for the Constraint SBGN Layout VANTED add-on.
+
+  Layout:
+    src/main/java/         Java sources
+    src/main/resources/    ConstraintLayout.xml + other classpath resources
+    libs/adaptagrams.jar   The user's adaptagrams build (SWIG bindings + NativeLoader
+                           + native libs for mac/linux/windows). Embedded into the
+                           addon JAR so VANTED loads it from inside the addon.
+    ../vanted-libraries/   VANTED's third-party JARs (provided at runtime by VANTED).
+
+  Usage:
+    ant                    # default = create_run_jar
+    ant clean              # remove target/
+    ant create_run_jar     # build addon JAR -> target/jar/ConstraintLayout.jar
+    ant test               # compile and run the unit tests in src/test/java
+    ant regression         # lay out every map in Files/*.sbgn headless and compare with tools/regression/baseline
+    ant regression-baseline  # rewrite that baseline from the current code (see supplement/regression.md)
+
+  Install: drop target/jar/ConstraintLayout.jar into VANTED via
+           "Edit -> Preferences -> Add-ons -> Install Add-on" (or just put it next
+           to other addon JARs in the VANTED plugins folder).
+-->
+<project default="create_run_jar" name="Create Constraints Addon">
+
+    <property name="src.dir"        value="src/main/java"/>
+    <property name="res.dir"        value="src/main/resources"/>
+    <property name="classes.dir"    value="target/classes"/>
+    <property name="jar.dest.path"  value="target/jar"/>
+    <property name="target.name"    value="ConstraintLayout.jar"/>
+    <property name="test.src.dir"     value="src/test/java"/>
+    <property name="test.classes.dir" value="target/test-classes"/>
+
+    <!-- VANTED's third-party libs. Override with -Dvanted.libs=/path/to/vanted-libraries. -->
+    <condition property="vanted.libs.default"
+               value="../vanted-libraries"
+               else="${user.home}/VANTED/vanted-libraries">
+        <available file="../vanted-libraries" type="dir"/>
+    </condition>
+    <property name="vanted.libs" value="${vanted.libs.default}"/>
+    <fail message="vanted-libraries directory not found at '${vanted.libs}'. Pass -Dvanted.libs=/path/to/vanted-libraries to override.">
+        <condition>
+            <not><available file="${vanted.libs}" type="dir"/></not>
+        </condition>
+    </fail>
+
+    <!-- VANTED core. Either:
+           a) Live source checkout: vanted.dir/target/classes  (after running ant in VANTED), or
+           b) Pre-built JAR.
+         Override with -Dvanted.dir=/path/to/vanted, -Dvanted.core.jar=/path/to/vanted-core.jar -->
+    <condition property="vanted.dir.default"
+               value="../vanted"
+               else="${user.home}/VANTED/vanted">
+        <available file="../vanted" type="dir"/>
+    </condition>
+    <property name="vanted.dir"      value="${vanted.dir.default}"/>
+    <property name="vanted.classes"  value="${vanted.dir}/target/classes"/>
+    <property name="vanted.core.jar" value="${vanted.dir}/target/jar/vanted-core.jar"/>
+
+    <!-- The user's adaptagrams.jar lives in libs/. Its content is exploded into the
+         addon JAR (zipgroupfileset) so org.adaptagrams.NativeLoader and the bundled
+         native libraries ship with the addon. -->
+    <!-- libs/adaptagrams2.jar if present, otherwise the org.adaptagrams binding with natives in vanted-libraries -->
+    <condition property="adaptagrams2.jar" value="libs/adaptagrams2.jar">
+        <available file="libs/adaptagrams2.jar"/>
+    </condition>
+    <property name="adaptagrams2.jar" value="${vanted.libs}/adaptagrams.jar"/>
+
+    <path id="compile.classpath">
+        <fileset dir="${vanted.libs}">
+            <include name="**/*.jar"/>
+        </fileset>
+        <!-- VANTED core classes — try, in order: live source build, prebuilt JAR
+             in vanted/target/jar/, local libs/vanted-core.jar fallback. -->
+        <pathelement location="${vanted.classes}"/>
+        <fileset dir="${vanted.dir}/target/jar" erroronmissingdir="false">
+            <include name="vanted-core*.jar"/>
+        </fileset>
+        <!-- libs/ also holds sbgn-ed.jar (org.sbgn.Language, the SBGN-ED reader) -->
+        <fileset dir="libs" erroronmissingdir="false">
+            <include name="*.jar"/>
+        </fileset>
+        <pathelement location="${adaptagrams2.jar}"/>
+    </path>
+
+    <target name="clean">
+        <delete dir="target"/>
+    </target>
+
+    <target name="init" depends="clean">
+        <mkdir dir="${classes.dir}"/>
+        <mkdir dir="${jar.dest.path}"/>
+    </target>
+
+    <target name="check-vanted">
+        <condition property="vanted.classes.available">
+            <or>
+                <available file="${vanted.classes}/org/AttributeHelper.class"/>
+                <available type="dir" file="${vanted.dir}/target/jar"/>
+                <available type="dir" file="libs"/>
+            </or>
+        </condition>
+        <fail unless="vanted.classes.available">
+VANTED core classes not found.
+
+Either:
+  - Build VANTED first:   cd ${vanted.dir} &amp;&amp; ant
+  - Or drop a vanted-core.jar into ./libs/
+  - Or override the path: ant -Dvanted.dir=/path/to/vanted
+
+Looked in:
+  ${vanted.classes}
+  ${vanted.dir}/target/jar/vanted-core*.jar
+  libs/vanted-core*.jar
+        </fail>
+    </target>
+
+    <target name="compile" depends="init,check-vanted">
+        <javac srcdir="${src.dir}"
+               destdir="${classes.dir}"
+               source="1.8" target="1.8"
+               encoding="UTF-8"
+               includeantruntime="false"
+               debug="true">
+            <classpath refid="compile.classpath"/>
+        </javac>
+
+        <!-- copy ConstraintLayout.xml and any other classpath resources -->
+        <copy todir="${classes.dir}">
+            <fileset dir="${res.dir}"/>
+        </copy>
+    </target>
+
+    <target name="create_run_jar" depends="compile">
+        <delete file="${jar.dest.path}/${target.name}"/>
+        <jar destfile="${jar.dest.path}/${target.name}" filesetmanifest="mergewithoutmain">
+            <manifest>
+                <attribute name="Built-By" value="${user.name}"/>
+                <attribute name="Vanted-Addon-Descriptor" value="ConstraintLayout.xml"/>
+            </manifest>
+
+            <!-- our compiled classes + ConstraintLayout.xml at the JAR root -->
+            <fileset dir="${classes.dir}"/>
+
+            <!-- embed the user's adaptagrams: SWIG bindings, NativeLoader, native libs -->
+            <zipgroupfileset file="${adaptagrams2.jar}">
+                <exclude name="META-INF/*.SF"/>
+                <exclude name="META-INF/*.RSA"/>
+                <exclude name="META-INF/*.DSA"/>
+                <exclude name="META-INF/MANIFEST.MF"/>
+            </zipgroupfileset>
+        </jar>
+        <echo>Wrote ${jar.dest.path}/${target.name}</echo>
+    </target>
+
+    <!-- ant test: the unit tests in src/test/java, with the JUnit 4 of vanted-libraries. They run without VANTED's GUI;
+         SbgnUserTypesTest and DragSolveTest load the Adaptagrams natives (from vanted-libraries/adaptagrams.jar), the
+         others need no graph at all. -->
+    <target name="test" depends="compile">
+        <mkdir dir="${test.classes.dir}"/>
+        <javac srcdir="${test.src.dir}"
+               destdir="${test.classes.dir}"
+               source="1.8" target="1.8"
+               encoding="UTF-8"
+               includeantruntime="false"
+               debug="true">
+            <classpath>
+                <path refid="compile.classpath"/>
+                <pathelement location="${classes.dir}"/>
+            </classpath>
+        </javac>
+        <java classname="org.junit.runner.JUnitCore" fork="true" failonerror="true">
+            <classpath>
+                <path refid="compile.classpath"/>
+                <pathelement location="${classes.dir}"/>
+                <pathelement location="${test.classes.dir}"/>
+            </classpath>
+            <arg value="layout.sbgn.ERAlignmentPlanTest"/>
+            <arg value="layout.sbgn.SbgnPortSyncTest"/>
+            <arg value="layout.template.io.TemplateExamplesTest"/>
+            <arg value="layout.sbgn.SbgnUserTypesTest"/>
+            <arg value="adaptagrams_bridge.DragSolveTest"/>
+            <arg value="layout.store.StoreRoundTripTest"/>
+        </java>
+    </target>
+
+    <!-- ant regression: the headless regression run of tools/regression (developer tool, not in the add-on jar). It
+         lays out every map in Files/*.sbgn with the SBGN layout of its language and the mental-map layout, writes
+         coordinates and SBGN-ML to target/regression and compares them byte for byte with tools/regression/baseline.
+         The natives of Adaptagrams are loaded from the adaptagrams jar; run it with the Java the add-on is used with
+         (-Dregression.java=/path/to/java, default: this JVM; VANTED runs on Java 8). See supplement/regression.md. -->
+    <property name="regression.src.dir"     value="tools/regression/src"/>
+    <property name="regression.classes.dir" value="target/regression-classes"/>
+    <property name="regression.out.dir"     value="target/regression"/>
+    <property name="regression.baseline"    value="tools/regression/baseline"/>
+    <property name="regression.maps"        value="Files"/>
+    <property name="regression.args"        value=""/>
+    <condition property="regression.java" value="${java.home}/bin/java">
+        <not><isset property="regression.java"/></not>
+    </condition>
+
+    <target name="regression-compile" depends="compile">
+        <mkdir dir="${regression.classes.dir}"/>
+        <javac srcdir="${regression.src.dir}"
+               destdir="${regression.classes.dir}"
+               source="1.8" target="1.8"
+               encoding="UTF-8"
+               includeantruntime="false"
+               nowarn="true"
+               debug="true">
+            <classpath>
+                <path refid="compile.classpath"/>
+                <pathelement location="${classes.dir}"/>
+            </classpath>
+        </javac>
+    </target>
+
+    <target name="regression" depends="regression-compile" description="lay out Files/*.sbgn headless and compare with the baseline">
+        <mkdir dir="${regression.out.dir}"/>
+        <java classname="headless.Regression" fork="true" failonerror="true" jvm="${regression.java}" maxmemory="4g">
+            <classpath>
+                <path refid="compile.classpath"/>
+                <pathelement location="${classes.dir}"/>
+                <pathelement location="${regression.classes.dir}"/>
+            </classpath>
+            <arg value="--maps"/><arg value="${regression.maps}"/>
+            <arg value="--out"/><arg value="${regression.out.dir}"/>
+            <arg value="--baseline"/><arg value="${regression.baseline}"/>
+            <arg line="${regression.args}"/>
+        </java>
+    </target>
+
+    <target name="regression-baseline" depends="regression-compile" description="rewrite tools/regression/baseline from the current code">
+        <mkdir dir="${regression.baseline}"/>
+        <java classname="headless.Regression" fork="true" failonerror="true" jvm="${regression.java}" maxmemory="4g">
+            <classpath>
+                <path refid="compile.classpath"/>
+                <pathelement location="${classes.dir}"/>
+                <pathelement location="${regression.classes.dir}"/>
+            </classpath>
+            <arg value="--maps"/><arg value="${regression.maps}"/>
+            <arg value="--out"/><arg value="${regression.baseline}"/>
+            <arg line="${regression.args}"/>
+        </java>
+    </target>
+
+</project>

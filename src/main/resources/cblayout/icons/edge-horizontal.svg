@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <!-- EDGE_HORIZONTAL: the edge between two nodes is kept level; the accent level line continues it past both nodes -->
+  <path d="M2.75 16.25H6M26 16.25H29.25" fill="none" stroke="#2563EB" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <g fill="none" stroke="#5F6368" stroke-width="1.5" stroke-linecap="round">
+    <path d="M11.75 16.25H20.25"/>
+  </g>
+  <g fill="#E3E9F4" stroke="#3C4043" stroke-width="1.5">
+    <rect x="6.25" y="12.25" width="5.5" height="7.5" rx="1.75"/>
+    <rect x="20.25" y="12.25" width="5.5" height="7.5" rx="1.75"/>
+  </g>
+</svg>

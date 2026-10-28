@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <!-- ALIGN_CENTER: stacked nodes of different widths whose centres lie on one vertical guide -->
+  <g fill="#E3E9F4" stroke="#3C4043" stroke-width="1.5">
+    <rect x="11.25" y="4.25" width="9.5" height="5.5" rx="1.75"/>
+    <rect x="7.25" y="13.25" width="17.5" height="5.5" rx="1.75"/>
+    <rect x="13.25" y="22.25" width="5.5" height="5.5" rx="1.75"/>
+  </g>
+  <path d="M16.25 3V29" fill="none" stroke="#2563EB" stroke-width="1.5" stroke-dasharray="2 2"/>
+</svg>

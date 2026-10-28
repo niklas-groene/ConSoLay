@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<!DOCTYPE plugin PUBLIC "-//GRAFFITI/DTD Plugin Descriptin 1.0//EN" "http://www.graffiti.org/dtd/1.0/plugin.dtd">
+<plugin>
+    <author>Niklas Gröne</author>
+    <description>Integrating Constraints into Vanted, together with some Constraint-based Algorithms.</description>
+    <plugindesc>
+        <name>Constraint SBGN Layout</name>
+        <main>cblayout.CBLayout</main>
+        <version>1.0.0</version>
+        <compatibility>2.7.*, 2.8.*</compatibility>
+        <available></available>
+    </plugindesc>
+</plugin>

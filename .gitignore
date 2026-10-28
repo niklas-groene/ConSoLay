@@ -1,0 +1,8 @@
+target/
+out/
+.DS_Store
+.idea/
+*.iml
+Files/*
+!Files/*.sbgn
+Files/homo_sapiens.sbgn/

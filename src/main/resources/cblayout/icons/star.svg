@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <!-- STAR: a hub node with the other nodes evenly on a circle around it -->
+  <circle cx="16" cy="17" r="11" fill="none" stroke="#2563EB" stroke-width="1.5" stroke-dasharray="2 2"/>
+  <g fill="none" stroke="#5F6368" stroke-width="1.5" stroke-linecap="round">
+    <path d="M16 17L16 6M16 17L26.46 13.6M16 17L22.47 25.9M16 17L9.53 25.9M16 17L5.54 13.6"/>
+  </g>
+  <g fill="#E3E9F4" stroke="#3C4043" stroke-width="1.5">
+    <circle cx="16" cy="17" r="3.5"/>
+    <circle cx="16" cy="6" r="2.75"/>
+    <circle cx="26.46" cy="13.6" r="2.75"/>
+    <circle cx="22.47" cy="25.9" r="2.75"/>
+    <circle cx="9.53" cy="25.9" r="2.75"/>
+    <circle cx="5.54" cy="13.6" r="2.75"/>
+  </g>
+</svg>

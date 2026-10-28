@@ -1,0 +1,41 @@
+id	label	regulator	x	y
+araA	araA		250.6	343.2
+araB	araB		215.6	469.3
+araC	araC	local	386.1	311.4
+araD	araD		666.6	266.0
+araE	araE		179.0	407.8
+araF	araF		314.9	405.4
+araG	araG		556.5	265.5
+araH	araH		353.2	478.5
+araJ	araJ		452.8	271.8
+crp	crp	global	629.3	548.5
+galE	galE		994.9	761.7
+galK	galK		688.1	740.3
+galM	galM		928.1	718.1
+galP	galP		915.6	799.7
+galR	galR	local	839.3	860.0
+galS	galS	local	786.1	781.0
+galT	galT		610.1	786.6
+lacA	lacA		1065.3	624.7
+lacI	lacI	local	1051.0	546.8
+lacY	lacY		1160.0	565.5
+lacZ	lacZ		1113.8	474.6
+mglA	mglA		817.7	711.7
+mglB	mglB		604.3	843.8
+mglC	mglC		709.0	845.6
+rhaA	rhaA		244.3	753.8
+rhaB	rhaB		142.3	658.7
+rhaD	rhaD		395.1	671.2
+rhaR	rhaR	local	196.2	597.6
+rhaS	rhaS	local	267.0	684.2
+rhaT	rhaT		371.3	767.0
+xylA	xylA		596.4	395.1
+xylB	xylB		628.5	333.2
+xylE	xylE		882.0	305.7
+xylF	xylF		972.3	413.7
+xylG	xylG		871.7	461.8
+xylH	xylH		975.7	350.7
+xylR	xylR	local	761.0	366.9
+ydeM	ydeM		60.0	123.0
+ydeN	ydeN		242.4	60.0
+ygeA	ygeA		452.1	411.8

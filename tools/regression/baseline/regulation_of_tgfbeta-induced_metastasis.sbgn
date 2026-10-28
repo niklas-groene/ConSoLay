@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sbgn xmlns="http://sbgn.org/libsbgn/0.3" xmlns:ns2="http://www.sbml.org/sbml/level3/version1/render/version1">
+    <map language="activity flow">
+        <glyph id="glyph5" class="biological activity">
+            <label text="Ras"/>
+            <bbox y="250.0" x="50.0" h="40.0" w="72.0"/>
+        </glyph>
+        <glyph id="glyph3" class="biological activity">
+            <label text="Mutant p53/&#xA;P-Smad"/>
+            <bbox y="532.0" x="159.42195" h="60.0" w="108.0"/>
+        </glyph>
+        <glyph id="glyph4" class="biological activity">
+            <label text="p63"/>
+            <bbox y="692.0" x="159.42195" h="60.0" w="108.0"/>
+        </glyph>
+        <glyph id="glyph1" class="biological activity">
+            <label text="Metastatic&#xA;suppressor&#xA;genes&#xA;activity"/>
+            <bbox y="852.0" x="159.42195" h="60.0" w="108.0"/>
+        </glyph>
+        <glyph id="glyph0" class="phenotype">
+            <label text="Pro-invasion&#xA;migration&#xA;metastasis&#xA;gene expression&#xA;platform"/>
+            <bbox y="1012.0" x="148.42195" h="70.0" w="130.0"/>
+        </glyph>
+        <glyph id="glyph2" class="biological activity">
+            <label text="TGF beta"/>
+            <bbox y="50.0" x="159.42195" h="60.0" w="108.0"/>
+        </glyph>
+        <glyph id="glyph6" orientation="vertical" class="and">
+            <bbox y="350.0" x="192.42195" h="42.0" w="42.0"/>
+            <port y="402.0" x="213.422" id="glyph6.2"/>
+            <port y="340.0" x="213.422" id="glyph6.1"/>
+        </glyph>
+        <arc target="glyph0" source="glyph2" id="arc0" class="positive influence">
+            <start y="80.0" x="267.42194"/>
+            <next y="80.0" x="303.92194"/>
+            <next y="1047.0" x="303.92194"/>
+            <end y="1047.0" x="278.42194"/>
+        </arc>
+        <arc target="glyph3" source="glyph6.2" id="arc1" class="positive influence">
+            <start y="402.0" x="213.422"/>
+            <end y="532.0" x="213.42195"/>
+        </arc>
+        <arc target="glyph1" source="glyph4" id="arc2" class="necessary stimulation">
+            <start y="752.0" x="213.42195"/>
+            <end y="852.0" x="213.42195"/>
+        </arc>
+        <arc target="glyph6.1" source="glyph5" id="arc3" class="logic arc">
+            <start y="270.0" x="122.0"/>
+            <next y="270.0" x="210.92195"/>
+            <next y="337.5" x="210.92195"/>
+            <end y="340.0" x="213.422"/>
+        </arc>
+        <arc target="glyph4" source="glyph3" id="arc4" class="negative influence">
+            <start y="592.0" x="213.42195"/>
+            <end y="692.0" x="213.42195"/>
+        </arc>
+        <arc target="glyph0" source="glyph1" id="arc5" class="negative influence">
+            <start y="912.0" x="213.42195"/>
+            <end y="1012.0" x="213.42195"/>
+        </arc>
+        <arc target="glyph6.1" source="glyph2" id="arc6" class="logic arc">
+            <start y="110.0" x="215.7657"/>
+            <next y="112.0" x="215.92195"/>
+            <next y="337.5" x="215.92195"/>
+            <end y="340.0" x="213.422"/>
+        </arc>
+    </map>
+</sbgn>

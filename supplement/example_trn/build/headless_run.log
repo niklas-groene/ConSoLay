@@ -1,0 +1,39 @@
+# generated at Wed Oct 14 09:32:01 CEST 2026
+GML read back: 40 nodes, 90 edges
+Rule 'Mutual regulation' -> Mutual regulation rev 1, priority High, problems: 0
+Rule 'Regulation' -> Regulation rev 1, priority Normal, problems: 0
+Rule 'Shared regulator' -> Shared regulator rev 1, priority Low, problems: 0
+  node crp: trn.regulator='global'
+  node araC: trn.regulator='local'
+  node araA: trn.regulator=''
+  edge 0 trn.effect='dual'
+Search: state COMPLETE, 259 matches, 113 ms, 455 partial assignments
+  matches per rule: {Mutual regulation=2, Regulation=81, Shared regulator=176}; variants per rule: {Mutual regulation=4, Regulation=83, Shared regulator=368}
+Apply: 259 instances, 261 constraints, skipped 0; constraints per rule: {Mutual regulation=4, Regulation=81, Shared regulator=176}
+Decide: 24 of 261 not applied (13 ms); per rule: {Regulation=2, Shared regulator=22}
+  lost against: {Regulation vs [Mutual regulation]=2, Shared regulator vs [Regulation]=10, Shared regulator vs [Mutual regulation, Regulation]=4, Shared regulator vs [Regulation, Shared regulator]=8}
+   - [Regulation] SEPARATION_Y [galR, galS] : Contradicts ALIGN_MIDDLE
+   - [Regulation] SEPARATION_Y [rhaR, rhaS] : Contradicts ALIGN_MIDDLE
+   - [Shared regulator] ALIGN_MIDDLE [galE, galS] : Contradicts SEPARATION_Y
+   - [Shared regulator] ALIGN_MIDDLE [galK, galS] : Contradicts SEPARATION_Y
+   - [Shared regulator] ALIGN_MIDDLE [galM, galS] : Contradicts SEPARATION_Y
+   - [Shared regulator] ALIGN_MIDDLE [galP, galS] : Contradicts SEPARATION_Y
+   - [Shared regulator] ALIGN_MIDDLE [galS, galT] : Contradicts SEPARATION_Y
+   - [Shared regulator] ALIGN_MIDDLE [galS, mglA] : Contradicts SEPARATION_Y
+   - [Shared regulator] ALIGN_MIDDLE [galS, mglB] : Contradicts SEPARATION_Y
+   - [Shared regulator] ALIGN_MIDDLE [galS, mglC] : Contradicts SEPARATION_Y
+   - [Shared regulator] ALIGN_MIDDLE [rhaR, rhaA] : Contradicts 2 constraints
+   - [Shared regulator] ALIGN_MIDDLE [rhaR, rhaB] : Contradicts 2 constraints
+   - [Shared regulator] ALIGN_MIDDLE [rhaR, rhaD] : Contradicts 2 constraints
+   - [Shared regulator] ALIGN_MIDDLE [rhaR, rhaT] : Contradicts 2 constraints
+   - [Shared regulator] ALIGN_MIDDLE [araC, xylA] : Contradicts SEPARATION_Y
+   - [Shared regulator] ALIGN_MIDDLE [araC, xylB] : Contradicts SEPARATION_Y
+   - [Shared regulator] ALIGN_MIDDLE [xylA, xylE] : Contradicts 2 constraints
+   - [Shared regulator] ALIGN_MIDDLE [xylA, xylF] : Contradicts 2 constraints
+   - [Shared regulator] ALIGN_MIDDLE [xylA, xylG] : Contradicts 2 constraints
+   - [Shared regulator] ALIGN_MIDDLE [xylA, xylH] : Contradicts 2 constraints
+   - [Shared regulator] ALIGN_MIDDLE [xylB, xylE] : Contradicts 2 constraints
+   - [Shared regulator] ALIGN_MIDDLE [xylB, xylF] : Contradicts 2 constraints
+   - [Shared regulator] ALIGN_MIDDLE [xylB, xylG] : Contradicts 2 constraints
+   - [Shared regulator] ALIGN_MIDDLE [xylB, xylH] : Contradicts 2 constraints
+Solve (without force-directed run, overlap removal on): 75 ms, not satisfied after the solve: 0

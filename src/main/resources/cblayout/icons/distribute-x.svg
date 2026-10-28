@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <!-- DISTRIBUTE_X: nodes with equal horizontal spacing -->
+  <g fill="#E3E9F4" stroke="#3C4043" stroke-width="1.5">
+    <rect x="3.25" y="6.25" width="5.5" height="7.5" rx="1.75"/>
+    <rect x="13.25" y="6.25" width="5.5" height="7.5" rx="1.75"/>
+    <rect x="23.25" y="6.25" width="5.5" height="7.5" rx="1.75"/>
+  </g>
+  <path d="M5.75 18V26.5M15.75 18V26.5M25.75 18V26.5M5.75 22.25H25.75" fill="none" stroke="#2563EB" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

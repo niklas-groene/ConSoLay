@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <!-- SEPARATION_Y: the centres of two nodes keep at least a given vertical distance, in this order -->
+  <g fill="#E3E9F4" stroke="#3C4043" stroke-width="1.5">
+    <rect x="6.25" y="3.25" width="7.5" height="7.5" rx="1.75"/>
+    <rect x="6.25" y="21.25" width="7.5" height="7.5" rx="1.75"/>
+  </g>
+  <path d="M17.5 7.25H26.5M17.5 24.75H26.5M22.25 8.75V23.25M19.5 11.25L22.25 8.5L25 11.25M19.5 20.75L22.25 23.5L25 20.75" fill="none" stroke="#2563EB" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <!-- TARGET: the node is pulled towards a desired position -->
+  <g fill="#E3E9F4" stroke="#3C4043" stroke-width="1.5">
+    <rect x="3.25" y="20.25" width="7.5" height="7.5" rx="1.75"/>
+  </g>
+  <path d="M12.25 19.75L17.5 14.5" fill="none" stroke="#2563EB" stroke-width="1.5" stroke-dasharray="2 2"/>
+  <path d="M14.75 13.75H18.25V17.25" fill="none" stroke="#2563EB" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="22.75" cy="9.25" r="4.5" fill="none" stroke="#2563EB" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M22.75 3V6.5M22.75 12V15.5M16.5 9.25H20M25.5 9.25H29" fill="none" stroke="#2563EB" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="22.75" cy="9.25" r="1.25" fill="#2563EB"/>
+</svg>

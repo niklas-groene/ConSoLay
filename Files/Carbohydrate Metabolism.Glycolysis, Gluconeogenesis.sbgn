@@ -1,0 +1,1511 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ns2:sbgn xmlns:ns1="http://www.sbml.org/sbml/level3/version1/render/version1" xmlns:ns2="http://sbgn.org/libsbgn/0.3">
+    <ns2:map id="map0" language="process description">
+        <ns2:glyph id="glyph124" class="simple chemical">
+            <ns2:label text="P"/>
+            <ns2:clone/>
+            <ns2:bbox y="725.5" x="630.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph72" class="simple chemical">
+            <ns2:label text="NAD+"/>
+            <ns2:clone/>
+            <ns2:bbox y="750.5" x="655.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph99" class="simple chemical">
+            <ns2:label text="NADH"/>
+            <ns2:clone/>
+            <ns2:bbox y="810.5" x="655.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph83" class="simple chemical">
+            <ns2:label text="NADP+"/>
+            <ns2:bbox y="797.5" x="317.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph66" class="simple chemical">
+            <ns2:label text="NADPH"/>
+            <ns2:bbox y="883.5" x="317.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph123" class="simple chemical">
+            <ns2:label text="PP"/>
+            <ns2:clone/>
+            <ns2:bbox y="450.5" x="319.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph88" class="simple chemical">
+            <ns2:label text="P"/>
+            <ns2:clone/>
+            <ns2:bbox y="528.5" x="319.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph78" class="simple chemical">
+            <ns2:label text="ATP"/>
+            <ns2:clone/>
+            <ns2:bbox y="465.5" x="1301.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph118" class="simple chemical">
+            <ns2:label text="ADP"/>
+            <ns2:clone/>
+            <ns2:bbox y="535.5" x="1301.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph70" class="simple chemical">
+            <ns2:label text="ADP"/>
+            <ns2:clone/>
+            <ns2:bbox y="870.5" x="655.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph43" class="simple chemical">
+            <ns2:label text="ATP"/>
+            <ns2:clone/>
+            <ns2:bbox y="930.5" x="655.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph77" class="simple chemical">
+            <ns2:label text="ADP"/>
+            <ns2:clone/>
+            <ns2:bbox y="870.5" x="1303.9" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph65" class="simple chemical">
+            <ns2:label text="ATP"/>
+            <ns2:clone/>
+            <ns2:bbox y="930.5" x="1303.9" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph60" class="simple chemical">
+            <ns2:label text="2-phospho-D-glycerate"/>
+            <ns2:bbox y="1100.5" x="595.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph100" class="simple chemical">
+            <ns2:label text="ADP"/>
+            <ns2:clone/>
+            <ns2:bbox y="1332.5" x="705.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph75" class="simple chemical">
+            <ns2:label text="ATP"/>
+            <ns2:clone/>
+            <ns2:bbox y="1427.5" x="705.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph96" class="simple chemical">
+            <ns2:label text="ADP"/>
+            <ns2:clone/>
+            <ns2:bbox y="1264.5" x="1361.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph67" class="simple chemical">
+            <ns2:label text="ATP"/>
+            <ns2:clone/>
+            <ns2:bbox y="1358.5" x="1361.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph54" class="simple chemical">
+            <ns2:label text="NAD+"/>
+            <ns2:clone/>
+            <ns2:bbox y="1350.5" x="115.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph102" class="simple chemical">
+            <ns2:label text="NADH"/>
+            <ns2:clone/>
+            <ns2:bbox y="1250.5" x="115.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph84" class="simple chemical">
+            <ns2:label text="NAD+"/>
+            <ns2:bbox y="1737.5" x="445.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph56" class="simple chemical">
+            <ns2:label text="NADH"/>
+            <ns2:bbox y="1737.5" x="565.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph90" class="simple chemical">
+            <ns2:label text="CO2"/>
+            <ns2:bbox y="1712.5" x="535.0" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph57" class="simple chemical">
+            <ns2:label text="NADP+"/>
+            <ns2:clone/>
+            <ns2:bbox y="1480.5" x="1295.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph55" class="simple chemical">
+            <ns2:label text="NADPH"/>
+            <ns2:clone/>
+            <ns2:bbox y="1390.5" x="1285.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph113" class="simple chemical">
+            <ns2:label text="CO2"/>
+            <ns2:bbox y="1420.5" x="1305.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph69" class="simple chemical">
+            <ns2:label text="ATP"/>
+            <ns2:clone/>
+            <ns2:bbox y="1311.5" x="311.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph108" class="simple chemical">
+            <ns2:label text="ADP"/>
+            <ns2:clone/>
+            <ns2:bbox y="1311.5" x="421.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph87" class="simple chemical">
+            <ns2:label text="CO2"/>
+            <ns2:clone/>
+            <ns2:bbox y="1282.5" x="451.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph125" class="simple chemical">
+            <ns2:label text="ATP"/>
+            <ns2:clone/>
+            <ns2:bbox y="1425.5" x="495.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph73" class="simple chemical">
+            <ns2:label text="P"/>
+            <ns2:clone/>
+            <ns2:bbox y="1400.5" x="465.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph119" class="simple chemical">
+            <ns2:label text="PP"/>
+            <ns2:clone/>
+            <ns2:bbox y="1350.5" x="465.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph128" class="simple chemical">
+            <ns2:label text="AMP"/>
+            <ns2:bbox y="1325.5" x="495.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph122" class="simple chemical">
+            <ns2:label text="ATP"/>
+            <ns2:clone/>
+            <ns2:bbox y="1350.5" x="1151.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph112" class="simple chemical">
+            <ns2:label text="P"/>
+            <ns2:clone/>
+            <ns2:bbox y="1330.5" x="1121.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph50" class="simple chemical">
+            <ns2:label text="PP"/>
+            <ns2:bbox y="1280.5" x="1121.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph101" class="simple chemical">
+            <ns2:label text="AMP"/>
+            <ns2:bbox y="1260.5" x="1151.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph42" class="simple chemical">
+            <ns2:label text="P"/>
+            <ns2:clone/>
+            <ns2:bbox y="465.5" x="1541.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph95" class="simple chemical">
+            <ns2:label text="ATP"/>
+            <ns2:clone/>
+            <ns2:bbox y="450.5" x="664.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph51" class="simple chemical">
+            <ns2:label text="ADP"/>
+            <ns2:clone/>
+            <ns2:bbox y="528.5" x="664.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph48" class="simple chemical">
+            <ns2:label text="P"/>
+            <ns2:clone/>
+            <ns2:bbox y="726.5" x="1303.9" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph49" class="simple chemical">
+            <ns2:label text="NADP+"/>
+            <ns2:clone/>
+            <ns2:bbox y="760.5" x="1303.9" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph79" class="simple chemical">
+            <ns2:label text="NADPH"/>
+            <ns2:clone/>
+            <ns2:bbox y="820.5" x="1303.9" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph45" class="simple chemical">
+            <ns2:label text="P"/>
+            <ns2:clone/>
+            <ns2:bbox y="475.5" x="450.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph98" class="simple chemical">
+            <ns2:label text="D-fructose 6-phosphate"/>
+            <ns2:bbox y="430.5" x="495.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph121" class="simple chemical">
+            <ns2:label text="1,3-bisphospho-D-glycerate"/>
+            <ns2:bbox y="840.5" x="595.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph114" class="simple chemical">
+            <ns2:label text="D-fructose 1,6-bisphosphate"/>
+            <ns2:bbox y="550.5" x="495.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph120" class="simple chemical">
+            <ns2:label text="dihydroxyacetone phosphate"/>
+            <ns2:clone/>
+            <ns2:bbox y="700.5" x="395.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph74" class="simple chemical">
+            <ns2:label text="D-fructose 6-phosphate"/>
+            <ns2:bbox y="430.5" x="1421.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph68" class="simple chemical">
+            <ns2:label text="D-fructose 1,6-bisphosphate"/>
+            <ns2:bbox y="560.5" x="1421.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph97" class="simple chemical">
+            <ns2:label text="1,3-bisphospho-D-glycerate"/>
+            <ns2:bbox y="840.5" x="1241.1428" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph71" class="simple chemical">
+            <ns2:label text="2-phospho-D-glycerate"/>
+            <ns2:bbox y="1100.5" x="1241.1428" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph115" class="simple chemical">
+            <ns2:label text="pyruvate"/>
+            <ns2:bbox y="1380.5" x="1241.1428" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph116" class="simple chemical">
+            <ns2:label text="CO2"/>
+            <ns2:clone/>
+            <ns2:bbox y="1153.5" x="421.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph82" class="simple chemical">
+            <ns2:label text="P"/>
+            <ns2:clone/>
+            <ns2:bbox y="1153.5" x="311.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph105" class="simple chemical">
+            <ns2:label text="oxaloacetate"/>
+            <ns2:clone/>
+            <ns2:bbox y="1230.5" x="175.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph126" class="simple chemical">
+            <ns2:label text="D-glucose 1-phosphate"/>
+            <ns2:bbox y="160.5" x="495.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph111" class="simple chemical">
+            <ns2:label text="P"/>
+            <ns2:clone/>
+            <ns2:bbox y="260.5" x="785.0" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph52" class="simple chemical">
+            <ns2:label text="D-glucose 1-phosphate"/>
+            <ns2:bbox y="160.5" x="1421.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph109" class="simple chemical">
+            <ns2:label text="P"/>
+            <ns2:clone/>
+            <ns2:bbox y="260.5" x="1065.0" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph85" class="simple chemical">
+            <ns2:label text="D-glucose 6-phosphate"/>
+            <ns2:bbox y="290.5" x="495.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph130" class="simple chemical">
+            <ns2:label text="P"/>
+            <ns2:clone/>
+            <ns2:bbox y="390.5" x="1065.0" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph62" class="simple chemical">
+            <ns2:label text="D-glucose 6-phosphate"/>
+            <ns2:bbox y="290.5" x="1421.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph107" class="simple chemical">
+            <ns2:label text="P"/>
+            <ns2:clone/>
+            <ns2:bbox y="390.5" x="785.0" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph59" class="simple chemical">
+            <ns2:label text="D-glyceraldehyde 3-phosphate"/>
+            <ns2:bbox y="700.5" x="595.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph58" class="simple chemical">
+            <ns2:label text="P"/>
+            <ns2:clone/>
+            <ns2:bbox y="800.5" x="1065.0" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph91" class="simple chemical">
+            <ns2:label text="D-glyceraldehyde 3-phosphate"/>
+            <ns2:bbox y="700.5" x="1241.1428" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph44" class="simple chemical">
+            <ns2:label text="P"/>
+            <ns2:clone/>
+            <ns2:bbox y="800.5" x="785.0" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph129" class="simple chemical">
+            <ns2:label text="3-phospho-D-glycerate"/>
+            <ns2:bbox y="970.5" x="595.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph61" class="simple chemical">
+            <ns2:label text="P"/>
+            <ns2:clone/>
+            <ns2:bbox y="1070.5" x="1065.0" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph92" class="simple chemical">
+            <ns2:label text="3-phospho-D-glycerate"/>
+            <ns2:bbox y="970.5" x="1241.1428" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph53" class="simple chemical">
+            <ns2:label text="P"/>
+            <ns2:clone/>
+            <ns2:bbox y="1070.5" x="785.0" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph103" class="simple chemical">
+            <ns2:label text="phosphoenolpyruvate"/>
+            <ns2:bbox y="1230.5" x="595.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph93" class="simple chemical">
+            <ns2:label text="P"/>
+            <ns2:clone/>
+            <ns2:bbox y="1330.5" x="1065.0" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph117" class="simple chemical">
+            <ns2:label text="phosphoenolpyruvate"/>
+            <ns2:bbox y="1230.5" x="1241.1428" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph46" class="simple chemical">
+            <ns2:label text="P"/>
+            <ns2:clone/>
+            <ns2:bbox y="1330.5" x="785.0" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph41" class="simple chemical">
+            <ns2:label text="malate"/>
+            <ns2:bbox y="1500.5" x="1241.1428" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph63" class="simple chemical">
+            <ns2:label text="L-glutamate"/>
+            <ns2:bbox y="1500.5" x="785.0" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph81" class="simple chemical">
+            <ns2:label text="malate"/>
+            <ns2:clone/>
+            <ns2:bbox y="1400.5" x="785.0" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph110" class="simple chemical">
+            <ns2:label text="L-glutamate"/>
+            <ns2:bbox y="1400.5" x="1065.0" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph80" class="simple chemical">
+            <ns2:label text="pyruvate"/>
+            <ns2:bbox y="1430.5" x="595.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph127" class="simple chemical">
+            <ns2:label text="pyruvate"/>
+            <ns2:bbox y="1767.5" x="645.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph64" class="simple chemical">
+            <ns2:label text="malate"/>
+            <ns2:bbox y="1767.5" x="375.0" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph106" class="simple chemical">
+            <ns2:label text="oxaloacetate"/>
+            <ns2:clone/>
+            <ns2:bbox y="1520.0" x="304.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph89" class="simple chemical">
+            <ns2:label text="malate"/>
+            <ns2:clone/>
+            <ns2:bbox y="1400.5" x="175.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph76" class="simple chemical">
+            <ns2:label text="oxaloacetate"/>
+            <ns2:bbox y="1685.0" x="175.5" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph94" class="simple chemical">
+            <ns2:label text="dihydroxyacetone phosphate"/>
+            <ns2:bbox y="600.5" x="1241.1428" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph104" class="simple chemical">
+            <ns2:label text="P"/>
+            <ns2:clone/>
+            <ns2:bbox y="600.5" x="785.0" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph86" class="simple chemical">
+            <ns2:label text="dihydroxyacetone phosphate"/>
+            <ns2:clone/>
+            <ns2:bbox y="500.5" x="785.0" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph47" class="simple chemical">
+            <ns2:label text="P"/>
+            <ns2:clone/>
+            <ns2:bbox y="500.5" x="1065.0" h="30.0" w="30.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph26" class="macromolecule">
+            <ns2:label text="1.2.1.12"/>
+            <ns2:bbox y="780.5" x="521.5" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph154" orientation="vertical" class="process">
+            <ns2:bbox y="790.5" x="605.5" h="10.0" w="10.0"/>
+            <ns2:port y="785.5" x="610.5" id="glyph154.1"/>
+            <ns2:port y="805.5" x="610.5" id="glyph154.2"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph12" class="macromolecule">
+            <ns2:label text="1.2.1.9"/>
+            <ns2:bbox y="840.5" x="313.5" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph157" orientation="vertical" class="process">
+            <ns2:bbox y="850.5" x="397.5" h="10.0" w="10.0"/>
+            <ns2:port y="845.5" x="402.5" id="glyph157.1"/>
+            <ns2:port y="865.5" x="402.5" id="glyph157.2"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph38" class="macromolecule">
+            <ns2:label text="2.7.1.90"/>
+            <ns2:bbox y="490.5" x="315.5" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph163" orientation="vertical" class="process">
+            <ns2:bbox y="500.5" x="399.5" h="10.0" w="10.0"/>
+            <ns2:port y="495.5" x="404.5" id="glyph163.1"/>
+            <ns2:port y="515.5" x="404.5" id="glyph163.2"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph11" class="macromolecule">
+            <ns2:label text="phosphoenolpyruvat/phosphat&#xA;transporter"/>
+            <ns2:bbox y="1180.5" x="913.0" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph153" class="process">
+            <ns2:bbox y="1240.5" x="935.0" h="10.0" w="10.0"/>
+            <ns2:port y="1245.5" x="930.0" id="glyph153.1"/>
+            <ns2:port y="1245.5" x="950.0" id="glyph153.2"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph18" class="macromolecule">
+            <ns2:label text="5.4.2.2"/>
+            <ns2:bbox y="230.5" x="1347.5" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph146" orientation="vertical" class="process">
+            <ns2:bbox y="240.5" x="1431.5" h="10.0" w="10.0"/>
+            <ns2:port y="235.5" x="1436.5" id="glyph146.1"/>
+            <ns2:port y="255.5" x="1436.5" id="glyph146.2"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph24" class="macromolecule">
+            <ns2:label text="2.7.1.11"/>
+            <ns2:bbox y="500.5" x="1287.5" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph156" orientation="vertical" class="process">
+            <ns2:bbox y="510.5" x="1371.5" h="10.0" w="10.0"/>
+            <ns2:port y="505.5" x="1376.5" id="glyph156.1"/>
+            <ns2:port y="525.5" x="1376.5" id="glyph156.2"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph9" class="macromolecule">
+            <ns2:label text="4.1.2.13"/>
+            <ns2:bbox y="685.0" x="1343.0" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph165" class="process">
+            <ns2:bbox y="645.0" x="1365.0" h="10.0" w="10.0"/>
+            <ns2:port y="650.0" x="1380.0" id="glyph165.2"/>
+            <ns2:port y="650.0" x="1360.0" id="glyph165.1"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph39" class="macromolecule">
+            <ns2:label text="5.4.2.2"/>
+            <ns2:bbox y="230.5" x="421.5" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph167" orientation="vertical" class="process">
+            <ns2:bbox y="240.5" x="505.5" h="10.0" w="10.0"/>
+            <ns2:port y="235.5" x="510.5" id="glyph167.1"/>
+            <ns2:port y="255.5" x="510.5" id="glyph167.2"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph29" class="macromolecule">
+            <ns2:label text="5.3.1.9"/>
+            <ns2:bbox y="360.5" x="421.5" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph141" orientation="vertical" class="process">
+            <ns2:bbox y="370.5" x="505.5" h="10.0" w="10.0"/>
+            <ns2:port y="385.5" x="510.5" id="glyph141.2"/>
+            <ns2:port y="365.5" x="510.5" id="glyph141.1"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph40" class="macromolecule">
+            <ns2:label text="5.3.1.9"/>
+            <ns2:bbox y="360.5" x="1347.5" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph168" orientation="vertical" class="process">
+            <ns2:bbox y="370.5" x="1431.5" h="10.0" w="10.0"/>
+            <ns2:port y="365.5" x="1436.5" id="glyph168.1"/>
+            <ns2:port y="385.5" x="1436.5" id="glyph168.2"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph22" class="macromolecule">
+            <ns2:label text="2.7.2.3"/>
+            <ns2:bbox y="900.5" x="521.5" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph142" orientation="vertical" class="process">
+            <ns2:bbox y="910.5" x="605.5" h="10.0" w="10.0"/>
+            <ns2:port y="905.5" x="610.5" id="glyph142.1"/>
+            <ns2:port y="925.5" x="610.5" id="glyph142.2"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph30" class="macromolecule">
+            <ns2:label text="2.7.2.3"/>
+            <ns2:bbox y="900.5" x="1167.1428" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph160" orientation="vertical" class="process">
+            <ns2:bbox y="910.5" x="1251.1428" h="10.0" w="10.0"/>
+            <ns2:port y="905.5" x="1256.1428" id="glyph160.1"/>
+            <ns2:port y="925.5" x="1256.1428" id="glyph160.2"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph14" class="macromolecule">
+            <ns2:label text="5.4.2.1"/>
+            <ns2:bbox y="1030.5" x="521.5" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph145" orientation="vertical" class="process">
+            <ns2:bbox y="1040.5" x="605.5" h="10.0" w="10.0"/>
+            <ns2:port y="1055.5" x="610.5" id="glyph145.2"/>
+            <ns2:port y="1035.5" x="610.5" id="glyph145.1"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph15" class="macromolecule">
+            <ns2:label text="5.4.2.1"/>
+            <ns2:bbox y="1030.5" x="1167.1428" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph166" orientation="vertical" class="process">
+            <ns2:bbox y="1040.5" x="1251.1428" h="10.0" w="10.0"/>
+            <ns2:port y="1055.5" x="1256.1428" id="glyph166.2"/>
+            <ns2:port y="1035.5" x="1256.1428" id="glyph166.1"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph7" class="macromolecule">
+            <ns2:label text="4.2.1.11"/>
+            <ns2:bbox y="1170.5" x="521.5" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph169" orientation="vertical" class="process">
+            <ns2:bbox y="1180.5" x="605.5" h="10.0" w="10.0"/>
+            <ns2:port y="1175.5" x="610.5" id="glyph169.1"/>
+            <ns2:port y="1195.5" x="610.5" id="glyph169.2"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph23" class="macromolecule">
+            <ns2:label text="4.2.1.11"/>
+            <ns2:bbox y="1170.5" x="1167.1428" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph164" orientation="vertical" class="process">
+            <ns2:bbox y="1180.5" x="1251.1428" h="10.0" w="10.0"/>
+            <ns2:port y="1175.5" x="1256.1428" id="glyph164.1"/>
+            <ns2:port y="1195.5" x="1256.1428" id="glyph164.2"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph37" class="macromolecule">
+            <ns2:label text="2.7.1.40"/>
+            <ns2:bbox y="1380.5" x="695.5" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph136" orientation="vertical" class="process">
+            <ns2:bbox y="1390.5" x="655.5" h="10.0" w="10.0"/>
+            <ns2:port y="1385.5" x="660.5" id="glyph136.1"/>
+            <ns2:port y="1405.5" x="660.5" id="glyph136.2"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph4" class="macromolecule">
+            <ns2:label text="2.7.1.40"/>
+            <ns2:bbox y="1310.5" x="1351.5" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph161" orientation="vertical" class="process">
+            <ns2:bbox y="1320.5" x="1311.5" h="10.0" w="10.0"/>
+            <ns2:port y="1315.5" x="1316.5" id="glyph161.1"/>
+            <ns2:port y="1335.5" x="1316.5" id="glyph161.2"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph16" class="macromolecule">
+            <ns2:label text="5.3.1.1"/>
+            <ns2:bbox y="650.5" x="483.5" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph151" class="process">
+            <ns2:bbox y="710.5" x="505.5" h="10.0" w="10.0"/>
+            <ns2:port y="715.5" x="520.5" id="glyph151.2"/>
+            <ns2:port y="715.5" x="500.5" id="glyph151.1"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph1" class="macromolecule">
+            <ns2:label text="5.3.1.1"/>
+            <ns2:bbox y="650.0" x="1167.1428" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph131" orientation="vertical" class="process">
+            <ns2:bbox y="660.0" x="1251.1428" h="10.0" w="10.0"/>
+            <ns2:port y="655.0" x="1256.1428" id="glyph131.1"/>
+            <ns2:port y="675.0" x="1256.1428" id="glyph131.2"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph36" class="macromolecule">
+            <ns2:label text="1.1.1.37"/>
+            <ns2:bbox y="1300.5" x="101.5" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph139" orientation="vertical" class="process">
+            <ns2:bbox y="1310.5" x="185.5" h="10.0" w="10.0"/>
+            <ns2:port y="1325.5" x="190.5" id="glyph139.2"/>
+            <ns2:port y="1305.5" x="190.5" id="glyph139.1"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph8" class="macromolecule">
+            <ns2:label text="4.1.1.31"/>
+            <ns2:bbox y="1133.5" x="359.5" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph147" class="process">
+            <ns2:bbox y="1193.5" x="381.5" h="10.0" w="10.0"/>
+            <ns2:port y="1198.5" x="396.5" id="glyph147.2"/>
+            <ns2:port y="1198.5" x="376.5" id="glyph147.1"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph28" class="macromolecule">
+            <ns2:label text="1.1.1.39"/>
+            <ns2:bbox y="1817.5" x="493.5" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph159" class="process">
+            <ns2:bbox y="1777.5" x="515.5" h="10.0" w="10.0"/>
+            <ns2:port y="1782.5" x="510.5" id="glyph159.1"/>
+            <ns2:port y="1782.5" x="530.5" id="glyph159.2"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph17" class="macromolecule">
+            <ns2:label text="1.1.1.40"/>
+            <ns2:bbox y="1440.5" x="1167.1428" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph152" orientation="vertical" class="process">
+            <ns2:bbox y="1450.5" x="1251.1428" h="10.0" w="10.0"/>
+            <ns2:port y="1465.5" x="1256.1428" id="glyph152.2"/>
+            <ns2:port y="1445.5" x="1256.1428" id="glyph152.1"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph33" class="macromolecule">
+            <ns2:label text="4.1.1.49"/>
+            <ns2:bbox y="1222.5" x="359.5" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph170" class="process">
+            <ns2:bbox y="1282.5" x="381.5" h="10.0" w="10.0"/>
+            <ns2:port y="1287.5" x="376.5" id="glyph170.1"/>
+            <ns2:port y="1287.5" x="396.5" id="glyph170.2"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph20" class="macromolecule">
+            <ns2:label text="G1P transporter"/>
+            <ns2:bbox y="110.5" x="913.0" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph134" class="process">
+            <ns2:bbox y="170.5" x="935.0" h="10.0" w="10.0"/>
+            <ns2:port y="175.5" x="930.0" id="glyph134.1"/>
+            <ns2:port y="175.5" x="950.0" id="glyph134.2"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph2" class="macromolecule">
+            <ns2:label text="malate/glutamate&#xA;transporter"/>
+            <ns2:bbox y="1450.5" x="873.0" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph148" orientation="vertical" class="process">
+            <ns2:bbox y="1460.5" x="985.0" h="10.0" w="10.0"/>
+            <ns2:port y="1475.5" x="990.0" id="glyph148.2"/>
+            <ns2:port y="1455.5" x="990.0" id="glyph148.1"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph5" class="macromolecule">
+            <ns2:label text="pyruvate&#xA;transporter"/>
+            <ns2:bbox y="1600.5" x="571.5" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph162" orientation="vertical" class="process">
+            <ns2:bbox y="1610.5" x="655.5" h="10.0" w="10.0"/>
+            <ns2:port y="1605.5" x="660.5" id="glyph162.1"/>
+            <ns2:port y="1625.5" x="660.5" id="glyph162.2"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph19" class="macromolecule">
+            <ns2:label text="OAA/malate&#xA;transporter"/>
+            <ns2:bbox y="1625.0" x="228.0" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph149" class="process">
+            <ns2:bbox y="1585.0" x="250.0" h="10.0" w="10.0"/>
+            <ns2:port y="1590.0" x="265.0" id="glyph149.2"/>
+            <ns2:port y="1590.0" x="245.0" id="glyph149.1"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph13" class="macromolecule">
+            <ns2:label text="2.7.9.1"/>
+            <ns2:bbox y="1380.5" x="575.5" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph158" orientation="vertical" class="process">
+            <ns2:bbox y="1390.5" x="535.5" h="10.0" w="10.0"/>
+            <ns2:port y="1405.5" x="540.5" id="glyph158.2"/>
+            <ns2:port y="1385.5" x="540.5" id="glyph158.1"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph31" class="macromolecule">
+            <ns2:label text="2.7.9.1"/>
+            <ns2:bbox y="1310.5" x="1231.5" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph137" orientation="vertical" class="process">
+            <ns2:bbox y="1320.5" x="1191.5" h="10.0" w="10.0"/>
+            <ns2:port y="1335.5" x="1196.5" id="glyph137.2"/>
+            <ns2:port y="1315.5" x="1196.5" id="glyph137.1"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph32" class="macromolecule">
+            <ns2:label text="3.1.3.11"/>
+            <ns2:bbox y="500.5" x="1407.5" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph150" orientation="vertical" class="process">
+            <ns2:bbox y="510.5" x="1491.5" h="10.0" w="10.0"/>
+            <ns2:port y="505.5" x="1496.5" id="glyph150.1"/>
+            <ns2:port y="525.5" x="1496.5" id="glyph150.2"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph10" class="macromolecule">
+            <ns2:label text="triosephosphat/P&#xA;translocator&#xA;(TPT2_DHAP)"/>
+            <ns2:bbox y="550.5" x="873.0" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph140" orientation="vertical" class="process">
+            <ns2:bbox y="560.5" x="985.0" h="10.0" w="10.0"/>
+            <ns2:port y="575.5" x="990.0" id="glyph140.2"/>
+            <ns2:port y="555.5" x="990.0" id="glyph140.1"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph6" class="macromolecule">
+            <ns2:label text="triosephosphat/P&#xA;translocator&#xA;(TPT1_GAP)"/>
+            <ns2:bbox y="650.5" x="913.0" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph133" class="process">
+            <ns2:bbox y="710.5" x="935.0" h="10.0" w="10.0"/>
+            <ns2:port y="715.5" x="930.0" id="glyph133.1"/>
+            <ns2:port y="715.5" x="950.0" id="glyph133.2"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph25" class="macromolecule">
+            <ns2:label text="triosephosphat/P&#xA;translocator&#xA;(TPT3_3-PGA)"/>
+            <ns2:bbox y="920.5" x="913.0" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph143" class="process">
+            <ns2:bbox y="980.5" x="935.0" h="10.0" w="10.0"/>
+            <ns2:port y="985.5" x="930.0" id="glyph143.1"/>
+            <ns2:port y="985.5" x="950.0" id="glyph143.2"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph35" class="macromolecule">
+            <ns2:label text="2.7.1.11"/>
+            <ns2:bbox y="490.5" x="654.5" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph138" orientation="vertical" class="process">
+            <ns2:bbox y="500.5" x="614.5" h="10.0" w="10.0"/>
+            <ns2:port y="495.5" x="619.5" id="glyph138.1"/>
+            <ns2:port y="515.5" x="619.5" id="glyph138.2"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph34" class="macromolecule">
+            <ns2:label text="G6P transporter"/>
+            <ns2:bbox y="240.5" x="913.0" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph135" class="process">
+            <ns2:bbox y="300.5" x="935.0" h="10.0" w="10.0"/>
+            <ns2:port y="305.5" x="930.0" id="glyph135.1"/>
+            <ns2:port y="305.5" x="950.0" id="glyph135.2"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph21" class="macromolecule">
+            <ns2:label text="1.2.1.13"/>
+            <ns2:bbox y="780.5" x="1167.1428" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph155" orientation="vertical" class="process">
+            <ns2:bbox y="790.5" x="1251.1428" h="10.0" w="10.0"/>
+            <ns2:port y="785.5" x="1256.1428" id="glyph155.1"/>
+            <ns2:port y="805.5" x="1256.1428" id="glyph155.2"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph3" class="macromolecule">
+            <ns2:label text="3.1.3.11"/>
+            <ns2:bbox y="490.5" x="545.5" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph144" orientation="vertical" class="process">
+            <ns2:bbox y="500.5" x="505.5" h="10.0" w="10.0"/>
+            <ns2:port y="495.5" x="510.5" id="glyph144.1"/>
+            <ns2:port y="515.5" x="510.5" id="glyph144.2"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph27" class="macromolecule">
+            <ns2:label text="4.1.2.13"/>
+            <ns2:bbox y="600.5" x="421.5" h="30.0" w="54.0"/>
+        </ns2:glyph>
+        <ns2:glyph id="glyph132" orientation="vertical" class="process">
+            <ns2:bbox y="610.5" x="505.5" h="10.0" w="10.0"/>
+            <ns2:port y="605.5" x="510.5" id="glyph132.1"/>
+            <ns2:port y="625.5" x="510.5" id="glyph132.2"/>
+        </ns2:glyph>
+        <ns2:arc target="glyph124" source="glyph154.1" id="arc1" class="production">
+            <ns2:start y="785.5" x="610.5"/>
+            <ns2:end y="752.3403" x="636.2909"/>
+        </ns2:arc>
+        <ns2:arc target="glyph72" source="glyph154.1" id="arc2" class="production">
+            <ns2:start y="785.5" x="610.5"/>
+            <ns2:end y="770.2434" x="656.2698"/>
+        </ns2:arc>
+        <ns2:arc target="glyph99" source="glyph154.2" id="arc3" class="production">
+            <ns2:start y="805.5" x="610.5"/>
+            <ns2:end y="818.7918" x="657.0836"/>
+        </ns2:arc>
+        <ns2:arc target="glyph157.1" source="glyph83" id="arc4" class="consumption">
+            <ns2:start y="818.8963" x="346.06787"/>
+            <ns2:end y="845.5" x="402.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph66" source="glyph157.2" id="arc5" class="production">
+            <ns2:start y="865.5" x="402.5"/>
+            <ns2:end y="890.64874" x="345.28113"/>
+        </ns2:arc>
+        <ns2:arc target="glyph123" source="glyph163.1" id="arc6" class="production">
+            <ns2:start y="495.5" x="404.5"/>
+            <ns2:end y="471.40878" x="348.28717"/>
+        </ns2:arc>
+        <ns2:arc target="glyph88" source="glyph163.2" id="arc7" class="production">
+            <ns2:start y="515.5" x="404.5"/>
+            <ns2:end y="536.3436" x="347.6828"/>
+        </ns2:arc>
+        <ns2:arc target="glyph52" source="glyph146.1" id="arc8" class="production">
+            <ns2:start y="235.5" x="1436.5"/>
+            <ns2:end y="190.5" x="1436.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph156.1" source="glyph78" id="arc9" class="consumption">
+            <ns2:start y="486.26923" x="1330.3462"/>
+            <ns2:end y="505.5" x="1376.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph118" source="glyph156.2" id="arc10" class="production">
+            <ns2:start y="525.5" x="1376.5"/>
+            <ns2:end y="542.94196" x="1329.4567"/>
+        </ns2:arc>
+        <ns2:arc target="glyph70" source="glyph142.1" id="arc11" class="production">
+            <ns2:start y="905.5" x="610.5"/>
+            <ns2:end y="890.2434" x="656.2698"/>
+        </ns2:arc>
+        <ns2:arc target="glyph43" source="glyph142.2" id="arc12" class="production">
+            <ns2:start y="925.5" x="610.5"/>
+            <ns2:end y="938.7918" x="657.0836"/>
+        </ns2:arc>
+        <ns2:arc target="glyph77" source="glyph160.1" id="arc13" class="production">
+            <ns2:start y="905.5" x="1256.1428"/>
+            <ns2:end y="890.0546" x="1304.6082"/>
+        </ns2:arc>
+        <ns2:arc target="glyph65" source="glyph160.2" id="arc14" class="production">
+            <ns2:start y="925.5" x="1256.1428"/>
+            <ns2:end y="939.0307" x="1305.3668"/>
+        </ns2:arc>
+        <ns2:arc target="glyph60" source="glyph145.2" id="arc15" class="production">
+            <ns2:start y="1055.5" x="610.5"/>
+            <ns2:end y="1100.5" x="610.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph60" source="glyph169.1" id="arc16" class="production">
+            <ns2:start y="1175.5" x="610.5"/>
+            <ns2:end y="1130.5" x="610.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph136.1" source="glyph100" id="arc17" class="consumption">
+            <ns2:start y="1355.5258" x="707.8277"/>
+            <ns2:end y="1385.5" x="660.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph75" source="glyph136.2" id="arc18" class="production">
+            <ns2:start y="1405.5" x="660.5"/>
+            <ns2:end y="1433.2501" x="708.6916"/>
+        </ns2:arc>
+        <ns2:arc target="glyph161.1" source="glyph96" id="arc19" class="consumption">
+            <ns2:start y="1287.2174" x="1363.6376"/>
+            <ns2:end y="1315.5" x="1316.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph67" source="glyph161.2" id="arc20" class="production">
+            <ns2:start y="1335.5" x="1316.5"/>
+            <ns2:end y="1364.1295" x="1364.787"/>
+        </ns2:arc>
+        <ns2:arc target="glyph54" source="glyph139.2" id="arc21" class="production">
+            <ns2:start y="1325.5" x="190.5"/>
+            <ns2:end y="1357.1794" x="142.98076"/>
+        </ns2:arc>
+        <ns2:arc target="glyph89" source="glyph139.2" id="arc22" class="production">
+            <ns2:start y="1325.5" x="190.5"/>
+            <ns2:end y="1400.5" x="190.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph102" source="glyph139.1" id="arc23" class="production">
+            <ns2:start y="1305.5" x="190.5"/>
+            <ns2:end y="1275.1028" x="142.02332"/>
+        </ns2:arc>
+        <ns2:arc target="glyph159.1" source="glyph84" id="arc24" class="consumption">
+            <ns2:start y="1760.2174" x="473.3624"/>
+            <ns2:end y="1782.5" x="510.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph56" source="glyph159.2" id="arc25" class="production">
+            <ns2:start y="1782.5" x="530.5"/>
+            <ns2:end y="1759.2083" x="567.0836"/>
+        </ns2:arc>
+        <ns2:arc target="glyph127" source="glyph159.2" id="arc26" class="production">
+            <ns2:start y="1782.5" x="530.5"/>
+            <ns2:end y="1782.5" x="645.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph90" source="glyph159.2" id="arc27" class="production">
+            <ns2:start y="1782.5" x="530.5"/>
+            <ns2:end y="1740.7186" x="542.91003"/>
+        </ns2:arc>
+        <ns2:arc target="glyph57" source="glyph152.2" id="arc28" class="production">
+            <ns2:start y="1465.5" x="1256.1428"/>
+            <ns2:end y="1488.2521" x="1297.3673"/>
+        </ns2:arc>
+        <ns2:arc target="glyph41" source="glyph152.2" id="arc29" class="production">
+            <ns2:start y="1465.5" x="1256.1428"/>
+            <ns2:end y="1500.5" x="1256.1428"/>
+        </ns2:arc>
+        <ns2:arc target="glyph55" source="glyph152.1" id="arc30" class="production">
+            <ns2:start y="1445.5" x="1256.1428"/>
+            <ns2:end y="1416.7208" x="1290.5455"/>
+        </ns2:arc>
+        <ns2:arc target="glyph113" source="glyph152.1" id="arc31" class="production">
+            <ns2:start y="1445.5" x="1256.1428"/>
+            <ns2:end y="1439.9515" x="1306.1758"/>
+        </ns2:arc>
+        <ns2:arc target="glyph170.1" source="glyph69" id="arc32" class="consumption">
+            <ns2:start y="1317.2745" x="338.32755"/>
+            <ns2:end y="1287.5" x="376.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph108" source="glyph170.2" id="arc33" class="production">
+            <ns2:start y="1287.5" x="396.5"/>
+            <ns2:end y="1317.2745" x="424.67245"/>
+        </ns2:arc>
+        <ns2:arc target="glyph87" source="glyph170.2" id="arc34" class="production">
+            <ns2:start y="1287.5" x="396.5"/>
+            <ns2:end y="1295.6395" x="451.61584"/>
+        </ns2:arc>
+        <ns2:arc target="glyph125" source="glyph158.2" id="arc35" class="production">
+            <ns2:start y="1405.5" x="540.5"/>
+            <ns2:end y="1429.1112" x="520.26184"/>
+        </ns2:arc>
+        <ns2:arc target="glyph73" source="glyph158.2" id="arc36" class="production">
+            <ns2:start y="1405.5" x="540.5"/>
+            <ns2:end y="1413.034" x="495.2959"/>
+        </ns2:arc>
+        <ns2:arc target="glyph119" source="glyph158.1" id="arc37" class="production">
+            <ns2:start y="1385.5" x="540.5"/>
+            <ns2:end y="1372.2083" x="493.9164"/>
+        </ns2:arc>
+        <ns2:arc target="glyph128" source="glyph158.1" id="arc38" class="production">
+            <ns2:start y="1385.5" x="540.5"/>
+            <ns2:end y="1353.6685" x="517.6828"/>
+        </ns2:arc>
+        <ns2:arc target="glyph122" source="glyph137.2" id="arc39" class="production">
+            <ns2:start y="1335.5" x="1196.5"/>
+            <ns2:end y="1354.8934" x="1177.1066"/>
+        </ns2:arc>
+        <ns2:arc target="glyph112" source="glyph137.2" id="arc40" class="production">
+            <ns2:start y="1335.5" x="1196.5"/>
+            <ns2:end y="1343.034" x="1151.2959"/>
+        </ns2:arc>
+        <ns2:arc target="glyph50" source="glyph137.1" id="arc41" class="production">
+            <ns2:start y="1315.5" x="1196.5"/>
+            <ns2:end y="1302.2083" x="1149.9164"/>
+        </ns2:arc>
+        <ns2:arc target="glyph101" source="glyph137.1" id="arc42" class="production">
+            <ns2:start y="1315.5" x="1196.5"/>
+            <ns2:end y="1288.3624" x="1174.2174"/>
+        </ns2:arc>
+        <ns2:arc target="glyph42" source="glyph150.1" id="arc43" class="production">
+            <ns2:start y="505.5" x="1496.5"/>
+            <ns2:end y="488.05807" x="1543.5433"/>
+        </ns2:arc>
+        <ns2:arc target="glyph138.1" source="glyph95" id="arc44" class="consumption">
+            <ns2:start y="472.2082" x="666.0836"/>
+            <ns2:end y="495.5" x="619.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph51" source="glyph138.2" id="arc45" class="production">
+            <ns2:start y="515.5" x="619.5"/>
+            <ns2:end y="535.47424" x="666.8277"/>
+        </ns2:arc>
+        <ns2:arc target="glyph48" source="glyph155.1" id="arc46" class="production">
+            <ns2:start y="785.5" x="1256.1428"/>
+            <ns2:end y="750.11115" x="1306.6179"/>
+        </ns2:arc>
+        <ns2:arc target="glyph49" source="glyph155.1" id="arc47" class="production">
+            <ns2:start y="785.5" x="1256.1428"/>
+            <ns2:end y="777.8604" x="1304.0869"/>
+        </ns2:arc>
+        <ns2:arc target="glyph79" source="glyph155.2" id="arc48" class="production">
+            <ns2:start y="805.5" x="1256.1428"/>
+            <ns2:end y="827.43774" x="1306.2509"/>
+        </ns2:arc>
+        <ns2:arc target="glyph45" source="glyph144.1" id="arc49" class="production">
+            <ns2:start y="495.5" x="510.5"/>
+            <ns2:end y="495.2434" x="479.73026"/>
+        </ns2:arc>
+        <ns2:arc target="glyph98" source="glyph163.1" id="arc50" class="production">
+            <ns2:start y="495.5" x="404.5"/>
+            <ns2:end y="451.8993" x="496.93353"/>
+        </ns2:arc>
+        <ns2:arc target="glyph98" source="glyph144.1" id="arc51" class="production">
+            <ns2:start y="495.5" x="510.5"/>
+            <ns2:end y="460.5" x="510.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph138.1" source="glyph98" id="arc52" class="consumption">
+            <ns2:start y="451.75412" x="524.134"/>
+            <ns2:end y="495.5" x="619.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph98" source="glyph141.2" id="arc53" class="production">
+            <ns2:start y="385.5" x="510.5"/>
+            <ns2:end y="430.5" x="510.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph144.2" source="glyph114" id="arc54" class="consumption">
+            <ns2:start y="550.5" x="510.5"/>
+            <ns2:end y="515.5" x="510.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph114" source="glyph138.2" id="arc55" class="production">
+            <ns2:start y="515.5" x="619.5"/>
+            <ns2:end y="558.2666" x="523.6407"/>
+        </ns2:arc>
+        <ns2:arc target="glyph114" source="glyph163.2" id="arc56" class="production">
+            <ns2:start y="515.5" x="404.5"/>
+            <ns2:end y="558.111" x="497.44614"/>
+        </ns2:arc>
+        <ns2:arc target="glyph126" source="glyph167.1" id="arc57" class="production">
+            <ns2:start y="235.5" x="510.5"/>
+            <ns2:end y="190.5" x="510.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph157.1" source="glyph59" id="arc58" class="consumption">
+            <ns2:start y="723.45" x="597.78"/>
+            <ns2:end y="845.5" x="402.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph59" source="glyph151.2" id="arc59" class="production">
+            <ns2:start y="715.5" x="520.5"/>
+            <ns2:end y="715.5" x="595.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph59" source="glyph154.1" id="arc60" class="production">
+            <ns2:start y="785.5" x="610.5"/>
+            <ns2:end y="730.5" x="610.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph121" source="glyph142.1" id="arc61" class="production">
+            <ns2:start y="905.5" x="610.5"/>
+            <ns2:end y="870.5" x="610.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph121" source="glyph154.2" id="arc62" class="production">
+            <ns2:start y="805.5" x="610.5"/>
+            <ns2:end y="840.5" x="610.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph114" source="glyph132.1" id="arc63" class="production">
+            <ns2:start y="605.5" x="510.5"/>
+            <ns2:end y="580.5" x="510.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph59" source="glyph132.2" id="arc64" class="production">
+            <ns2:start y="625.5" x="510.5"/>
+            <ns2:end y="704.8934" x="599.8934"/>
+        </ns2:arc>
+        <ns2:arc target="glyph120" source="glyph151.1" id="arc65" class="production">
+            <ns2:start y="715.5" x="500.5"/>
+            <ns2:end y="715.5" x="425.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph120" source="glyph132.2" id="arc66" class="production">
+            <ns2:start y="625.5" x="510.5"/>
+            <ns2:end y="704.8934" x="421.1066"/>
+        </ns2:arc>
+        <ns2:arc target="glyph129" source="glyph142.2" id="arc67" class="production">
+            <ns2:start y="925.5" x="610.5"/>
+            <ns2:end y="970.5" x="610.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph129" source="glyph157.2" id="arc68" class="production">
+            <ns2:start y="865.5" x="402.5"/>
+            <ns2:end y="977.55" x="597.78"/>
+        </ns2:arc>
+        <ns2:arc target="glyph129" source="glyph145.1" id="arc69" class="production">
+            <ns2:start y="1035.5" x="610.5"/>
+            <ns2:end y="1000.5" x="610.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph105" source="glyph139.1" id="arc70" class="production">
+            <ns2:start y="1305.5" x="190.5"/>
+            <ns2:end y="1260.5" x="190.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph170.1" source="glyph105" id="arc71" class="consumption">
+            <ns2:start y="1248.804" x="205.13162"/>
+            <ns2:end y="1287.5" x="376.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph80" source="glyph158.2" id="arc72" class="production">
+            <ns2:start y="1405.5" x="540.5"/>
+            <ns2:end y="1438.0579" x="597.4764"/>
+        </ns2:arc>
+        <ns2:arc target="glyph80" source="glyph136.2" id="arc73" class="production">
+            <ns2:start y="1405.5" x="660.5"/>
+            <ns2:end y="1434.8934" x="621.1066"/>
+        </ns2:arc>
+        <ns2:arc target="glyph103" source="glyph169.2" id="arc74" class="production">
+            <ns2:start y="1195.5" x="610.5"/>
+            <ns2:end y="1230.5" x="610.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph103" source="glyph158.1" id="arc75" class="production">
+            <ns2:start y="1385.5" x="540.5"/>
+            <ns2:end y="1259.0928" x="604.15674"/>
+        </ns2:arc>
+        <ns2:arc target="glyph103" source="glyph170.2" id="arc76" class="production">
+            <ns2:start y="1287.5" x="396.5"/>
+            <ns2:end y="1248.2643" x="595.7569"/>
+        </ns2:arc>
+        <ns2:arc target="glyph136.1" source="glyph103" id="arc77" class="consumption">
+            <ns2:start y="1259.6261" x="615.54504"/>
+            <ns2:end y="1385.5" x="660.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph159.1" source="glyph64" id="arc78" class="consumption">
+            <ns2:start y="1782.5" x="405.0"/>
+            <ns2:end y="1782.5" x="510.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph62" source="glyph168.1" id="arc79" class="production">
+            <ns2:start y="365.5" x="1436.5"/>
+            <ns2:end y="320.5" x="1436.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph62" source="glyph146.2" id="arc80" class="production">
+            <ns2:start y="255.5" x="1436.5"/>
+            <ns2:end y="290.5" x="1436.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph74" source="glyph150.1" id="arc81" class="production">
+            <ns2:start y="505.5" x="1496.5"/>
+            <ns2:end y="456.88885" x="1446.2618"/>
+        </ns2:arc>
+        <ns2:arc target="glyph74" source="glyph168.2" id="arc82" class="production">
+            <ns2:start y="385.5" x="1436.5"/>
+            <ns2:end y="430.5" x="1436.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph156.1" source="glyph74" id="arc83" class="consumption">
+            <ns2:start y="456.1066" x="1425.8934"/>
+            <ns2:end y="505.5" x="1376.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph68" source="glyph165.2" id="arc84" class="production">
+            <ns2:start y="650.0" x="1380.0"/>
+            <ns2:end y="587.4517" x="1427.4359"/>
+        </ns2:arc>
+        <ns2:arc target="glyph150.2" source="glyph68" id="arc85" class="consumption">
+            <ns2:start y="565.8972" x="1448.0233"/>
+            <ns2:end y="525.5" x="1496.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph68" source="glyph156.2" id="arc86" class="production">
+            <ns2:start y="525.5" x="1376.5"/>
+            <ns2:end y="564.8934" x="1425.8934"/>
+        </ns2:arc>
+        <ns2:arc target="glyph94" source="glyph131.1" id="arc87" class="production">
+            <ns2:start y="655.0" x="1256.1428"/>
+            <ns2:end y="630.5" x="1256.1428"/>
+        </ns2:arc>
+        <ns2:arc target="glyph94" source="glyph165.1" id="arc88" class="production">
+            <ns2:start y="650.0" x="1360.0"/>
+            <ns2:end y="619.84985" x="1270.4983"/>
+        </ns2:arc>
+        <ns2:arc target="glyph91" source="glyph155.1" id="arc89" class="production">
+            <ns2:start y="785.5" x="1256.1428"/>
+            <ns2:end y="730.5" x="1256.1428"/>
+        </ns2:arc>
+        <ns2:arc target="glyph91" source="glyph131.2" id="arc90" class="production">
+            <ns2:start y="675.0" x="1256.1428"/>
+            <ns2:end y="700.5" x="1256.1428"/>
+        </ns2:arc>
+        <ns2:arc target="glyph91" source="glyph165.1" id="arc91" class="production">
+            <ns2:start y="650.0" x="1360.0"/>
+            <ns2:end y="708.0202" x="1269.1449"/>
+        </ns2:arc>
+        <ns2:arc target="glyph97" source="glyph160.1" id="arc92" class="production">
+            <ns2:start y="905.5" x="1256.1428"/>
+            <ns2:end y="870.5" x="1256.1428"/>
+        </ns2:arc>
+        <ns2:arc target="glyph97" source="glyph155.2" id="arc93" class="production">
+            <ns2:start y="805.5" x="1256.1428"/>
+            <ns2:end y="840.5" x="1256.1428"/>
+        </ns2:arc>
+        <ns2:arc target="glyph71" source="glyph164.1" id="arc94" class="production">
+            <ns2:start y="1175.5" x="1256.1428"/>
+            <ns2:end y="1130.5" x="1256.1428"/>
+        </ns2:arc>
+        <ns2:arc target="glyph71" source="glyph166.2" id="arc95" class="production">
+            <ns2:start y="1055.5" x="1256.1428"/>
+            <ns2:end y="1100.5" x="1256.1428"/>
+        </ns2:arc>
+        <ns2:arc target="glyph117" source="glyph137.1" id="arc96" class="production">
+            <ns2:start y="1315.5" x="1196.5"/>
+            <ns2:end y="1257.5258" x="1247.1772"/>
+        </ns2:arc>
+        <ns2:arc target="glyph117" source="glyph164.2" id="arc97" class="production">
+            <ns2:start y="1195.5" x="1256.1428"/>
+            <ns2:end y="1230.5" x="1256.1428"/>
+        </ns2:arc>
+        <ns2:arc target="glyph161.1" source="glyph117" id="arc98" class="consumption">
+            <ns2:start y="1256.8601" x="1265.9381"/>
+            <ns2:end y="1315.5" x="1316.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph92" source="glyph166.1" id="arc99" class="production">
+            <ns2:start y="1035.5" x="1256.1428"/>
+            <ns2:end y="1000.5" x="1256.1428"/>
+        </ns2:arc>
+        <ns2:arc target="glyph92" source="glyph160.2" id="arc100" class="production">
+            <ns2:start y="925.5" x="1256.1428"/>
+            <ns2:end y="970.5" x="1256.1428"/>
+        </ns2:arc>
+        <ns2:arc target="glyph115" source="glyph161.2" id="arc101" class="production">
+            <ns2:start y="1335.5" x="1316.5"/>
+            <ns2:end y="1384.1399" x="1265.9381"/>
+        </ns2:arc>
+        <ns2:arc target="glyph115" source="glyph152.1" id="arc102" class="production">
+            <ns2:start y="1445.5" x="1256.1428"/>
+            <ns2:end y="1410.5" x="1256.1428"/>
+        </ns2:arc>
+        <ns2:arc target="glyph115" source="glyph137.2" id="arc103" class="production">
+            <ns2:start y="1335.5" x="1196.5"/>
+            <ns2:end y="1384.8618" x="1245.568"/>
+        </ns2:arc>
+        <ns2:arc target="glyph85" source="glyph167.2" id="arc104" class="production">
+            <ns2:start y="255.5" x="510.5"/>
+            <ns2:end y="290.5" x="510.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph85" source="glyph141.1" id="arc105" class="production">
+            <ns2:start y="365.5" x="510.5"/>
+            <ns2:end y="320.5" x="510.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph147.2" source="glyph103" id="arc106" class="consumption">
+            <ns2:start y="1242.2823" x="595.8492"/>
+            <ns2:end y="1198.5" x="396.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph147.2" source="glyph116" id="arc107" class="consumption">
+            <ns2:start y="1177.5" x="424.5"/>
+            <ns2:end y="1198.5" x="396.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph82" source="glyph147.1" id="arc108" class="production">
+            <ns2:start y="1198.5" x="376.5"/>
+            <ns2:end y="1175.2083" x="339.9164"/>
+        </ns2:arc>
+        <ns2:arc target="glyph105" source="glyph147.1" id="arc109" class="production">
+            <ns2:start y="1198.5" x="376.5"/>
+            <ns2:end y="1242.0022" x="205.08649"/>
+        </ns2:arc>
+        <ns2:arc target="glyph126" source="glyph134.1" id="arc110" class="production">
+            <ns2:start y="175.5" x="930.0"/>
+            <ns2:end y="175.5" x="525.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph111" source="glyph134.2" id="arc111" class="production">
+            <ns2:start y="175.5" x="950.0"/>
+            <ns2:end y="266.78143" x="812.206"/>
+        </ns2:arc>
+        <ns2:arc target="glyph52" source="glyph134.2" id="arc112" class="production">
+            <ns2:start y="175.5" x="950.0"/>
+            <ns2:end y="175.5" x="1421.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph109" source="glyph134.1" id="arc113" class="production">
+            <ns2:start y="175.5" x="930.0"/>
+            <ns2:end y="267.1795" x="1067.5193"/>
+        </ns2:arc>
+        <ns2:arc target="glyph85" source="glyph135.1" id="arc114" class="production">
+            <ns2:start y="305.5" x="930.0"/>
+            <ns2:end y="305.5" x="525.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph130" source="glyph135.1" id="arc115" class="production">
+            <ns2:start y="305.5" x="930.0"/>
+            <ns2:end y="397.1795" x="1067.5193"/>
+        </ns2:arc>
+        <ns2:arc target="glyph62" source="glyph135.2" id="arc116" class="production">
+            <ns2:start y="305.5" x="950.0"/>
+            <ns2:end y="305.5" x="1421.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph107" source="glyph135.2" id="arc117" class="production">
+            <ns2:start y="305.5" x="950.0"/>
+            <ns2:end y="396.78143" x="812.206"/>
+        </ns2:arc>
+        <ns2:arc target="glyph59" source="glyph133.1" id="arc118" class="production">
+            <ns2:start y="715.5" x="930.0"/>
+            <ns2:end y="715.5" x="625.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph58" source="glyph133.1" id="arc119" class="production">
+            <ns2:start y="715.5" x="930.0"/>
+            <ns2:end y="807.1795" x="1067.5193"/>
+        </ns2:arc>
+        <ns2:arc target="glyph91" source="glyph133.2" id="arc120" class="production">
+            <ns2:start y="715.5" x="950.0"/>
+            <ns2:end y="715.5" x="1241.1428"/>
+        </ns2:arc>
+        <ns2:arc target="glyph44" source="glyph133.2" id="arc121" class="production">
+            <ns2:start y="715.5" x="950.0"/>
+            <ns2:end y="806.78143" x="812.206"/>
+        </ns2:arc>
+        <ns2:arc target="glyph129" source="glyph143.1" id="arc122" class="production">
+            <ns2:start y="985.5" x="930.0"/>
+            <ns2:end y="985.5" x="625.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph61" source="glyph143.1" id="arc123" class="production">
+            <ns2:start y="985.5" x="930.0"/>
+            <ns2:end y="1077.1794" x="1067.5193"/>
+        </ns2:arc>
+        <ns2:arc target="glyph92" source="glyph143.2" id="arc124" class="production">
+            <ns2:start y="985.5" x="950.0"/>
+            <ns2:end y="985.5" x="1241.1428"/>
+        </ns2:arc>
+        <ns2:arc target="glyph53" source="glyph143.2" id="arc125" class="production">
+            <ns2:start y="985.5" x="950.0"/>
+            <ns2:end y="1076.7814" x="812.206"/>
+        </ns2:arc>
+        <ns2:arc target="glyph103" source="glyph153.1" id="arc126" class="production">
+            <ns2:start y="1245.5" x="930.0"/>
+            <ns2:end y="1245.5" x="625.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph93" source="glyph153.1" id="arc127" class="production">
+            <ns2:start y="1245.5" x="930.0"/>
+            <ns2:end y="1337.1794" x="1067.5193"/>
+        </ns2:arc>
+        <ns2:arc target="glyph117" source="glyph153.2" id="arc128" class="production">
+            <ns2:start y="1245.5" x="950.0"/>
+            <ns2:end y="1245.5" x="1241.1428"/>
+        </ns2:arc>
+        <ns2:arc target="glyph46" source="glyph153.2" id="arc129" class="production">
+            <ns2:start y="1245.5" x="950.0"/>
+            <ns2:end y="1336.7814" x="812.206"/>
+        </ns2:arc>
+        <ns2:arc target="glyph41" source="glyph148.2" id="arc130" class="production">
+            <ns2:start y="1475.5" x="990.0"/>
+            <ns2:end y="1513.2706" x="1241.3094"/>
+        </ns2:arc>
+        <ns2:arc target="glyph63" source="glyph148.2" id="arc131" class="production">
+            <ns2:start y="1475.5" x="990.0"/>
+            <ns2:end y="1512.4098" x="814.6782"/>
+        </ns2:arc>
+        <ns2:arc target="glyph81" source="glyph148.1" id="arc132" class="production">
+            <ns2:start y="1455.5" x="990.0"/>
+            <ns2:end y="1419.3174" x="814.5061"/>
+        </ns2:arc>
+        <ns2:arc target="glyph110" source="glyph148.1" id="arc133" class="production">
+            <ns2:start y="1455.5" x="990.0"/>
+            <ns2:end y="1422.7847" x="1066.8877"/>
+        </ns2:arc>
+        <ns2:arc target="glyph80" source="glyph162.1" id="arc134" class="production">
+            <ns2:start y="1605.5" x="660.5"/>
+            <ns2:end y="1459.8171" x="614.9741"/>
+        </ns2:arc>
+        <ns2:arc target="glyph127" source="glyph162.2" id="arc135" class="production">
+            <ns2:start y="1625.5" x="660.5"/>
+            <ns2:end y="1767.5" x="660.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph64" source="glyph149.2" id="arc136" class="production">
+            <ns2:start y="1590.0" x="265.0"/>
+            <ns2:end y="1769.9196" x="381.83093"/>
+        </ns2:arc>
+        <ns2:arc target="glyph106" source="glyph149.2" id="arc137" class="production">
+            <ns2:start y="1590.0" x="265.0"/>
+            <ns2:end y="1545.6549" x="308.94196"/>
+        </ns2:arc>
+        <ns2:arc target="glyph89" source="glyph149.1" id="arc138" class="production">
+            <ns2:start y="1590.0" x="245.0"/>
+            <ns2:end y="1429.5696" x="195.70052"/>
+        </ns2:arc>
+        <ns2:arc target="glyph76" source="glyph149.1" id="arc139" class="production">
+            <ns2:start y="1590.0" x="245.0"/>
+            <ns2:end y="1687.0604" x="198.0873"/>
+        </ns2:arc>
+        <ns2:arc target="glyph94" source="glyph140.2" id="arc140" class="production">
+            <ns2:start y="575.5" x="990.0"/>
+            <ns2:end y="613.2706" x="1241.3094"/>
+        </ns2:arc>
+        <ns2:arc target="glyph104" source="glyph140.2" id="arc141" class="production">
+            <ns2:start y="575.5" x="990.0"/>
+            <ns2:end y="612.40985" x="814.6782"/>
+        </ns2:arc>
+        <ns2:arc target="glyph86" source="glyph140.1" id="arc142" class="production">
+            <ns2:start y="555.5" x="990.0"/>
+            <ns2:end y="519.3174" x="814.5061"/>
+        </ns2:arc>
+        <ns2:arc target="glyph47" source="glyph140.1" id="arc143" class="production">
+            <ns2:start y="555.5" x="990.0"/>
+            <ns2:end y="522.78467" x="1066.8877"/>
+        </ns2:arc>
+        <ns2:arc target="glyph154" source="glyph26" id="arc144" class="catalysis">
+            <ns2:start y="795.5" x="575.5"/>
+            <ns2:end y="795.5" x="605.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph157" source="glyph12" id="arc145" class="catalysis">
+            <ns2:start y="855.5" x="367.5"/>
+            <ns2:end y="855.5" x="397.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph163" source="glyph38" id="arc146" class="catalysis">
+            <ns2:start y="505.5" x="369.5"/>
+            <ns2:end y="505.5" x="399.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph153" source="glyph11" id="arc147" class="stimulation">
+            <ns2:start y="1210.5" x="940.0"/>
+            <ns2:end y="1240.5" x="940.0"/>
+        </ns2:arc>
+        <ns2:arc target="glyph146" source="glyph18" id="arc148" class="catalysis">
+            <ns2:start y="245.5" x="1401.5"/>
+            <ns2:end y="245.5" x="1431.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph156" source="glyph24" id="arc149" class="catalysis">
+            <ns2:start y="515.5" x="1341.5"/>
+            <ns2:end y="515.5" x="1371.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph165" source="glyph9" id="arc150" class="catalysis">
+            <ns2:start y="685.0" x="1370.0"/>
+            <ns2:end y="655.0" x="1370.0"/>
+        </ns2:arc>
+        <ns2:arc target="glyph167" source="glyph39" id="arc151" class="catalysis">
+            <ns2:start y="245.5" x="475.5"/>
+            <ns2:end y="245.5" x="505.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph141" source="glyph29" id="arc152" class="catalysis">
+            <ns2:start y="375.5" x="475.5"/>
+            <ns2:end y="375.5" x="505.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph168" source="glyph40" id="arc153" class="catalysis">
+            <ns2:start y="375.5" x="1401.5"/>
+            <ns2:end y="375.5" x="1431.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph142" source="glyph22" id="arc154" class="catalysis">
+            <ns2:start y="915.5" x="575.5"/>
+            <ns2:end y="915.5" x="605.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph160" source="glyph30" id="arc155" class="catalysis">
+            <ns2:start y="915.5" x="1221.1428"/>
+            <ns2:end y="915.5" x="1251.1428"/>
+        </ns2:arc>
+        <ns2:arc target="glyph145" source="glyph14" id="arc156" class="catalysis">
+            <ns2:start y="1045.5" x="575.5"/>
+            <ns2:end y="1045.5" x="605.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph166" source="glyph15" id="arc157" class="catalysis">
+            <ns2:start y="1045.5" x="1221.1428"/>
+            <ns2:end y="1045.5" x="1251.1428"/>
+        </ns2:arc>
+        <ns2:arc target="glyph169" source="glyph7" id="arc158" class="catalysis">
+            <ns2:start y="1185.5" x="575.5"/>
+            <ns2:end y="1185.5" x="605.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph164" source="glyph23" id="arc159" class="catalysis">
+            <ns2:start y="1185.5" x="1221.1428"/>
+            <ns2:end y="1185.5" x="1251.1428"/>
+        </ns2:arc>
+        <ns2:arc target="glyph136" source="glyph37" id="arc160" class="catalysis">
+            <ns2:start y="1395.5" x="695.5"/>
+            <ns2:end y="1395.5" x="665.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph161" source="glyph4" id="arc161" class="catalysis">
+            <ns2:start y="1325.5" x="1351.5"/>
+            <ns2:end y="1325.5" x="1321.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph151" source="glyph16" id="arc162" class="catalysis">
+            <ns2:start y="680.5" x="510.5"/>
+            <ns2:end y="710.5" x="510.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph131" source="glyph1" id="arc163" class="catalysis">
+            <ns2:start y="665.0" x="1221.1428"/>
+            <ns2:end y="665.0" x="1251.1428"/>
+        </ns2:arc>
+        <ns2:arc target="glyph139" source="glyph36" id="arc164" class="catalysis">
+            <ns2:start y="1315.5" x="155.5"/>
+            <ns2:end y="1315.5" x="185.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph147" source="glyph8" id="arc165" class="catalysis">
+            <ns2:start y="1163.5" x="386.5"/>
+            <ns2:end y="1193.5" x="386.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph159" source="glyph28" id="arc166" class="catalysis">
+            <ns2:start y="1817.5" x="520.5"/>
+            <ns2:end y="1787.5" x="520.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph152" source="glyph17" id="arc167" class="catalysis">
+            <ns2:start y="1455.5" x="1221.1428"/>
+            <ns2:end y="1455.5" x="1251.1428"/>
+        </ns2:arc>
+        <ns2:arc target="glyph170" source="glyph33" id="arc168" class="catalysis">
+            <ns2:start y="1252.5" x="386.5"/>
+            <ns2:end y="1282.5" x="386.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph134" source="glyph20" id="arc169" class="stimulation">
+            <ns2:start y="140.5" x="940.0"/>
+            <ns2:end y="170.5" x="940.0"/>
+        </ns2:arc>
+        <ns2:arc target="glyph148" source="glyph2" id="arc170" class="stimulation">
+            <ns2:start y="1465.5" x="927.0"/>
+            <ns2:end y="1465.5" x="985.0"/>
+        </ns2:arc>
+        <ns2:arc target="glyph162" source="glyph5" id="arc171" class="stimulation">
+            <ns2:start y="1615.5" x="625.5"/>
+            <ns2:end y="1615.5" x="655.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph149" source="glyph19" id="arc172" class="stimulation">
+            <ns2:start y="1625.0" x="255.0"/>
+            <ns2:end y="1595.0" x="255.0"/>
+        </ns2:arc>
+        <ns2:arc target="glyph158" source="glyph13" id="arc173" class="catalysis">
+            <ns2:start y="1395.5" x="575.5"/>
+            <ns2:end y="1395.5" x="545.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph137" source="glyph31" id="arc174" class="catalysis">
+            <ns2:start y="1325.5" x="1231.5"/>
+            <ns2:end y="1325.5" x="1201.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph150" source="glyph32" id="arc175" class="catalysis">
+            <ns2:start y="515.5" x="1461.5"/>
+            <ns2:end y="515.5" x="1491.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph140" source="glyph10" id="arc176" class="stimulation">
+            <ns2:start y="565.5" x="927.0"/>
+            <ns2:end y="565.5" x="985.0"/>
+        </ns2:arc>
+        <ns2:arc target="glyph133" source="glyph6" id="arc177" class="stimulation">
+            <ns2:start y="680.5" x="940.0"/>
+            <ns2:end y="710.5" x="940.0"/>
+        </ns2:arc>
+        <ns2:arc target="glyph143" source="glyph25" id="arc178" class="stimulation">
+            <ns2:start y="950.5" x="940.0"/>
+            <ns2:end y="980.5" x="940.0"/>
+        </ns2:arc>
+        <ns2:arc target="glyph138" source="glyph35" id="arc179" class="catalysis">
+            <ns2:start y="505.5" x="654.5"/>
+            <ns2:end y="505.5" x="624.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph135" source="glyph34" id="arc180" class="stimulation">
+            <ns2:start y="270.5" x="940.0"/>
+            <ns2:end y="300.5" x="940.0"/>
+        </ns2:arc>
+        <ns2:arc target="glyph155" source="glyph21" id="arc181" class="catalysis">
+            <ns2:start y="795.5" x="1221.1428"/>
+            <ns2:end y="795.5" x="1251.1428"/>
+        </ns2:arc>
+        <ns2:arc target="glyph144" source="glyph3" id="arc182" class="catalysis">
+            <ns2:start y="505.5" x="545.5"/>
+            <ns2:end y="505.5" x="515.5"/>
+        </ns2:arc>
+        <ns2:arc target="glyph132" source="glyph27" id="arc183" class="catalysis">
+            <ns2:start y="615.5" x="475.5"/>
+            <ns2:end y="615.5" x="505.5"/>
+        </ns2:arc>
+    </ns2:map>
+</ns2:sbgn>

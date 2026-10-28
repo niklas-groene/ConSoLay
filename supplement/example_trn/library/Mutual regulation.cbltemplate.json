@@ -1,0 +1,102 @@
+{
+  "format": "cbl-template",
+  "formatVersion": 1,
+  "id": "trn:mutual-regulation",
+  "revision": 1,
+  "name": "Mutual regulation",
+  "description": "Two regulators that regulate each other lie side by side in one row instead of one above the other.",
+  "kind": "pattern",
+  "source": "file",
+  "coordinates": "local: origin = top-left corner of the pattern's bounding box when the template was made; x to the right, y downwards, in px; node positions are centres. Positions in constraint definitions use the same coordinates; applying a template moves them with the instance.",
+  "nodes": [
+    {
+      "id": "n1",
+      "label": "A",
+      "role": "",
+      "x": 35,
+      "y": 13,
+      "width": 70.0,
+      "height": 26.0,
+      "conditions": []
+    },
+    {
+      "id": "n2",
+      "label": "B",
+      "role": "",
+      "x": 135,
+      "y": 13,
+      "width": 70.0,
+      "height": 26.0,
+      "conditions": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "n1",
+      "target": "n2",
+      "directed": true,
+      "role": "",
+      "conditions": []
+    },
+    {
+      "id": "e2",
+      "source": "n2",
+      "target": "n1",
+      "directed": true,
+      "role": "",
+      "conditions": []
+    }
+  ],
+  "ports": [
+    {
+      "id": "p1",
+      "name": "A",
+      "node": "n1"
+    },
+    {
+      "id": "p2",
+      "name": "B",
+      "node": "n2"
+    }
+  ],
+  "constraints": [
+    {
+      "id": "k1",
+      "type": "ALIGN_MIDDLE",
+      "name": "Side by side",
+      "priority": "NORMAL",
+      "enabled": true,
+      "roles": {
+        "nodes": [
+          "n1",
+          "n2"
+        ]
+      },
+      "params": {
+        "axis": "y",
+        "anchor": "middle"
+      }
+    },
+    {
+      "id": "k2",
+      "type": "SEPARATION_X",
+      "name": "A left of B",
+      "priority": "NORMAL",
+      "enabled": true,
+      "roles": {
+        "first": [
+          "n1"
+        ],
+        "second": [
+          "n2"
+        ]
+      },
+      "params": {
+        "axis": "x",
+        "distance": 100.0,
+        "exact": false
+      }
+    }
+  ]
+}

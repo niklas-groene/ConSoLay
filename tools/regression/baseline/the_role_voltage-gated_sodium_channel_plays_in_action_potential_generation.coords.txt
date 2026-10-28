@@ -1,0 +1,20 @@
+E glyph0#6 -> glyph2#7
+E glyph3#2 -> glyph5#3
+E glyph4#1 -> glyph0#6
+E glyph5#3 -> glyph6#4
+E glyph6#4 -> glyph1#5
+N glyph0#6 350.0 287.5 108.0 75.0
+N glyph1#5 110.0 600.0 120.0 60.0
+N glyph2#7 350.0 455.0 120.0 60.0
+N glyph3#2 110.0 100.0 120.0 100.0
+N glyph4#1 350.0 100.0 120.0 100.0
+N glyph5#3 110.0 280.0 108.0 60.0
+N glyph6#4 110.0 440.0 108.0 60.0
+# constraints 7
+C ALIGN_CENTER auto glyph3#2 glyph5#3 glyph6#4 glyph1#5
+C ALIGN_CENTER auto glyph4#1 glyph0#6 glyph2#7
+C SEPARATION_Y auto glyph0#6 glyph2#7
+C SEPARATION_Y auto glyph3#2 glyph5#3
+C SEPARATION_Y auto glyph4#1 glyph0#6
+C SEPARATION_Y auto glyph5#3 glyph6#4
+C SEPARATION_Y auto glyph6#4 glyph1#5

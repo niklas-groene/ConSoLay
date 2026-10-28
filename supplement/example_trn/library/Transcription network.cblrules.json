@@ -1,0 +1,332 @@
+{
+  "format": "cbl-rules",
+  "formatVersion": 1,
+  "id": "trn:motif-style",
+  "revision": 1,
+  "name": "Transcription network: regulators above targets",
+  "description": "House style for transcription networks after Shen-Orr et al. (2002): regulators above the genes they regulate, the targets of a local regulator in one row, mutually regulating regulators side by side. The node attribute trn.regulator marks global and local regulators.",
+  "rules": [
+    {
+      "id": "r1",
+      "name": "Mutual regulation",
+      "description": "Wins over Regulation for the two arcs of the pair.",
+      "enabled": true,
+      "priority": "HIGH",
+      "template": {
+        "id": "trn:mutual-regulation",
+        "revision": 1,
+        "name": "Mutual regulation"
+      }
+    },
+    {
+      "id": "r2",
+      "name": "Regulation",
+      "description": "The convention itself.",
+      "enabled": true,
+      "priority": "NORMAL",
+      "template": {
+        "id": "trn:regulation",
+        "revision": 1,
+        "name": "Regulation"
+      }
+    },
+    {
+      "id": "r3",
+      "name": "Shared regulator",
+      "description": "Yields to Regulation where a target regulates another target of the same regulator.",
+      "enabled": true,
+      "priority": "LOW",
+      "template": {
+        "id": "trn:shared-regulator",
+        "revision": 1,
+        "name": "Shared regulator"
+      }
+    }
+  ],
+  "templates": [
+    {
+      "format": "cbl-template",
+      "formatVersion": 1,
+      "id": "trn:mutual-regulation",
+      "revision": 1,
+      "name": "Mutual regulation",
+      "description": "Two regulators that regulate each other lie side by side in one row instead of one above the other.",
+      "kind": "pattern",
+      "source": "file",
+      "coordinates": "local: origin = top-left corner of the pattern's bounding box when the template was made; x to the right, y downwards, in px; node positions are centres. Positions in constraint definitions use the same coordinates; applying a template moves them with the instance.",
+      "nodes": [
+        {
+          "id": "n1",
+          "label": "A",
+          "role": "",
+          "x": 35,
+          "y": 13,
+          "width": 70.0,
+          "height": 26.0,
+          "conditions": []
+        },
+        {
+          "id": "n2",
+          "label": "B",
+          "role": "",
+          "x": 135,
+          "y": 13,
+          "width": 70.0,
+          "height": 26.0,
+          "conditions": []
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "source": "n1",
+          "target": "n2",
+          "directed": true,
+          "role": "",
+          "conditions": []
+        },
+        {
+          "id": "e2",
+          "source": "n2",
+          "target": "n1",
+          "directed": true,
+          "role": "",
+          "conditions": []
+        }
+      ],
+      "ports": [
+        {
+          "id": "p1",
+          "name": "A",
+          "node": "n1"
+        },
+        {
+          "id": "p2",
+          "name": "B",
+          "node": "n2"
+        }
+      ],
+      "constraints": [
+        {
+          "id": "k1",
+          "type": "ALIGN_MIDDLE",
+          "name": "Side by side",
+          "priority": "NORMAL",
+          "enabled": true,
+          "roles": {
+            "nodes": [
+              "n1",
+              "n2"
+            ]
+          },
+          "params": {
+            "axis": "y",
+            "anchor": "middle"
+          }
+        },
+        {
+          "id": "k2",
+          "type": "SEPARATION_X",
+          "name": "A left of B",
+          "priority": "NORMAL",
+          "enabled": true,
+          "roles": {
+            "first": [
+              "n1"
+            ],
+            "second": [
+              "n2"
+            ]
+          },
+          "params": {
+            "axis": "x",
+            "distance": 100.0,
+            "exact": false
+          }
+        }
+      ]
+    },
+    {
+      "format": "cbl-template",
+      "formatVersion": 1,
+      "id": "trn:regulation",
+      "revision": 1,
+      "name": "Regulation",
+      "description": "A transcription factor and a gene it regulates: the regulator above the target (Shen-Orr et al. 2002 draw regulating transcription factors above the regulated operons).",
+      "kind": "pattern",
+      "source": "file",
+      "coordinates": "local: origin = top-left corner of the pattern's bounding box when the template was made; x to the right, y downwards, in px; node positions are centres. Positions in constraint definitions use the same coordinates; applying a template moves them with the instance.",
+      "nodes": [
+        {
+          "id": "n1",
+          "label": "Regulator",
+          "role": "",
+          "x": 35,
+          "y": 13,
+          "width": 70.0,
+          "height": 26.0,
+          "conditions": []
+        },
+        {
+          "id": "n2",
+          "label": "Target",
+          "role": "",
+          "x": 35,
+          "y": 93,
+          "width": 70.0,
+          "height": 26.0,
+          "conditions": []
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "source": "n1",
+          "target": "n2",
+          "directed": true,
+          "role": "",
+          "conditions": []
+        }
+      ],
+      "ports": [
+        {
+          "id": "p1",
+          "name": "Regulator",
+          "node": "n1"
+        },
+        {
+          "id": "p2",
+          "name": "Target",
+          "node": "n2"
+        }
+      ],
+      "constraints": [
+        {
+          "id": "k1",
+          "type": "SEPARATION_Y",
+          "name": "Regulator above target",
+          "priority": "NORMAL",
+          "enabled": true,
+          "roles": {
+            "first": [
+              "n1"
+            ],
+            "second": [
+              "n2"
+            ]
+          },
+          "params": {
+            "axis": "y",
+            "distance": 70.0,
+            "exact": false
+          }
+        }
+      ]
+    },
+    {
+      "format": "cbl-template",
+      "formatVersion": 1,
+      "id": "trn:shared-regulator",
+      "revision": 1,
+      "name": "Shared regulator",
+      "description": "Two genes regulated by the same local (non-global) regulator lie in one row; applied to all pairs, the targets of a local regulator form a row.",
+      "kind": "pattern",
+      "source": "file",
+      "coordinates": "local: origin = top-left corner of the pattern's bounding box when the template was made; x to the right, y downwards, in px; node positions are centres. Positions in constraint definitions use the same coordinates; applying a template moves them with the instance.",
+      "nodes": [
+        {
+          "id": "n1",
+          "label": "Regulator",
+          "role": "",
+          "x": 85,
+          "y": 13,
+          "width": 70.0,
+          "height": 26.0,
+          "conditions": [
+            {
+              "attribute": "trn.regulator",
+              "op": "equals",
+              "values": [
+                "local"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "n2",
+          "label": "Target A",
+          "role": "",
+          "x": 35,
+          "y": 93,
+          "width": 70.0,
+          "height": 26.0,
+          "conditions": []
+        },
+        {
+          "id": "n3",
+          "label": "Target B",
+          "role": "",
+          "x": 135,
+          "y": 93,
+          "width": 70.0,
+          "height": 26.0,
+          "conditions": []
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "source": "n1",
+          "target": "n2",
+          "directed": true,
+          "role": "",
+          "conditions": []
+        },
+        {
+          "id": "e2",
+          "source": "n1",
+          "target": "n3",
+          "directed": true,
+          "role": "",
+          "conditions": []
+        }
+      ],
+      "ports": [
+        {
+          "id": "p1",
+          "name": "Regulator",
+          "node": "n1"
+        },
+        {
+          "id": "p2",
+          "name": "Target A",
+          "node": "n2"
+        },
+        {
+          "id": "p3",
+          "name": "Target B",
+          "node": "n3"
+        }
+      ],
+      "constraints": [
+        {
+          "id": "k1",
+          "type": "ALIGN_MIDDLE",
+          "name": "Targets in one row",
+          "priority": "NORMAL",
+          "enabled": true,
+          "roles": {
+            "nodes": [
+              "n2",
+              "n3"
+            ]
+          },
+          "params": {
+            "axis": "y",
+            "anchor": "middle"
+          }
+        }
+      ]
+    }
+  ]
+}

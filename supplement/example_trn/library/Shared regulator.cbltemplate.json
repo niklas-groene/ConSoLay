@@ -1,0 +1,105 @@
+{
+  "format": "cbl-template",
+  "formatVersion": 1,
+  "id": "trn:shared-regulator",
+  "revision": 1,
+  "name": "Shared regulator",
+  "description": "Two genes regulated by the same local (non-global) regulator lie in one row; applied to all pairs, the targets of a local regulator form a row.",
+  "kind": "pattern",
+  "source": "file",
+  "coordinates": "local: origin = top-left corner of the pattern's bounding box when the template was made; x to the right, y downwards, in px; node positions are centres. Positions in constraint definitions use the same coordinates; applying a template moves them with the instance.",
+  "nodes": [
+    {
+      "id": "n1",
+      "label": "Regulator",
+      "role": "",
+      "x": 85,
+      "y": 13,
+      "width": 70.0,
+      "height": 26.0,
+      "conditions": [
+        {
+          "attribute": "trn.regulator",
+          "op": "equals",
+          "values": [
+            "local"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "n2",
+      "label": "Target A",
+      "role": "",
+      "x": 35,
+      "y": 93,
+      "width": 70.0,
+      "height": 26.0,
+      "conditions": []
+    },
+    {
+      "id": "n3",
+      "label": "Target B",
+      "role": "",
+      "x": 135,
+      "y": 93,
+      "width": 70.0,
+      "height": 26.0,
+      "conditions": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "n1",
+      "target": "n2",
+      "directed": true,
+      "role": "",
+      "conditions": []
+    },
+    {
+      "id": "e2",
+      "source": "n1",
+      "target": "n3",
+      "directed": true,
+      "role": "",
+      "conditions": []
+    }
+  ],
+  "ports": [
+    {
+      "id": "p1",
+      "name": "Regulator",
+      "node": "n1"
+    },
+    {
+      "id": "p2",
+      "name": "Target A",
+      "node": "n2"
+    },
+    {
+      "id": "p3",
+      "name": "Target B",
+      "node": "n3"
+    }
+  ],
+  "constraints": [
+    {
+      "id": "k1",
+      "type": "ALIGN_MIDDLE",
+      "name": "Targets in one row",
+      "priority": "NORMAL",
+      "enabled": true,
+      "roles": {
+        "nodes": [
+          "n2",
+          "n3"
+        ]
+      },
+      "params": {
+        "axis": "y",
+        "anchor": "middle"
+      }
+    }
+  ]
+}
