@@ -14,8 +14,8 @@ import java.util.Map;
 
 /**
  * Main tab "Algorithms": a {@link CardSelector} with the layout algorithms of the add-on (the step algorithms of the
- * {@link StepLayoutRegistry}, the Mental Map and the Templates) above the panel of the selected algorithm. Every panel
- * is built once and keeps its state while another algorithm is shown.
+ * {@link StepLayoutRegistry} and the Mental Map) above the panel of the selected algorithm. Every panel is built once
+ * and keeps its state while another algorithm is shown. Templates have their own main tab ({@link TemplatesTab}).
  *
  * @author Niklas Gröne
  */
@@ -23,8 +23,8 @@ public class AlgorithmsTab extends JPanel {
 
     private static final long serialVersionUID = 1L;
 
-    /** Ids of the two panels that are not step algorithms (those use their registry id). */
-    public static final String MENTAL_MAP = "mental-map", TEMPLATES = "templates";
+    /** Id of the panel that is not a step algorithm (those use their registry id). */
+    public static final String MENTAL_MAP = "mental-map";
 
     private final CardSelector<String> selector = new CardSelector<>(Ui.COLUMN_WIDTH - 2 * Ui.PAD);
     private final Map<String, JComponent> panels = new LinkedHashMap<>();
@@ -38,16 +38,11 @@ public class AlgorithmsTab extends JPanel {
         selector.addOption(MENTAL_MAP, "Mental Map", "Keep a reference layout",
                 "Re-layout the edited graph relative to a pinned reference snapshot, so the user's mental map is "
                         + "preserved, and travel through the snapshot history.");
-        selector.addOption(TEMPLATES, "Templates", "Find and apply layout rules",
-                "Templates describe where they fit (a pattern, or a composite of other templates) and which constraints "
-                        + "they make there. Find where they fit, review the suggestions on the graph and apply the ones "
-                        + "you choose; build templates and rule sets in the editor.");
         selector.getAccessibleContext().setAccessibleName("Algorithm");
 
         panels.put(MENTAL_MAP, new MentalMapPanel());
-        panels.put(TEMPLATES, new gui.template.TemplatePanel());
 
-        // All panels stay in the tree (listeners, timers and the template preview keep working); the stack skips
+        // All panels stay in the tree (listeners and timers keep working); the stack skips
         // the invisible ones, so the column is only as high as the selected panel.
         for (JComponent panel : panels.values()) content.addRow(panel, 0);
 

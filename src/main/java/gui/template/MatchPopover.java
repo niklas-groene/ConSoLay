@@ -182,7 +182,7 @@ final class MatchPopover {
             apply.setName("applyMatch");
             body.addRow(apply, Ui.GAP_M);
             JButton sel = Ui.button(m.selected ? "Remove from selection" : "Select for applying",
-                    "Collects matches to apply together with \"Apply selected\" in the Templates panel.", e -> {
+                    "Collects matches to apply together with \"Apply selected\" on the Templates page.", e -> {
                         wb.setSelected(m, !m.selected);
                         wb.openPopover(m);
                     });

@@ -68,8 +68,9 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * The add-on's inspector tab "Constraint-Based Layout" with two main tabs: "Algorithms" ({@link AlgorithmsTab}: SBGN,
- * Mental Map, Templates) and "Constraints" (the user's constraints, their lists and conflicts). The tab loads the
+ * The add-on's inspector tab "Constraint-Based Layout" with three main tabs: "Algorithms" ({@link AlgorithmsTab}: SBGN,
+ * Mental Map), "Templates" ({@link TemplatesTab}: library, search, matches, instances, rule sets) and "Constraints"
+ * (the user's constraints, their lists and conflicts). The tab loads the
  * Adaptagrams natives, installs the refreshes of the {@link ConstraintStore}, and re-solves the user's constraints
  * after a drag or a deleted node.
  */
@@ -102,6 +103,7 @@ public class AddonTab extends InspectorTab implements ViewListener, SessionListe
 
         JTabbedPane mainTabs = new JTabbedPane();
         mainTabs.addTab("Algorithms", new AlgorithmsTab());
+        mainTabs.addTab("Templates", new TemplatesTab());
         mainTabs.addTab("Constraints", new ConstraintsTab());
 
         setLayout(new BorderLayout());

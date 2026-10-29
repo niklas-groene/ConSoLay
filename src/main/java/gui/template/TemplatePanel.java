@@ -47,7 +47,7 @@ import java.util.Set;
 import java.util.prefs.Preferences;
 
 /**
- * Panel "Templates" of the Algorithms tab: template library, search for matches, found matches, applied instances
+ * Content of the main tab "Templates" ({@link gui.TemplatesTab}): template library, search for matches, found matches, applied instances
  * and rule set. Finding matches never changes the graph; only the apply buttons (here or in a match's popover) change
  * the layout, as one undoable step.
  *

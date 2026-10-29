@@ -566,7 +566,7 @@ final class ConstraintListSection extends Section {
         }
         Deactivation d = c.getDeactivation();
         String state = c.isSwitchedOnItself() && !c.isEnabled() ? "Its template instance " + (c.getOrigin() == null ? "" : "'" + c.getOrigin().getInstanceLabel() + "' ")
-                + "(or a component of it) is switched off; switch it on in Algorithms › Templates. Its own switch stays as it is."
+                + "(or a component of it) is switched off; switch it on on the Templates page. Its own switch stays as it is."
                 : !c.isEnabled() ? "Switched off: no solve applies it until you switch it on again under Advanced."
                 : d == null ? null
                 : d.contradictsItself() ? "Not applied. " + d.reason()

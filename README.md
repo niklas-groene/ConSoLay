@@ -9,7 +9,7 @@ pass through the same loop:
 - **by hand**: the Constraints page (tab "Constraint-Based Layout") with a palette, a list and a Conflicts section that
   explains every decision;
 - **from a library**: templates (patterns with conditions on node and edge attributes and the constraints to create),
-  composites and rule sets, found in a graph by a subgraph search and applied in batches (Algorithms › Templates);
+  composites and rule sets, found in a graph by a subgraph search and applied in batches (the Templates page);
 - **by algorithm**: layout algorithms written as steps that add constraints instead of setting positions, with the
   SBGN PD, ER and AF layouts as the first ones (Algorithms › SBGN); other add-ons register their own through
   `layout.steps.StepLayoutRegistry` (see `supplement/algorithm-interface.md`).
@@ -53,7 +53,7 @@ IntelliJ run configuration does).
 | `src/main/java/layout/sbgn` | the SBGN PD, ER and AF layouts and their edge routing |
 | `src/main/java/layout/template` | templates: model, JSON files, search, application |
 | `src/main/java/layout/mental_map` | the mental-map layout with its snapshot timeline |
-| `src/main/java/gui` | the tab (Constraints page, Algorithms page, template editor), the overlay |
+| `src/main/java/gui` | the tab (Algorithms page, Templates page, Constraints page, template editor), the overlay |
 | `src/main/java/cblayout` | the VANTED plug-in entry (`CBLayout`), the menu entries |
 | `tools/regression` | the headless regression run and the drag bench (not part of the jar) |
 | `supplement` | the supplement of the paper: regression, algorithm interface, dragging, all switches, the TRN example |
