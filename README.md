@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="supplement/logo.png" alt="ConSoLay logo" width="240">
+</p>
+
 # ConSoLay: constraint-based layout, an add-on for VANTED
 
 Constraint-based graph layout in [VANTED](https://www.cls.uni-konstanz.de/software/vanted/) with the Adaptagrams
