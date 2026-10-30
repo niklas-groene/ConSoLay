@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="supplement/logo-dark.png">
-    <img src="supplement/logo.png" alt="ConSoLay" width="250">
+    <img src="supplement/logo.png" alt="ConSoLay" width="200">
   </picture>
 </p>
 
