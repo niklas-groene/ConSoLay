@@ -1,8 +1,11 @@
 <p align="center">
-  <img src="supplement/logo.png" alt="ConSoLay logo" width="240">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="supplement/logo-dark.png">
+    <img src="supplement/logo.png" alt="ConSoLay" width="280">
+  </picture>
 </p>
 
-# ConSoLay: constraint-based layout, an add-on for VANTED
+<p align="center"><b>Constraint-based layout, an add-on for VANTED</b></p>
 
 Constraint-based graph layout in [VANTED](https://www.cls.uni-konstanz.de/software/vanted/) with the Adaptagrams
 libraries (libcola, libvpsc, libavoid): the user states relations between nodes (25 constraint types: alignments, gaps,
