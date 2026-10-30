@@ -57,6 +57,8 @@ public class TemplatePanel extends JPanel {
 
     private static final long serialVersionUID = 1L;
     private static final Preferences PREFS = Preferences.userNodeForPackage(TemplatePanel.class);
+    /** Width of the check box column of the match list. */
+    private static final int BOX_COLUMN = 24;
     private static TemplatePanel instance;
 
     /** Shows a message in the status line of the panel (popover actions report here). */
@@ -94,7 +96,15 @@ public class TemplatePanel extends JPanel {
     private final JLabel showState = new JLabel();
     private final Section matchesSection = new Section("Matches");
     private final DefaultListModel<Match> matchModel = new DefaultListModel<>();
-    private final JList<Match> matchList = new JList<>(matchModel);
+    /** A press in a row's check box column selects the match for applying: it does not open it. */
+    private boolean pressOnBox;
+    private final JList<Match> matchList = new JList<Match>(matchModel) {
+        private static final long serialVersionUID = 1L;
+        @Override protected void processMouseEvent(MouseEvent e) {
+            if (e.getID() == MouseEvent.MOUSE_PRESSED) pressOnBox = e.getX() < BOX_COLUMN;
+            super.processMouseEvent(e);
+        }
+    };
     private final JLabel pageLabel = Ui.hint(" ");
     private final JButton prevPage = Ui.button("◀", "Previous matches", null), nextPage = Ui.button("▶", "Next matches", null);
     private final JButton selectAll = Ui.button("Select all", "Selects every match of the search for applying (not only the shown ones).", null);
@@ -114,6 +124,7 @@ public class TemplatePanel extends JPanel {
     private final JButton instPrefer = Ui.button("Prefer…", "Raises the priorities of its constraints that are not applied so they win; shows first what changes.", null);
     private final VerticalStack partsBox = new VerticalStack();
     private final JLabel instanceInfo = Ui.hint(" ");
+    private boolean updatingInstances;
 
     private final RuleSetSection ruleSection;
 
@@ -470,21 +481,20 @@ public class TemplatePanel extends JPanel {
         matchList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         matchList.getAccessibleContext().setAccessibleName("Matches");
         matchList.addListSelectionListener(e -> {
-            if (e.getValueIsAdjusting() || updatingMatches) return;
-            Match m = matchList.getSelectedValue();
-            if (m == null) return;
-            TemplateWorkbench wb = TemplateWorkbench.get();
-            if (!wb.isSuggestionMode()) wb.setSuggestionMode(true);
-            wb.openPopover(m);
+            if (e.getValueIsAdjusting() || updatingMatches || pressOnBox) return;
+            showChosenMatch();
         });
         matchList.addMouseListener(new MouseAdapter() {
             @Override public void mouseClicked(MouseEvent e) {
                 int i = matchList.locationToIndex(e.getPoint());
-                if (i < 0) return;
-                Rectangle cell = matchList.getCellBounds(i, i);
-                if (cell != null && e.getX() - cell.x < 24) {   // the check box column
+                Rectangle cell = i < 0 ? null : matchList.getCellBounds(i, i);
+                if (cell == null || !cell.contains(e.getPoint())) return;
+                if (e.getX() - cell.x < BOX_COLUMN) {
                     Match m = matchModel.get(i);
                     TemplateWorkbench.get().setSelected(m, !m.selected);
+                } else if (TemplateWorkbench.get().focus != matchModel.get(i)) {
+                    // the row was chosen before and its popover closed since: no selection event comes
+                    showChosenMatch();
                 }
             }
         });
@@ -519,6 +529,16 @@ public class TemplatePanel extends JPanel {
         applyAll.addActionListener(e -> applyAllFound());
         s.addRow(applyAll, Ui.GAP_XS);
         return s;
+    }
+
+    /** The match chosen in the list: its popover beside it on the graph, scrolled into view. */
+    private void showChosenMatch() {
+        Match m = matchList.getSelectedValue();
+        if (m == null) return;
+        TemplateWorkbench wb = TemplateWorkbench.get();
+        if (!wb.isSuggestionMode()) wb.setSuggestionMode(true);
+        wb.reveal(m);
+        wb.openPopover(m);
     }
 
     private void page(int d) {
@@ -594,7 +614,7 @@ public class TemplatePanel extends JPanel {
         instanceList.setVisibleRowCount(4);
         instanceList.getAccessibleContext().setAccessibleName("Applied template instances");
         instanceList.addListSelectionListener(e -> {
-            if (e.getValueIsAdjusting()) return;
+            if (e.getValueIsAdjusting() || updatingInstances) return;
             TemplateInstance i = instanceList.getSelectedValue();
             TemplateWorkbench.get().focusInstance = i;
             updateInstanceActions();
@@ -632,9 +652,16 @@ public class TemplatePanel extends JPanel {
     private void refreshInstances() {
         Graph g = TemplateWorkbench.activeGraph();
         TemplateInstance sel = instanceList.getSelectedValue();
-        instanceModel.clear();
-        for (TemplateInstance i : InstanceRegistry.of(g)) instanceModel.addElement(i);
-        if (sel != null && instanceModel.contains(sel)) instanceList.setSelectedValue(sel, false);
+        updatingInstances = true;   // listing them anew chooses nothing
+        try {
+            instanceModel.clear();
+            for (TemplateInstance i : InstanceRegistry.of(g)) instanceModel.addElement(i);
+            if (sel != null && instanceModel.contains(sel)) instanceList.setSelectedValue(sel, false);
+        } finally {
+            updatingInstances = false;
+        }
+        TemplateWorkbench wb = TemplateWorkbench.get();
+        if (wb.focusInstance != null && wb.focusInstance.graph == g && !instanceModel.contains(wb.focusInstance)) wb.focusInstance = null;
         instanceSection.setTrailingText(String.valueOf(instanceModel.size()));
         instanceList.setVisibleRowCount(Math.max(1, Math.min(5, instanceModel.size())));
         updateInstanceActions();
@@ -748,7 +775,7 @@ public class TemplatePanel extends JPanel {
                 for (Match m : shown) matchModel.addElement(m);
             }
             if (wb.focus != null && matchModel.contains(wb.focus)) matchList.setSelectedValue(wb.focus, true);
-            else if (keep != null && matchModel.contains(keep)) matchList.setSelectedValue(keep, false);
+            else if (keep != null && matchModel.contains(keep) && matchList.isFocusOwner()) matchList.setSelectedValue(keep, false);
             else matchList.clearSelection();
         } finally {
             updatingMatches = false;
@@ -795,7 +822,7 @@ public class TemplatePanel extends JPanel {
     // ================================================================== rendering
 
     private static JScrollPane scroll(JList<?> list) {
-        return new JScrollPane(list, ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED, ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER) {
+        return new gui.components.NestedScrollPane(list, ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED, ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER) {
             private static final long serialVersionUID = 1L;
             @Override public Dimension getPreferredSize() { return new Dimension(40, super.getPreferredSize().height); }
             @Override public Dimension getMinimumSize() { return getPreferredSize(); }

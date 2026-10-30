@@ -186,6 +186,34 @@ public final class MatchOverlay extends JComponent {
         return direct.isEmpty() ? inside : direct;
     }
 
+    /** The screen bounds (in {@code target}'s coordinates) of an applied instance, or null. */
+    static Rectangle2D bounds(TemplateInstance i, Component target) {
+        Geo g = geo(target);
+        return g == null ? null : g.bounds(liveNodes(i), PAD + 3);
+    }
+
+    private static List<Node> liveNodes(TemplateInstance i) {
+        List<Node> ns = new ArrayList<>();
+        for (Node n : i.nodes.values()) if (n.getGraph() == i.graph) ns.add(n);
+        return ns;
+    }
+
+    /** The applied instance of the active graph under a point of the view component (the smallest hull), or null. */
+    static TemplateInstance instanceAt(Point viewPoint, JComponent viewComp) {
+        Graph g = TemplateWorkbench.activeGraph();
+        if (g == null) return null;
+        TemplateInstance best = null;
+        double area = Double.POSITIVE_INFINITY;
+        for (TemplateInstance i : InstanceRegistry.of(g)) {
+            Rectangle2D r = bounds(i, viewComp);
+            if (r != null && r.contains(viewPoint) && r.getWidth() * r.getHeight() < area) {
+                area = r.getWidth() * r.getHeight();
+                best = i;
+            }
+        }
+        return best;
+    }
+
     @Override
     protected void paintComponent(Graphics g0) {
         TemplateWorkbench wb = TemplateWorkbench.get();
@@ -292,9 +320,7 @@ public final class MatchOverlay extends JComponent {
     }
 
     private void paintInstance(Graphics2D g, Geo geo, TemplateInstance i, boolean emphasised) {
-        List<Node> ns = new ArrayList<>();
-        for (Node n : i.nodes.values()) if (n.getGraph() == i.graph) ns.add(n);
-        Rectangle2D r = geo.bounds(ns, PAD + 3);
+        Rectangle2D r = geo.bounds(liveNodes(i), PAD + 3);
         if (r == null) return;
         TemplateInstance.Status s = i.status(ConstraintStore.constraints);
         Color c = !i.isOn() ? OFF : s.notApplied > 0 ? CONFLICT : APPLIED;

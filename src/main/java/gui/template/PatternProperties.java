@@ -8,7 +8,6 @@ import constraints.spec.ConstraintSpecs;
 import gui.ConstraintCatalog;
 import gui.ConstraintParamForm;
 import gui.PriorityControls;
-import gui.components.ScrollColumn;
 import gui.components.Section;
 import gui.components.Ui;
 import gui.components.VerticalStack;
@@ -20,8 +19,6 @@ import layout.template.model.TemplateDef;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.FocusAdapter;
-import java.awt.event.FocusEvent;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -36,67 +33,55 @@ import java.util.function.Consumer;
  *
  * @author Niklas Gröne
  */
-final class PatternProperties extends JPanel {
+final class PatternProperties extends PropertiesPanel {
 
     private static final long serialVersionUID = 1L;
-    private static final int W = 250;
     private static final int ROW_H = 18;
 
-    private final EditorModel model;
-    private final VerticalStack column = new VerticalStack();
-    private String shownKey = "";
-    /** Set while this panel changes the model, so the rebuild does not replace the control being used. */
-    private boolean selfChange;
     /** The role list entry ("constraint|role", index) to select again after the next rebuild, or null. */
     private String keepRoleKey;
     private int keepRoleIndex = -1;
+    /** The texts of the shown constraint that depend on its values. */
+    private JLabel constraintTitle, constraintState;
 
     PatternProperties(EditorModel model) {
-        super(new BorderLayout());
-        this.model = model;
-        setOpaque(false);
-        column.setBorder(Ui.columnPadding(Ui.GAP_L, Ui.GAP_L));
-        add(new ScrollColumn(column, W + 20), BorderLayout.CENTER);
-        model.addListener(this::refresh);
+        super(model);
         refresh();
     }
 
-    /** Rebuilds when the selection or the structure changed (not for the panel's own value edits). */
-    void refresh() {
+    @Override
+    String selectionKey() {
+        return model.selConstraint + "|" + model.selNodes + "|" + model.selEdges;
+    }
+
+    @Override
+    void build() {
         ConstraintSpec s = model.selConstraint == null ? null : model.def().constraint(model.selConstraint);
-        String key = model.selConstraint + "|" + model.selNodes + "|" + model.selEdges + "|" + model.def().nodes.size() + "|"
-                + model.def().constraints.size() + "|" + model.def().ports.size() + "|" + model.canUndo() + model.undoName()
-                + "|" + (s == null ? "" : s.roles);
-        if (selfChange && key.equals(shownKey)) {
-            keepRoleKey = null;
-            return;
-        }
-        shownKey = key;
-        column.clearRows();
-        if (s != null) column.addRow(constraintSection(s));
+        constraintTitle = null;
+        constraintState = null;
+        // what was chosen last comes first, so it is in view without scrolling past the other
+        if (s != null && model.constraintFirst) column.addRow(constraintSection(s));
         if (model.selNodes.size() == 1) {
             column.addRow(nodeSection(model.def().node(model.selNodes.iterator().next())), sectionGap());
         } else if (model.selNodes.size() > 1) {
             column.addRow(multiSection(), sectionGap());
         }
         if (model.selEdges.size() == 1) column.addRow(edgeSection(model.def().edge(model.selEdges.iterator().next())), sectionGap());
+        if (s != null && !model.constraintFirst) column.addRow(constraintSection(s), sectionGap());
         column.addRow(templateSection(), sectionGap());
-        column.revalidate();
-        column.repaint();
         keepRoleKey = null;
+    }
+
+    @Override
+    void controlsKept() {
+        ConstraintSpec s = model.selConstraint == null ? null : model.def().constraint(model.selConstraint);
+        if (s == null || constraintTitle == null) return;
+        constraintTitle.setText(TemplateEditor.title(s));
+        updateConstraintState(s);
     }
 
     private int sectionGap() {
         return column.getRowCount() == 0 ? 0 : Ui.SECTION_GAP;
-    }
-
-    private void edit(String name, Runnable r) {
-        selfChange = true;
-        try {
-            model.change(name, r);
-        } finally {
-            selfChange = false;
-        }
     }
 
     // ================================================================== constraint
@@ -105,6 +90,7 @@ final class PatternProperties extends JPanel {
         Section sec = new Section("Constraint " + s.id);
         JLabel title = new JLabel(TemplateEditor.title(s));
         title.setFont(Ui.bold());
+        constraintTitle = title;
         sec.addRow(title);
         if (s.kind() == null) {
             sec.addRow(Ui.hint("Type '" + Ui.esc(s.type) + "' of a newer version: it is kept unchanged when saving, but it cannot be "
@@ -113,17 +99,20 @@ final class PatternProperties extends JPanel {
         }
         JTextField name = new JTextField(s.name == null ? "" : s.name, 2);
         name.setToolTipText(Ui.tooltip("Your name for the constraint (shown in lists and conflict messages); empty: its kind."));
-        commitOnFocus(name, v -> edit("Rename constraint", () -> model.def().constraint(s.id).name = v.isEmpty() ? null : v));
+        onText(name, v -> {
+            ConstraintSpec now = model.def().constraint(s.id);
+            if (now != null) tweak("Rename constraint", () -> now.name = v.isEmpty() ? null : v);
+        });
         sec.addRow(Ui.labeled("Name", name), Ui.GAP_S);
         JCheckBox on = new JCheckBox("Active", s.enabled);
         on.setOpaque(false);
         on.setToolTipText(Ui.tooltip("Off: the constraint is kept in the template but starts switched off in every instance."));
-        on.addActionListener(e -> edit(on.isSelected() ? "Switch constraint on" : "Switch constraint off", () -> model.def().constraint(s.id).enabled = on.isSelected()));
+        on.addActionListener(e -> tweak(on.isSelected() ? "Switch constraint on" : "Switch constraint off", () -> model.def().constraint(s.id).enabled = on.isSelected()));
         sec.addRow(on, Ui.GAP_XS);
         JComboBox<Priority> prio = PriorityControls.comboBox("specPriority");
         prio.setSelectedItem(s.priority);
         prio.setToolTipText(Ui.tooltip(PriorityControls.TOOLTIP));
-        prio.addActionListener(e -> edit("Change priority", () -> model.def().constraint(s.id).priority = PriorityControls.selected(prio)));
+        prio.addActionListener(e -> tweak("Change priority", () -> model.def().constraint(s.id).priority = PriorityControls.selected(prio)));
         sec.addRow(Ui.labeled("Priority", prio), Ui.GAP_XS);
 
         Constraint c = model.constraint(s.id);
@@ -140,7 +129,7 @@ final class PatternProperties extends JPanel {
                 final ConstraintParamForm[] form = new ConstraintParamForm[1];
                 form[0] = new ConstraintParamForm(params, values, () -> {
                     Map<String, Object> v = form[0].values();
-                    edit("Change " + info.title, () -> {
+                    tweakMerging("values " + s.id, "Change " + info.title, () -> {
                         Constraint k = model.constraint(s.id);
                         if (k == null) return;
                         for (ConstraintCatalog.Editable ed : info.editablesFor(k)) {
@@ -159,15 +148,25 @@ final class PatternProperties extends JPanel {
             if (r.optional && s.role(r.name).isEmpty() && !s.roles.isEmpty() && otherOptionalUsed(a, s, r)) continue;
             sec.addRow(roleEditor(s, r), Ui.GAP_M);
         }
+        constraintState = new JLabel();
+        constraintState.setFont(Ui.small());
+        constraintState.setForeground(Ui.MUTED);
+        updateConstraintState(s);
+        sec.addRow(constraintState, Ui.GAP_S);
+        if (info != null) sec.addRow(Ui.hint(Ui.esc(info.description), W), Ui.GAP_S);
+        return sec;
+    }
+
+    /** Why the constraint is invalid, what happened to it with the last edit, or that it does not hold in the drawing. */
+    private void updateConstraintState(ConstraintSpec s) {
         List<String> problems = ConstraintSpecs.validate(s, model.def().nodeIds(), model.def().edgeIds());
         String note = model.notes.get(s.id), unmet = model.unmet.get(s.id);
         StringBuilder sb = new StringBuilder();
         if (note != null) sb.append(Ui.esc(note)).append("<br>");
         for (String p : problems) sb.append("<font color='#c5221f'>").append(Ui.esc(p)).append("</font><br>");
         if (problems.isEmpty() && unmet != null) sb.append("<font color='#b06000'>Does not hold in the drawing: ").append(Ui.esc(unmet)).append("</font>");
-        if (sb.length() > 0) sec.addRow(Ui.hint(sb.toString(), W), Ui.GAP_S);
-        if (info != null) sec.addRow(Ui.hint(Ui.esc(info.description), W), Ui.GAP_S);
-        return sec;
+        constraintState.setText(sb.length() == 0 ? "" : Ui.wrapped(sb.toString(), W));
+        constraintState.setVisible(sb.length() > 0);
     }
 
     private static boolean otherOptionalUsed(ConstraintSpecs.Adapter a, ConstraintSpec s, ConstraintSpecs.RoleInfo r) {
@@ -215,14 +214,12 @@ final class PatternProperties extends JPanel {
                 // The constraint stays selected; the node is only highlighted, and the new list keeps this entry.
                 keepRoleKey = roleKey;
                 keepRoleIndex = list.getSelectedIndex();
-                shownKey = "";
-                selfChange = true;
+                model.constraintFirst = true;
                 model.fire();
-                selfChange = false;
             }
         });
         int rows = Math.max(2, Math.min(6, ids.size()));
-        box.addRow(new JScrollPane(list) {
+        box.addRow(new gui.components.NestedScrollPane(list) {
             private static final long serialVersionUID = 1L;
             @Override public Dimension getPreferredSize() { return new Dimension(40, rows * ROW_H + 6); }
             @Override public Dimension getMinimumSize() { return getPreferredSize(); }
@@ -253,8 +250,15 @@ final class PatternProperties extends JPanel {
         });
         JButton up = Ui.button("↑", "Moves the chosen element earlier.", e -> move(s, r, list.getSelectedIndex(), -1));
         JButton down = Ui.button("↓", "Moves the chosen element later.", e -> move(s, r, list.getSelectedIndex(), 1));
-        up.setEnabled(r.ordered);
-        down.setEnabled(r.ordered);
+        add.setEnabled(!(r.edges ? model.selEdges : model.selNodes).isEmpty());
+        Runnable chosen = () -> {
+            int i = list.getSelectedIndex();
+            remove.setEnabled(i >= 0);
+            up.setEnabled(r.ordered && i > 0);
+            down.setEnabled(r.ordered && i >= 0 && i < m.size() - 1);
+        };
+        chosen.run();
+        list.addListSelectionListener(e -> chosen.run());
         box.addRow(Ui.row(add, remove, up, down), Ui.GAP_XS);
         return box;
     }
@@ -286,17 +290,20 @@ final class PatternProperties extends JPanel {
         Section sec = new Section("Node " + n.id);
         JTextField label = new JTextField(n.label, 2);
         label.setToolTipText(Ui.tooltip("Shown in the editor and in match descriptions; searching uses it only through a condition."));
-        commitOnFocus(label, v -> edit("Rename node", () -> model.def().node(n.id).label = v));
+        onText(label, v -> {
+            PatternNode now = model.def().node(n.id);
+            if (now != null) tweak("Rename node", () -> now.label = v);
+        });
         sec.addRow(Ui.labeled("Label", label));
         sec.addRow(conditionEditor("Semantic role", n.condition(Condition.SBGN_ROLE), SbgnRoles.nodeRoles(TemplateWorkbench.activeGraph()),
-                c -> edit("Change role condition", () -> {
+                c -> tweak("Change role condition", () -> {
                     PatternNode k = model.def().node(n.id);
                     k.setCondition(c);
                     if (c.op == Condition.Op.EQUALS && !c.values.isEmpty()) k.role = c.values.get(0);
                 })), Ui.GAP_S);
         for (Condition c : n.conditions) {
             if (Condition.SBGN_ROLE.equals(c.attribute)) continue;
-            sec.addRow(extraCondition(c, cond -> edit("Change condition", () -> model.def().node(n.id).setCondition(cond)),
+            sec.addRow(extraCondition(c, cond -> tweak("Change condition", () -> model.def().node(n.id).setCondition(cond)),
                     () -> edit("Remove condition", () -> model.def().node(n.id).conditions.removeIf(k -> k.attribute.equals(c.attribute)))), Ui.GAP_S);
         }
         JButton addCond = Ui.button("Add condition…", "A further search condition, e.g. on the label or another attribute.", e -> {
@@ -306,18 +313,17 @@ final class PatternProperties extends JPanel {
             edit("Add condition", () -> model.def().node(n.id).setCondition(new Condition(path.trim(), Condition.Op.EXISTS, null)));
         });
         sec.addRow(addCond, Ui.GAP_XS);
-        JSpinner w = new JSpinner(sizeModel(n.width)), h = new JSpinner(sizeModel(n.height));
-        w.addChangeListener(e -> edit("Resize node", () -> model.def().node(n.id).width = ((Number) w.getValue()).doubleValue()));
-        h.addChangeListener(e -> edit("Resize node", () -> model.def().node(n.id).height = ((Number) h.getValue()).doubleValue()));
+        JSpinner w = spinner(n.width, 1, 5000, 5, "width " + n.id, "Resize node", v -> model.def().node(n.id).width = v);
+        JSpinner h = spinner(n.height, 1, 5000, 5, "height " + n.id, "Resize node", v -> model.def().node(n.id).height = v);
         sec.addRow(Ui.labeled("Size", Ui.row(w, h)), Ui.GAP_S);
 
         sec.addRow(subheading("Ports (named connection points)"), Ui.GAP_M);
         for (Port p : model.def().portsOf(n.id)) {
             JTextField pn = new JTextField(p.name, 2);
             pn.setToolTipText(Ui.tooltip("Renaming keeps every use working (uses refer to the port's id " + p.id + ")."));
-            commitOnFocus(pn, v -> {
-                if (v.isEmpty()) return;
-                edit("Rename port", () -> model.def().port(p.id).name = v);
+            onText(pn, v -> {
+                Port now = model.def().port(p.id);
+                if (!v.isEmpty() && now != null) tweak("Rename port", () -> now.name = v);
             });
             JButton del = Ui.button("Delete", "Deletes the port; composites that use it show the uses as invalid.", e -> {
                 if (!TemplateEditor.confirmPortDeletion(this, model, Collections.singleton(n.id), p)) return;
@@ -348,6 +354,7 @@ final class PatternProperties extends JPanel {
         for (ConstraintSpec s : cs) {
             JButton b = Ui.button(TemplateEditor.title(s), "Select this constraint.", e -> {
                 model.selConstraint = s.id;
+                model.constraintFirst = true;
                 model.fire();
             });
             b.setHorizontalAlignment(SwingConstants.LEFT);
@@ -359,11 +366,6 @@ final class PatternProperties extends JPanel {
         });
         sec.addRow(del, Ui.GAP_M);
         return sec;
-    }
-
-    /** 1 to 5000 px, widened to a size outside (from a graph node or a file), so the spinner can show it. */
-    private static SpinnerNumberModel sizeModel(double v) {
-        return new SpinnerNumberModel(v, Math.min(1, v), Math.max(5000, v), 5);
     }
 
     private static String suggestPortName(PatternNode n) {
@@ -390,7 +392,7 @@ final class PatternProperties extends JPanel {
         JCheckBox dir = new JCheckBox("Direction counts", e.directed);
         dir.setOpaque(false);
         dir.setToolTipText(Ui.tooltip("On: a graph edge must run the same way. Off: either way fits."));
-        dir.addActionListener(ev -> edit("Change direction", () -> model.def().edge(e.id).directed = dir.isSelected()));
+        dir.addActionListener(ev -> tweak("Change direction", () -> model.def().edge(e.id).directed = dir.isSelected()));
         JButton rev = Ui.button("Reverse", "Swaps the edge's start and end.", ev -> edit("Reverse edge", () -> {
             PatternEdge k = model.def().edge(e.id);
             String t = k.source;
@@ -399,7 +401,7 @@ final class PatternProperties extends JPanel {
         }));
         sec.addRow(Ui.row(dir, rev), Ui.GAP_S);
         sec.addRow(conditionEditor("Semantic role", e.condition(Condition.SBGN_ROLE), SbgnRoles.edgeRoles(TemplateWorkbench.activeGraph()),
-                c -> edit("Change edge role", () -> {
+                c -> tweak("Change edge role", () -> {
                     PatternEdge k = model.def().edge(e.id);
                     k.setCondition(c);
                     if (c.op == Condition.Op.EQUALS && !c.values.isEmpty()) k.role = c.values.get(0);
@@ -416,17 +418,9 @@ final class PatternProperties extends JPanel {
         TemplateDef t = model.def();
         Section sec = new Section("Template");
         JTextField name = new JTextField(t.name, 2);
-        commitOnFocus(name, v -> { if (!v.isEmpty()) edit("Rename template", () -> model.def().name = v); });
+        onText(name, v -> { if (!v.isEmpty()) tweak("Rename template", () -> model.def().name = v); });
         sec.addRow(Ui.labeled("Name", name));
-        JTextArea desc = new JTextArea(t.description, 3, 2);
-        desc.setLineWrap(true);
-        desc.setWrapStyleWord(true);
-        desc.addFocusListener(new FocusAdapter() {
-            @Override public void focusLost(FocusEvent e) {
-                if (!desc.getText().equals(model.def().description)) edit("Change description", () -> model.def().description = desc.getText());
-            }
-        });
-        sec.addRow(new JScrollPane(desc), Ui.GAP_XS);
+        sec.addRow(descriptionField(t.description, v -> tweak("Change description", () -> model.def().description = v)), Ui.GAP_XS);
         sec.addRow(Ui.hint("Revision " + t.revision + " · " + t.nodes.size() + " nodes · " + t.edges.size() + " edges · "
                 + t.constraints.size() + " constraints · " + t.ports.size() + " ports<br><font color='#9aa0a6'>id " + Ui.esc(t.id)
                 + "</font><br>Positions are local (origin = top left of the pattern); fitting the view never changes them.", W), Ui.GAP_S);
@@ -434,12 +428,6 @@ final class PatternProperties extends JPanel {
     }
 
     // ================================================================== helpers
-
-    private static JLabel subheading(String text) {
-        JLabel l = new JLabel(text);
-        l.setFont(Ui.small().deriveFont(Font.BOLD));
-        return l;
-    }
 
     /** A condition row: rule (any value / is / is one of / has a value) and the value(s). */
     private JComponent conditionEditor(String label, Condition current, List<String> proposals, Consumer<Condition> onChange) {
@@ -460,6 +448,7 @@ final class PatternProperties extends JPanel {
             }
         });
         value.setSelectedItem(String.join(", ", c.values));
+        final Condition[] shown = {current};
         Runnable commit = () -> {
             Condition.Op o = (Condition.Op) op.getSelectedItem();
             String v = value.getEditor().getItem() == null ? "" : String.valueOf(value.getEditor().getItem()).trim();
@@ -467,7 +456,10 @@ final class PatternProperties extends JPanel {
             if (o == Condition.Op.IN_LIST) for (String p : v.split(",")) { if (!p.trim().isEmpty()) vals.add(p.trim()); }
             else if (o == Condition.Op.EQUALS && !v.isEmpty()) vals.add(v);
             Condition n = new Condition(c.attribute, o, vals);
-            if (!n.equals(current)) onChange.accept(n);
+            if (!n.equals(shown[0])) {
+                shown[0] = n;
+                onChange.accept(n);
+            }
         };
         op.addActionListener(e -> {
             value.setEnabled(op.getSelectedItem() == Condition.Op.EQUALS || op.getSelectedItem() == Condition.Op.IN_LIST);
@@ -486,20 +478,5 @@ final class PatternProperties extends JPanel {
         p.add(editor, BorderLayout.CENTER);
         p.add(Ui.button("✕", "Removes this condition.", e -> remove.run()), BorderLayout.EAST);
         return p;
-    }
-
-    private static void commitOnFocus(JTextField f, Consumer<String> commit) {
-        final String[] before = {f.getText()};
-        Runnable r = () -> {
-            String v = f.getText().trim();
-            if (!v.equals(before[0].trim())) {
-                before[0] = v;
-                commit.accept(v);
-            }
-        };
-        f.addActionListener(e -> r.run());
-        f.addFocusListener(new FocusAdapter() {
-            @Override public void focusLost(FocusEvent e) { r.run(); }
-        });
     }
 }

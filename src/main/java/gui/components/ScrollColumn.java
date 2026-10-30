@@ -8,13 +8,15 @@ import java.awt.*;
  * no horizontal scrolling), and the pane asks for a fixed width no matter what it holds. VANTED sizes the inspector
  * from the tabs' preferred width and pins that as the minimum, so a long constraint text or hint must not widen it.
  */
-public class ScrollColumn extends JScrollPane {
+public class ScrollColumn extends NestedScrollPane {
 
     private static final long serialVersionUID = 1L;
+    /** Pixels per step of the mouse wheel. */
+    private static final int WHEEL_STEP = 24;
 
     public ScrollColumn(JComponent content, int preferredWidth) {
         super(new Column(content, preferredWidth), VERTICAL_SCROLLBAR_AS_NEEDED, HORIZONTAL_SCROLLBAR_NEVER);
-        getVerticalScrollBar().setUnitIncrement(16);
+        getVerticalScrollBar().setUnitIncrement(WHEEL_STEP);
         setBorder(BorderFactory.createEmptyBorder());
         setViewportBorder(null);
     }
@@ -38,7 +40,7 @@ public class ScrollColumn extends JScrollPane {
         @Override public Dimension getPreferredScrollableViewportSize() {
             return new Dimension(preferredWidth, getPreferredSize().height);
         }
-        @Override public int getScrollableUnitIncrement(Rectangle r, int orientation, int direction) { return 16; }
+        @Override public int getScrollableUnitIncrement(Rectangle r, int orientation, int direction) { return WHEEL_STEP; }
         @Override public int getScrollableBlockIncrement(Rectangle r, int orientation, int direction) {
             return Math.max(16, (orientation == SwingConstants.VERTICAL ? r.height : r.width) - 16);
         }

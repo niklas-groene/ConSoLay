@@ -29,8 +29,10 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -61,6 +63,10 @@ final class TemplateEditor extends JFrame {
     private final JPanel rightCards = new JPanel(new CardLayout());
     private PatternCanvas patternCanvas;
     private ComponentCanvas componentCanvas;
+    private PropertiesPanel properties;
+    /** The open editor of each template: opening it again brings that window to the front. */
+    private static final Map<String, TemplateEditor> OPEN = new HashMap<>();
+    private final String openKey;
     /** Components looked into, from the edited template down (read-only views). */
     private final List<ComponentUse> path = new ArrayList<>();
     private final List<TemplateDef> pathTemplates = new ArrayList<>();
@@ -71,6 +77,7 @@ final class TemplateEditor extends JFrame {
         super("Template: " + def.name);
         this.file = file;
         this.onSaved = onSaved;
+        this.openKey = def.id;
         this.model = new EditorModel(def, library);
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
         addWindowListener(new WindowAdapter() {
@@ -82,10 +89,15 @@ final class TemplateEditor extends JFrame {
         JComponent left;
         if (def.isComposite()) {
             componentCanvas = new ComponentCanvas(model, false);
+            componentCanvas.setName("componentCanvas");
             componentCanvas.onOpen = this::openInside;
-            centerCards.add(componentCanvas, "edit");
+            JPanel center = new JPanel(new BorderLayout());
+            center.add(compositeToolbar(), BorderLayout.NORTH);
+            center.add(componentCanvas, BorderLayout.CENTER);
+            centerCards.add(center, "edit");
             left = new CompositeSidebar(model, this);
-            rightCards.add(new CompositeProperties(model, this), "edit");
+            properties = new CompositeProperties(model, this);
+            rightCards.add(properties, "edit");
         } else {
             patternCanvas = new PatternCanvas(model);
             patternCanvas.setName("patternCanvas");
@@ -94,7 +106,8 @@ final class TemplateEditor extends JFrame {
             center.add(patternCanvas, BorderLayout.CENTER);
             centerCards.add(center, "edit");
             left = new ConstraintSpecList(model);
-            rightCards.add(new PatternProperties(model), "edit");
+            properties = new PatternProperties(model);
+            rightCards.add(properties, "edit");
         }
         // fixed side columns, the canvas takes the rest of the (resizable) window
         JPanel body = new JPanel(new BorderLayout());
@@ -112,13 +125,20 @@ final class TemplateEditor extends JFrame {
         model.addListener(this::refresh);
         refresh();
         setSize(1180, 760);
-        setMinimumSize(new Dimension(820, 520));
+        setMinimumSize(new Dimension(1040, 560));
         setLocationByPlatform(true);
     }
 
     /** Opens an editor window for {@code def} (a copy is edited). */
     static TemplateEditor open(TemplateDef def, File file, TemplateLibrary library, String banner, Consumer<TemplateDef> onSaved) {
+        TemplateEditor known = OPEN.get(def.id);
+        if (known != null) {
+            known.setVisible(true);
+            known.toFront();
+            return known;
+        }
         TemplateEditor e = new TemplateEditor(def.copy(), file, library, banner, onSaved);
+        OPEN.put(def.id, e);
         e.setVisible(true);
         return e;
     }
@@ -139,9 +159,8 @@ final class TemplateEditor extends JFrame {
         redoButton.setName("editorRedo");
         bar.add(saveButton);
         bar.add(copy);
-        bar.add(new JSeparator(SwingConstants.VERTICAL));
-        bar.add(undoButton);
-        bar.add(redoButton);
+        bar.add(Box.createHorizontalStrut(Ui.GAP_L));
+        bar.add(segmented(undoButton, redoButton));
         crumbs.setOpaque(false);
         bar.add(Box.createHorizontalStrut(Ui.GAP_L));
         bar.add(crumbs);
@@ -169,52 +188,73 @@ final class TemplateEditor extends JFrame {
         bannerText.setText(text == null ? "" : "<html>" + Ui.esc(text) + "</html>");
     }
 
-    private JComponent canvasToolbar() {
-        JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, Ui.GAP_S, Ui.GAP_XS));
+    /** Buttons that belong together, joined into one control where the look and feel can (on the Mac). */
+    private static JComponent segmented(AbstractButton... buttons) {
+        JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        p.setOpaque(false);
+        for (int i = 0; i < buttons.length; i++) {
+            buttons[i].putClientProperty("JButton.buttonType", "segmented");
+            buttons[i].putClientProperty("JButton.segmentPosition", buttons.length == 1 ? "only" : i == 0 ? "first" : i == buttons.length - 1 ? "last" : "middle");
+            buttons[i].putClientProperty("JComponent.sizeVariant", "small");
+            p.add(buttons[i]);
+        }
+        return p;
+    }
+
+    private static JPanel toolbarRow() {
+        JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, Ui.GAP_M, Ui.GAP_XS));
         bar.setBackground(new Color(0xF6, 0xF8, 0xFB));
-        JPanel bar2 = new JPanel(new FlowLayout(FlowLayout.LEFT, Ui.GAP_S, Ui.GAP_XS));
-        bar2.setBackground(new Color(0xF6, 0xF8, 0xFB));
+        return bar;
+    }
+
+    private JComponent canvasToolbar() {
+        JPanel bar = toolbarRow();
+        JPanel bar2 = toolbarRow();
         JPanel both = new JPanel(new GridLayout(2, 1));
         both.add(bar);
         both.add(bar2);
         ButtonGroup g = new ButtonGroup();
         JToggleButton select = new JToggleButton("Select / move", true), add = new JToggleButton("Add node"), connect = new JToggleButton("Connect");
-        select.setToolTipText(Ui.tooltip("Click to select, drag to move; drag on the background to select several. Delete removes."));
-        add.setToolTipText(Ui.tooltip("Click on the canvas to add a node (Esc ends)."));
-        connect.setToolTipText(Ui.tooltip("Drag from one node to another to add an edge."));
+        select.setToolTipText(Ui.tooltip("Click to select, drag to move; drag on the background to select several. Delete removes. (V)"));
+        add.setToolTipText(Ui.tooltip("Click on the canvas to add a node; Esc ends. (N)"));
+        connect.setToolTipText(Ui.tooltip("Drag from one node to another to add an edge; Esc ends. (C)"));
         select.setName("toolSelect");
         add.setName("toolAddNode");
         connect.setName("toolConnect");
-        for (JToggleButton b : new JToggleButton[]{select, add, connect}) {
-            g.add(b);
-            bar.add(b);
-        }
-        select.addActionListener(e -> patternCanvas.tool = PatternCanvas.Tool.SELECT);
-        add.addActionListener(e -> patternCanvas.tool = PatternCanvas.Tool.ADD_NODE);
-        connect.addActionListener(e -> patternCanvas.tool = PatternCanvas.Tool.CONNECT);
-        model.addListener(() -> {
-            if (patternCanvas.tool == PatternCanvas.Tool.SELECT && !select.isSelected()) select.setSelected(true);
-        });
-        bar.add(new JSeparator(SwingConstants.VERTICAL));
-        JButton fit = Ui.button("Fit", "Fits the pattern into the view (the stored positions stay as they are).", e -> patternCanvas.fit());
-        JButton zin = Ui.button("+", "Zoom in (or the mouse wheel)", e -> patternCanvas.zoom(1.25));
-        JButton zout = Ui.button("−", "Zoom out", e -> patternCanvas.zoom(0.8));
-        bar.add(fit);
-        bar.add(zin);
-        bar.add(zout);
+        for (JToggleButton b : new JToggleButton[]{select, add, connect}) g.add(b);
+        select.addActionListener(e -> useTool(PatternCanvas.Tool.SELECT));
+        add.addActionListener(e -> useTool(PatternCanvas.Tool.ADD_NODE));
+        connect.addActionListener(e -> useTool(PatternCanvas.Tool.CONNECT));
+        patternCanvas.onToolChange = () -> {
+            PatternCanvas.Tool t = patternCanvas.tool();
+            (t == PatternCanvas.Tool.ADD_NODE ? add : t == PatternCanvas.Tool.CONNECT ? connect : select).setSelected(true);
+        };
+        bar.add(segmented(select, add, connect));
+        JButton fit = new JButton("Fit"), zin = new JButton("+"), zout = new JButton("−");
+        fit.setToolTipText(Ui.tooltip("Fits the pattern into the view (the stored positions stay as they are)."));
+        zin.setToolTipText(Ui.tooltip("Zoom in (or the mouse wheel)"));
+        zout.setToolTipText(Ui.tooltip("Zoom out"));
+        fit.addActionListener(e -> patternCanvas.fit());
+        zin.addActionListener(e -> patternCanvas.zoom(1.25));
+        zout.addActionListener(e -> patternCanvas.zoom(0.8));
+        bar.add(segmented(fit, zout, zin));
         JCheckBox keep = new JCheckBox("Keep constraints while dragging", true);
         keep.setOpaque(false);
         keep.setName("keepConstraints");
+        keep.putClientProperty("JComponent.sizeVariant", "small");
         keep.setToolTipText(Ui.tooltip("On: each drag step is solved with the template's constraints; what holds a node back is shown. "
                 + "Off: nodes move freely and constraints that stop holding are marked. Dragging never changes a constraint's values."));
         keep.addActionListener(e -> patternCanvas.solveWhileDragging = keep.isSelected());
         JCheckBox all = new JCheckBox("Show all constraints", true);
         all.setOpaque(false);
+        all.putClientProperty("JComponent.sizeVariant", "small");
         all.addActionListener(e -> {
             patternCanvas.showAllConstraints = all.isSelected();
             patternCanvas.repaint();
         });
-        JButton solve = Ui.button("Apply constraints", "Solves the template's constraints once on the pattern (like a solve in the graph).", e -> {
+        JButton solve = new JButton("Apply constraints");
+        solve.setToolTipText(Ui.tooltip("Solves the template's constraints once on the pattern (like a solve in the graph)."));
+        solve.addActionListener(e -> {
             model.beginStep("Apply constraints");
             java.util.Map<String, String> unmet = model.solve(false);
             model.message = unmet.isEmpty() ? "All constraints hold." : unmet.size() + " constraints do not hold (see the list).";
@@ -222,8 +262,26 @@ final class TemplateEditor extends JFrame {
         });
         bar2.add(keep);
         bar2.add(all);
-        bar2.add(solve);
+        bar2.add(segmented(solve));
         return both;
+    }
+
+    private void useTool(PatternCanvas.Tool t) {
+        patternCanvas.setTool(t);
+        patternCanvas.requestFocusInWindow();
+    }
+
+    private JComponent compositeToolbar() {
+        JPanel bar = toolbarRow();
+        JButton fit = new JButton("Fit"), zin = new JButton("+"), zout = new JButton("−");
+        fit.setToolTipText(Ui.tooltip("Fits all components into the view (the stored positions stay as they are)."));
+        zin.setToolTipText(Ui.tooltip("Zoom in (or the mouse wheel)"));
+        zout.setToolTipText(Ui.tooltip("Zoom out"));
+        fit.addActionListener(e -> componentCanvas.fit());
+        zin.addActionListener(e -> componentCanvas.zoom(1.25));
+        zout.addActionListener(e -> componentCanvas.zoom(0.8));
+        bar.add(segmented(fit, zout, zin));
+        return bar;
     }
 
     private JComponent south() {
@@ -300,10 +358,17 @@ final class TemplateEditor extends JFrame {
         }
         sb.append("</html>");
         JOptionPane.showMessageDialog(this, new JLabel(sb.toString()), "Problems of the template", JOptionPane.PLAIN_MESSAGE);
+        selectFirstProblem();
+    }
+
+    /** Selects the first element with a problem, so its settings are in view. */
+    private void selectFirstProblem() {
         for (TemplateValidator.Problem p : model.problems()) {
             if (p.elementId == null) continue;
-            if (model.def().constraint(p.elementId) != null) model.selConstraint = p.elementId;
-            else if (model.def().component(p.elementId) != null) model.selComponent = p.elementId;
+            if (model.def().constraint(p.elementId) != null) {
+                model.selConstraint = p.elementId;
+                model.constraintFirst = true;
+            } else if (model.def().component(p.elementId) != null) model.selComponent = p.elementId;
             else if (model.def().link(p.elementId) != null) model.selLink = p.elementId;
             else if (model.def().relation(p.elementId) != null) model.selRelation = p.elementId;
             else continue;
@@ -313,12 +378,14 @@ final class TemplateEditor extends JFrame {
     }
 
     private void undo() {
+        properties.commitPending();   // what was just typed is the newest change: undo takes that back first
         model.undo();
         model.message = "Undone.";
         model.fire();
     }
 
     private void redo() {
+        properties.commitPending();
         model.redo();
         model.message = "Redone.";
         model.fire();
@@ -328,6 +395,7 @@ final class TemplateEditor extends JFrame {
 
     /** Saves (a new revision, or a copy); returns false if it was not saved. */
     boolean save(boolean asCopy) {
+        properties.commitPending();
         TemplateDef t = model.def().copy();
         if (asCopy) {
             String name = JOptionPane.showInputDialog(this, "Name of the copy:", t.name + " copy");
@@ -345,21 +413,14 @@ final class TemplateEditor extends JFrame {
             for (TemplateValidator.Problem p : ps) if (p.severity == TemplateValidator.Severity.ERROR) sb.append("• ").append(Ui.esc(p.toString())).append("<br>");
             sb.append("<br>Fix or delete these elements (the list shows them in red).</html>");
             JOptionPane.showMessageDialog(this, new JLabel(sb.toString()), "Save template", JOptionPane.WARNING_MESSAGE);
-            showProblems();
+            selectFirstProblem();
             return false;
         }
         File target = asCopy ? null : file;
         if (target == null) {
             File dir = model.library == null ? null : model.library.getFolder();
-            JFileChooser fc = new JFileChooser(dir);
-            fc.setSelectedFile(new File(dir == null ? fc.getCurrentDirectory() : dir, TemplateFiles.fileName(t.name, TemplateFiles.TEMPLATE_EXT)));
-            if (fc.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return false;
-            target = fc.getSelectedFile();
-            if (!target.getName().toLowerCase(Locale.ROOT).endsWith(TemplateFiles.TEMPLATE_EXT)) {
-                target = new File(target.getParentFile(), target.getName().replaceAll("(?i)\\.json$", "") + TemplateFiles.TEMPLATE_EXT);
-            }
-            if (target.exists() && JOptionPane.showConfirmDialog(this, target.getName() + " exists. Replace it?", "Save template",
-                    JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) return false;
+            target = dir != null ? freeFile(dir, t.name) : chooseFile(t.name);
+            if (target == null) return false;
             TemplateDef known = model.library == null ? null : model.library.latest(t.id);
             if (model.isDirty() && known != null) t.revision = Math.max(t.revision, known.revision) + 1;   // a changed known template
         } else if (model.isDirty()) {
@@ -382,13 +443,36 @@ final class TemplateEditor extends JFrame {
         return true;
     }
 
+    /** A file for a new template in the library folder, under its name (numbered if that exists). */
+    private static File freeFile(File dir, String name) {
+        File f = new File(dir, TemplateFiles.fileName(name, TemplateFiles.TEMPLATE_EXT));
+        for (int k = 2; f.exists(); k++) f = new File(dir, TemplateFiles.fileName(name + " " + k, TemplateFiles.TEMPLATE_EXT));
+        return f;
+    }
+
+    /** Without a library folder: asks where to save; null if cancelled. */
+    private File chooseFile(String name) {
+        JFileChooser fc = new JFileChooser();
+        fc.setSelectedFile(new File(fc.getCurrentDirectory(), TemplateFiles.fileName(name, TemplateFiles.TEMPLATE_EXT)));
+        if (fc.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return null;
+        File target = fc.getSelectedFile();
+        if (!target.getName().toLowerCase(Locale.ROOT).endsWith(TemplateFiles.TEMPLATE_EXT)) {
+            target = new File(target.getParentFile(), target.getName().replaceAll("(?i)\\.json$", "") + TemplateFiles.TEMPLATE_EXT);
+        }
+        if (target.exists() && JOptionPane.showConfirmDialog(this, target.getName() + " exists. Replace it?", "Save template",
+                JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) return null;
+        return target;
+    }
+
     private void close() {
+        properties.commitPending();
         if (model.isDirty()) {
             int a = JOptionPane.showConfirmDialog(this, "Save the changes to '" + model.def().name + "'?", "Close template editor",
                     JOptionPane.YES_NO_CANCEL_OPTION);
             if (a == JOptionPane.CANCEL_OPTION || a == JOptionPane.CLOSED_OPTION) return;
             if (a == JOptionPane.YES_OPTION && !save(false)) return;
         }
+        OPEN.remove(openKey);
         dispose();
     }
 
@@ -503,7 +587,8 @@ final class TemplateEditor extends JFrame {
         TemplateSource src = sourceWith(t);
         String why = Templates.whyNotComponent(model.def(), t, src);
         if (why != null) {
-            JOptionPane.showMessageDialog(this, why, "Insert component", JOptionPane.WARNING_MESSAGE);
+            model.message = why;
+            model.fire();
             return;
         }
         model.change("Insert " + t.name, () -> {

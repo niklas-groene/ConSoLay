@@ -167,7 +167,7 @@ final class ConstraintListSection extends Section {
                 + "them. <b>Off</b>: every constraint is its own entry."));
         groupBox.addActionListener(e -> refresh());
 
-        JScrollPane scroll = new JScrollPane(list, ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+        JScrollPane scroll = new gui.components.NestedScrollPane(list, ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
                 ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER) {
             private static final long serialVersionUID = 1L;
             @Override public Dimension getPreferredSize() { return new Dimension(40, super.getPreferredSize().height); }

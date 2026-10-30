@@ -34,9 +34,16 @@ final class MatchPopover {
 
     private static JComponent panel;
     private static Match anchor;
+    private static TemplateInstance anchorInstance;
     private static Point chooserPoint;
     private static Timer follow;
+    /** What the popover was placed for last: no need to place it again while this stays. */
+    private static Rectangle placedView, placedTarget;
     private static final int WIDTH = 290;
+
+    static boolean isOpen() {
+        return panel != null;
+    }
 
     static void hideAll() {
         if (panel != null) {
@@ -48,7 +55,10 @@ final class MatchPopover {
         }
         panel = null;
         anchor = null;
+        anchorInstance = null;
         chooserPoint = null;
+        placedView = null;
+        placedTarget = null;
         if (follow != null) follow.stop();
     }
 
@@ -73,21 +83,7 @@ final class MatchPopover {
         Color c = MatchOverlay.colorOf(m);
         VerticalStack body = new VerticalStack();
 
-        JLabel title = new JLabel(MatchOverlay.symbolOf(m) + "  " + m.title());
-        title.setFont(Ui.bold());
-        title.setForeground(Ui.TEXT);
-        JButton close = new JButton("×");
-        close.setToolTipText("Close (Esc)");
-        close.setMargin(new Insets(0, 4, 0, 4));
-        close.setBorderPainted(false);
-        close.setContentAreaFilled(false);
-        close.getAccessibleContext().setAccessibleName("Close");
-        close.addActionListener(e -> wb.closePopover());
-        JPanel head = new JPanel(new BorderLayout(Ui.GAP_S, 0));
-        head.setOpaque(false);
-        head.add(title, BorderLayout.CENTER);
-        head.add(close, BorderLayout.EAST);
-        body.addRow(head);
+        body.addRow(head(MatchOverlay.symbolOf(m) + "  " + m.title()));
         body.addRow(chip(MatchOverlay.stateText(m), c), Ui.GAP_XS);
 
         StringBuilder info = new StringBuilder();
@@ -153,25 +149,7 @@ final class MatchPopover {
 
         if (m.state == Match.State.APPLIED && m.instance instanceof TemplateInstance) {
             TemplateInstance inst = (TemplateInstance) m.instance;
-            body.addRow(text("Instance " + TemplateWorkbench.esc(inst.label()) + ": " + TemplateWorkbench.esc(inst.status(ConstraintStore.constraints).text()), Ui.TEXT), Ui.GAP_S);
-            JButton onOff = Ui.button(inst.isOn() ? "Switch instance off" : "Switch instance on",
-                    "Switches all its constraints off or on together; their own settings are kept.", e -> {
-                        wb.setInstanceOn(inst, "", !inst.isOn());
-                        wb.openPopover(m);
-                    });
-            onOff.setName("instanceOnOff");
-            JButton remove = Ui.button("Remove instance", "Removes exactly the constraints this instance made (Edit › Undo brings them back).", e -> {
-                wb.removeInstance(inst);
-                wb.closePopover();
-            });
-            remove.setName("instanceRemove");
-            body.addRow(onOff, Ui.GAP_S);
-            body.addRow(remove, Ui.GAP_XS);
-            JButton show = Ui.button("Show constraints", "Marks the instance's constraints on the graph.", e -> {
-                gui.DisplayConstraints.clearMarkings();
-                gui.DisplayConstraints.drawConstraints(inst.present(ConstraintStore.constraints));
-            });
-            body.addRow(show, Ui.GAP_XS);
+            addInstanceActions(body, inst, () -> wb.openPopover(m));
         } else if (m.state != Match.State.INVALID) {
             PrimaryButton apply = Ui.primaryButton("Apply this match", "Makes its " + m.task.plan.size()
                     + " constraints on these nodes and solves the layout once (Edit › Undo reverts it).", e -> {
@@ -182,10 +160,8 @@ final class MatchPopover {
             apply.setName("applyMatch");
             body.addRow(apply, Ui.GAP_M);
             JButton sel = Ui.button(m.selected ? "Remove from selection" : "Select for applying",
-                    "Collects matches to apply together with \"Apply selected\" on the Templates page.", e -> {
-                        wb.setSelected(m, !m.selected);
-                        wb.openPopover(m);
-                    });
+                    "Collects matches to apply together with \"Apply selected\" on the Templates page.",
+                    e -> wb.setSelected(m, !m.selected));
             sel.setName("toggleSelected");
             JButton show = Ui.button("Show constraints", "Marks the constraints the match would make (nothing is added).",
                     e -> wb.showPlannedConstraints(m));
@@ -193,7 +169,64 @@ final class MatchPopover {
             body.addRow(sel, Ui.GAP_S);
             body.addRow(show, Ui.GAP_XS);
         }
-        open(lp, body, c, m, null);
+        anchor = m;
+        open(lp, body, c, null);
+    }
+
+    /** Opens the popover of an applied instance: its state and the actions on it. */
+    static void showInstance(TemplateInstance inst) {
+        hideAll();
+        JLayeredPane lp = layered();
+        if (lp == null) return;
+        TemplateWorkbench wb = TemplateWorkbench.get();
+        VerticalStack body = new VerticalStack();
+        body.addRow(head(inst.label()));
+        body.addRow(chip(inst.isOn() ? "Applied" : "Switched off", inst.isOn() ? MatchOverlay.APPLIED : MatchOverlay.OFF), Ui.GAP_XS);
+        addInstanceActions(body, inst, () -> wb.openInstancePopover(inst));
+        anchorInstance = inst;
+        open(lp, body, inst.isOn() ? MatchOverlay.APPLIED : MatchOverlay.OFF, null);
+    }
+
+    private static JComponent head(String titleText) {
+        JLabel title = new JLabel(titleText);
+        title.setFont(Ui.bold());
+        title.setForeground(Ui.TEXT);
+        JButton close = new JButton("×");
+        close.setToolTipText("Close (Esc)");
+        close.setMargin(new Insets(0, 4, 0, 4));
+        close.setBorderPainted(false);
+        close.setContentAreaFilled(false);
+        close.getAccessibleContext().setAccessibleName("Close");
+        close.addActionListener(e -> TemplateWorkbench.get().closePopover());
+        JPanel head = new JPanel(new BorderLayout(Ui.GAP_S, 0));
+        head.setOpaque(false);
+        head.add(title, BorderLayout.CENTER);
+        head.add(close, BorderLayout.EAST);
+        return head;
+    }
+
+    /** State and actions of an applied instance; {@code reopen} shows the popover again after a change. */
+    private static void addInstanceActions(VerticalStack body, TemplateInstance inst, Runnable reopen) {
+        TemplateWorkbench wb = TemplateWorkbench.get();
+        body.addRow(text("Instance " + TemplateWorkbench.esc(inst.label()) + ": " + TemplateWorkbench.esc(inst.status(ConstraintStore.constraints).text()), Ui.TEXT), Ui.GAP_S);
+        JButton onOff = Ui.button(inst.isOn() ? "Switch instance off" : "Switch instance on",
+                "Switches all its constraints off or on together; their own settings are kept.", e -> {
+                    wb.setInstanceOn(inst, "", !inst.isOn());
+                    reopen.run();
+                });
+        onOff.setName("instanceOnOff");
+        JButton remove = Ui.button("Remove instance", "Removes exactly the constraints this instance made (Edit › Undo brings them back).", e -> {
+            wb.closePopover();
+            wb.removeInstance(inst);
+        });
+        remove.setName("instanceRemove");
+        body.addRow(onOff, Ui.GAP_S);
+        body.addRow(remove, Ui.GAP_XS);
+        JButton show = Ui.button("Show constraints", "Marks the instance's constraints on the graph.", e -> {
+            gui.DisplayConstraints.clearMarkings();
+            gui.DisplayConstraints.drawConstraints(inst.present(ConstraintStore.constraints));
+        });
+        body.addRow(show, Ui.GAP_XS);
     }
 
     /** Lists overlapping matches to choose one; moving through the list previews each on the graph. */
@@ -247,20 +280,20 @@ final class MatchPopover {
                 if (m != null) wb.openPopover(m);
             }
         });
-        body.addRow(new JScrollPane(list), Ui.GAP_S);
+        body.addRow(new gui.components.NestedScrollPane(list), Ui.GAP_S);
         body.addRow(text("Move through the list to preview; click or press Enter to choose.", Ui.MUTED), Ui.GAP_XS);
         chooserPoint = SwingUtilities.convertPoint(v.getViewComponent(), viewPoint, lp);
-        open(lp, body, Ui.ACCENT, null, chooserPoint);
+        open(lp, body, Ui.ACCENT, chooserPoint);
         list.setSelectedIndex(0);
         list.requestFocusInWindow();
     }
 
-    private static void open(JLayeredPane lp, JComponent body, Color accent, Match m, Point at) {
+    private static void open(JLayeredPane lp, JComponent body, Color accent, Point at) {
         JPanel p = new JPanel(new BorderLayout());
         p.setOpaque(false);
         p.setBorder(new PopoverBorder(accent));
         body.setOpaque(false);
-        JScrollPane sp = new JScrollPane(body, ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED, ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        JScrollPane sp = new gui.components.NestedScrollPane(body, ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED, ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         sp.setBorder(null);
         sp.setOpaque(false);
         sp.getViewport().setOpaque(false);
@@ -269,7 +302,6 @@ final class MatchPopover {
         p.setName("templatePopover");
         p.addMouseListener(new MouseAdapter() { });   // clicks stay in the popover
         panel = p;
-        anchor = m;
         lp.add(p, JLayeredPane.POPUP_LAYER);
         place(lp, at);
         lp.revalidate();
@@ -279,19 +311,7 @@ final class MatchPopover {
             follow.setRepeats(true);
         }
         follow.restart();
-        SwingUtilities.invokeLater(() -> {
-            if (panel == p) focusFirst(p);
-        });
-    }
-
-    private static void focusFirst(Container c) {
-        for (Component k : c.getComponents()) {
-            if (k instanceof PrimaryButton || (k instanceof JList)) {
-                k.requestFocusInWindow();
-                return;
-            }
-            if (k instanceof Container) focusFirst((Container) k);
-        }
+        // The focus stays where it is: the graph keeps its keys (Delete, arrows), and so does a list being stepped through.
     }
 
     /** Keeps the popover next to its match (zoom, pan, drag); hides it if the view went away. */
@@ -315,19 +335,20 @@ final class MatchPopover {
             // the view is smaller than the popover: use the main window instead
             vis = new Rectangle(8, 8, lp.getWidth() - 16, lp.getHeight() - 16);
         }
-        panel.setSize(WIDTH, 10);
-        panel.doLayout();
-        Dimension d = panel.getPreferredSize();
+        Dimension d = want;
         d.width = WIDTH;
         d.height = Math.min(d.height, Math.max(120, vis.height - 16));
         Rectangle target;
-        if (anchor != null) {
-            Rectangle2D b = MatchOverlay.bounds(anchor, lp);
+        if (anchor != null || anchorInstance != null) {
+            Rectangle2D b = anchor != null ? MatchOverlay.bounds(anchor, lp) : MatchOverlay.bounds(anchorInstance, lp);
             if (b == null) return;
             target = b.getBounds();
         } else {
             target = new Rectangle(at == null ? vis.x + 20 : at.x, at == null ? vis.y + 20 : at.y, 1, 1);
         }
+        if (vis.equals(placedView) && target.equals(placedTarget)) return;
+        placedView = vis;
+        placedTarget = target;
         int gap = 12;
         // Candidates beside the match (right, left, below, above), each kept inside the view; the one covering the
         // least of the match and of other nodes wins (in this order on ties).

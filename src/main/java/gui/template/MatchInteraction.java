@@ -1,6 +1,7 @@
 package gui.template;
 
 import gui.components.Ui;
+import layout.template.apply.TemplateInstance;
 import layout.template.search.Match;
 import layout.template.search.MatchCheck;
 
@@ -12,12 +13,15 @@ import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.geom.AffineTransform;
+import java.awt.geom.Point2D;
 import java.util.List;
 
 /**
  * Mouse and keyboard handling of the suggestion mode on the graph view: hovering a match highlights it and shows a short
- * card, a click (not a drag) opens its action popover or, where matches overlap, a chooser, and Escape closes the
- * popover or leaves the mode. The listeners only observe, so VANTED's own tools still receive every event.
+ * card, a click (not a drag) opens its action popover or, where matches overlap, a chooser, a click on an applied
+ * instance opens its actions, and Escape closes the popover or leaves the mode. The listeners only observe, so VANTED's
+ * own tools still receive every event.
  *
  * @author Niklas Gröne
  */
@@ -38,7 +42,7 @@ final class MatchInteraction extends MouseAdapter {
     /** What Escape was bound to in the root pane's own key map before (put back on detach), or null. */
     private Object rootEscape;
     private Point pressed;
-    private boolean dragging;
+    private boolean dragging, extending;
     private final Timer hoverTimer;
     private JComponent card;
     private Point lastPoint;
@@ -90,7 +94,7 @@ final class MatchInteraction extends MouseAdapter {
 
     void escape() {
         TemplateWorkbench wb = TemplateWorkbench.get();
-        if (wb.focus != null || wb.chooser != null) wb.closePopover();
+        if (wb.focus != null || wb.chooser != null || MatchPopover.isOpen()) wb.closePopover();
         else wb.setSuggestionMode(false);
         wb.fire();
     }
@@ -100,13 +104,29 @@ final class MatchInteraction extends MouseAdapter {
         return v != null && e.getComponent() == v.getViewComponent() && TemplateWorkbench.get().isSuggestionMode();
     }
 
+    /**
+     * The event's position on the view component. VANTED's view hands its listeners graph coordinates (it wraps every
+     * listener and undoes the zoom), while the overlay, the popover and the click tolerance work in view coordinates.
+     */
+    static Point viewPoint(MouseEvent e, AffineTransform zoom) {
+        if (zoom == null) return e.getPoint();
+        Point2D p = zoom.transform(new Point2D.Double(e.getX(), e.getY()), null);
+        return new Point((int) Math.round(p.getX()), (int) Math.round(p.getY()));
+    }
+
+    private static Point viewPoint(MouseEvent e) {
+        View v = TemplateWorkbench.activeView();
+        return viewPoint(e, v == null ? null : v.getZoom());
+    }
+
     @Override
     public void mouseMoved(MouseEvent e) {
         if (!ours(e)) return;
         TemplateWorkbench wb = TemplateWorkbench.get();
-        List<Match> hits = MatchOverlay.hits(e.getPoint(), (JComponent) e.getComponent());
+        lastPoint = viewPoint(e);
+        if (wb.chooser != null) return;   // the chooser previews its own rows
+        List<Match> hits = MatchOverlay.hits(lastPoint, (JComponent) e.getComponent());
         Match h = hits.isEmpty() ? null : hits.get(0);
-        lastPoint = e.getPoint();
         if (h != wb.hover) {
             wb.hover = h;
             hideCard();
@@ -131,35 +151,46 @@ final class MatchInteraction extends MouseAdapter {
     @Override
     public void mousePressed(MouseEvent e) {
         if (!ours(e) || !SwingUtilities.isLeftMouseButton(e)) return;
-        pressed = e.getPoint();
+        pressed = viewPoint(e);
         dragging = false;
+        // Shift or Ctrl extend the node selection of the graph: that is no choice of a match
+        extending = e.isShiftDown() || e.isControlDown() || e.isMetaDown();
     }
 
     @Override
     public void mouseDragged(MouseEvent e) {
         if (!ours(e) || pressed == null) return;
-        if (e.getPoint().distance(pressed) > CLICK_SLOP) {
+        if (viewPoint(e).distance(pressed) > CLICK_SLOP) {
             dragging = true;
             hideCard();
+            MatchOverlay.repaintAll();   // the outlines follow the nodes being moved
         }
     }
 
     @Override
     public void mouseReleased(MouseEvent e) {
         if (!ours(e) || pressed == null || !SwingUtilities.isLeftMouseButton(e)) return;
-        boolean click = !dragging && e.getPoint().distance(pressed) <= CLICK_SLOP;
+        Point at = viewPoint(e);
+        boolean click = !dragging && at.distance(pressed) <= CLICK_SLOP;
         pressed = null;
         if (!click) {
-            // a drag moved nodes: the popover follows its match
+            // a drag moved nodes: the outlines and the popover follow
+            MatchOverlay.repaintAll();
             MatchPopover.reposition();
             return;
         }
+        if (extending) return;
         hideCard();
         TemplateWorkbench wb = TemplateWorkbench.get();
-        List<Match> hits = MatchOverlay.hits(e.getPoint(), (JComponent) e.getComponent());
-        if (hits.isEmpty()) wb.closePopover();
-        else if (hits.size() == 1) wb.openPopover(hits.get(0));
-        else wb.openChooser(hits, e.getPoint());
+        JComponent view = (JComponent) e.getComponent();
+        List<Match> hits = MatchOverlay.hits(at, view);
+        if (hits.size() == 1) wb.openPopover(hits.get(0));
+        else if (hits.size() > 1) wb.openChooser(hits, at);
+        else {
+            TemplateInstance inst = MatchOverlay.instanceAt(at, view);
+            if (inst != null) wb.openInstancePopover(inst);
+            else wb.closePopover();
+        }
     }
 
     private void showCard() {

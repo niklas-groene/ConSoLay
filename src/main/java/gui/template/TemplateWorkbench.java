@@ -103,6 +103,10 @@ public final class TemplateWorkbench {
     List<Match> chooser;
     /** Instance emphasised on the graph (from the instance list), or null. */
     TemplateInstance focusInstance;
+    /** {@link #focusInstance} came from a click on the graph: it goes with the popover. */
+    private boolean instancePopover;
+    /** The markings on the graph are the planned constraints of the open match. */
+    private boolean plannedShown;
     private boolean firing, fireQueued;
 
     private TemplateWorkbench() {
@@ -405,18 +409,26 @@ public final class TemplateWorkbench {
     public void setSelected(Match m, boolean on) {
         if (m.state == Match.State.APPLIED || m.state == Match.State.INVALID) on = false;
         m.selected = on;
+        refreshOpenPopover();
         fire();
     }
 
     /** Selects every found match that can be applied (all of the run, not only the shown page). */
     public void selectAllFound(Graph g) {
         for (Match m : matches(g)) m.selected = m.state == Match.State.FOUND || m.state == Match.State.STALE;
+        refreshOpenPopover();
         fire();
     }
 
     public void clearSelected(Graph g) {
         for (Match m : matches(g)) m.selected = false;
+        refreshOpenPopover();
         fire();
+    }
+
+    /** The open popover shows a match's selection state: it follows however that state was changed. */
+    private void refreshOpenPopover() {
+        if (focus != null) MatchPopover.show(focus);
     }
 
     public List<Match> selected(Graph g) {
@@ -685,9 +697,24 @@ public final class TemplateWorkbench {
     /** Opens the action popover of {@code m} (closing any other). */
     public void openPopover(Match m) {
         chooser = null;
+        if (hover != m) hover = null;
         focus = m;
+        instancePopover = false;
+        clearPlannedMarkings();
         if (m != null) check(m);
         MatchPopover.show(m);
+        fire();
+    }
+
+    /** Opens the actions of an applied instance beside it on the graph and emphasises it. */
+    void openInstancePopover(TemplateInstance inst) {
+        chooser = null;
+        focus = null;
+        hover = null;
+        focusInstance = inst;
+        instancePopover = true;
+        clearPlannedMarkings();
+        MatchPopover.showInstance(inst);
         fire();
     }
 
@@ -695,16 +722,40 @@ public final class TemplateWorkbench {
     void openChooser(List<Match> ms, Point viewPoint) {
         focus = null;
         chooser = ms;
+        clearPlannedMarkings();
         MatchPopover.showChooser(ms, viewPoint);
         fire();
     }
 
     public void closePopover() {
-        boolean was = focus != null || chooser != null;
+        boolean was = focus != null || chooser != null || MatchPopover.isOpen();
+        if (chooser != null) hover = null;   // what the chooser previewed
         focus = null;
         chooser = null;
+        if (instancePopover) focusInstance = null;
+        instancePopover = false;
+        clearPlannedMarkings();
         MatchPopover.hideAll();
         if (was) MatchOverlay.repaintAll();
+    }
+
+    /**
+     * Brings a match into the visible part of the graph view (for a match chosen in the list, which may lie anywhere);
+     * the zoom stays as it is.
+     */
+    void reveal(Match m) {
+        View v = activeView();
+        JComponent comp = v == null ? null : v.getViewComponent();
+        if (comp == null || m.run.snapshot.graph != v.getGraph()) return;
+        java.awt.geom.Rectangle2D r = MatchOverlay.bounds(m, comp);
+        if (r != null) comp.scrollRectToVisible(r.getBounds());
+    }
+
+    /** The markings of a match's planned constraints belong to its popover: nothing was added to the graph. */
+    private void clearPlannedMarkings() {
+        if (!plannedShown) return;
+        plannedShown = false;
+        DisplayConstraints.clearMarkings();
     }
 
     /** Shows the constraints the match would make as markings on the graph (nothing is added). */
@@ -717,6 +768,7 @@ public final class TemplateWorkbench {
             }
             DisplayConstraints.clearMarkings();
             DisplayConstraints.drawConstraints(preview);
+            plannedShown = true;
         } catch (IllegalArgumentException e) {
             JOptionPane.showMessageDialog(null, "The constraints cannot be shown: " + e.getMessage());
         }

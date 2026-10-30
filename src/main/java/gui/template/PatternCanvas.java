@@ -13,6 +13,8 @@ import layout.template.model.TemplateDef;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.KeyEvent;
@@ -33,11 +35,11 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * The pattern graph of the template editor with the tools select/move, add node and connect; the mouse wheel zooms and
- * the right mouse button (or Alt + drag) pans the view without changing stored positions. With "Keep constraints
- * while dragging" every drag step is solved with the template's own constraints, and a ghost shows where a held node
- * was pulled to and which constraints hold it. The selected constraint is drawn over the others with its elements
- * marked by role.
+ * The pattern graph of the template editor with the tools select/move, add node and connect (keys V, N and C); the mouse
+ * wheel zooms and the right mouse button (or Alt + drag) pans the view without changing stored positions. With "Keep
+ * constraints while dragging" every drag step is solved with the template's own constraints, and a ghost shows where a
+ * held node was pulled to and which constraints hold it. The selected constraint is drawn over the others with its
+ * elements marked by role.
  *
  * @author Niklas Gröne
  */
@@ -48,7 +50,9 @@ final class PatternCanvas extends JComponent {
     enum Tool { SELECT, ADD_NODE, CONNECT }
 
     private final EditorModel model;
-    Tool tool = Tool.SELECT;
+    private Tool tool = Tool.SELECT;
+    /** Told when the tool changes (from the keys, or back to select), so the toolbar follows. */
+    Runnable onToolChange = () -> { };
     /** A look inside a component: select, zoom and pan only. */
     boolean readOnly;
     boolean solveWhileDragging = true;
@@ -56,11 +60,17 @@ final class PatternCanvas extends JComponent {
     /** Local → screen: scale and translation (view only). */
     private double scale = 1, tx = 40, ty = 40;
     private boolean fitted;
+    /** The user zoomed or panned: resizing the window no longer fits the pattern again. */
+    private boolean viewChosen;
 
     // interaction state
     private Point press, last;
     private boolean panning, dragging, banding;
     private String pressNode;
+    /** A press on a selected node of several: without a drag, the click selects that node alone. */
+    private boolean collapseOnClick;
+    /** The pointer left the start node while connecting, so coming back means a self-loop. */
+    private boolean leftStartNode;
     private Map<String, double[]> dragStart = new HashMap<>();
     private Point2D ghost;
     private String heldText;
@@ -88,7 +98,24 @@ final class PatternCanvas extends JComponent {
         });
         dragSolve = new Timer(25, e -> dragStep());
         dragSolve.setRepeats(false);
+        addComponentListener(new ComponentAdapter() {
+            @Override public void componentResized(ComponentEvent e) { if (!viewChosen) fit(); }
+        });
         bindKeys();
+    }
+
+    Tool tool() {
+        return tool;
+    }
+
+    void setTool(Tool t) {
+        if (readOnly && t != Tool.SELECT) return;
+        tool = t;
+        connectTo = null;
+        pressNode = null;
+        setCursor(t == Tool.ADD_NODE ? Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR) : Cursor.getDefaultCursor());
+        onToolChange.run();
+        repaint();
     }
 
     private void bindKeys() {
@@ -99,13 +126,19 @@ final class PatternCanvas extends JComponent {
         am.put("delete", action(this::deleteSelection));
         im.put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "escape");
         am.put("escape", action(() -> {
-            if (tool != Tool.SELECT) tool = Tool.SELECT;
-            else {
+            if (tool != Tool.SELECT) setTool(Tool.SELECT);
+            else if (!model.selNodes.isEmpty() || !model.selEdges.isEmpty()) {
                 model.selNodes.clear();
                 model.selEdges.clear();
+            } else {
+                model.selConstraint = null;
             }
             model.fire();
         }));
+        for (Object[] k : new Object[][]{{KeyEvent.VK_V, Tool.SELECT}, {KeyEvent.VK_N, Tool.ADD_NODE}, {KeyEvent.VK_C, Tool.CONNECT}}) {
+            im.put(KeyStroke.getKeyStroke((Integer) k[0], 0), "tool" + k[0]);
+            am.put("tool" + k[0], action(() -> setTool((Tool) k[1])));
+        }
         int mask = Toolkit.getDefaultToolkit().getMenuShortcutKeyMask();
         im.put(KeyStroke.getKeyStroke(KeyEvent.VK_A, mask), "selectAll");
         am.put("selectAll", action(() -> {
@@ -129,7 +162,7 @@ final class PatternCanvas extends JComponent {
 
     private void nudge(int dx, int dy) {
         if (readOnly || model.selNodes.isEmpty()) return;
-        model.change("Move nodes", () -> {
+        model.changeMerging("nudge", "Move nodes", () -> {
             for (String id : model.selNodes) {
                 PatternNode n = model.def().node(id);
                 if (n != null) { n.x += dx; n.y += dy; }
@@ -175,17 +208,20 @@ final class PatternCanvas extends JComponent {
 
     /** Fits the pattern into the canvas (changes only the view). */
     void fit() {
+        if (getWidth() < 20) return;
+        fitted = true;   // an empty pattern too: its first node appears where it was clicked, the view does not jump
+        viewChosen = false;
         double[] b = model.def().bounds();
-        if (b == null || getWidth() < 20) return;
+        if (b == null) return;
         AffineTransform t = PatternPainter.fit(b, new Rectangle2D.Double(0, 0, getWidth(), getHeight()), 60, 1.6);
         scale = t.getScaleX();
         tx = t.getTranslateX();
         ty = t.getTranslateY();
-        fitted = true;
         repaint();
     }
 
     void zoom(double factor) {
+        viewChosen = true;
         Point2D c = toLocal(new Point(getWidth() / 2, getHeight() / 2));
         scale = Math.max(0.1, Math.min(8, scale * factor));
         tx = getWidth() / 2.0 - c.getX() * scale;
@@ -234,6 +270,9 @@ final class PatternCanvas extends JComponent {
                 String s = "Empty pattern: choose \"Add node\" and click here.";
                 g.drawString(s, (getWidth() - g.getFontMetrics().stringWidth(s)) / 2, getHeight() / 2);
             }
+            g.setFont(Ui.small());
+            g.setColor(Ui.MUTED);
+            g.drawString(hint(), 8, getHeight() - 8);
             if (isFocusOwner()) {
                 g.setColor(Ui.FOCUS);
                 g.setStroke(new BasicStroke(2f));
@@ -241,6 +280,16 @@ final class PatternCanvas extends JComponent {
             }
         } finally {
             g.dispose();
+        }
+    }
+
+    /** What the mouse does right now. */
+    private String hint() {
+        if (readOnly) return "Scroll: zoom · Alt + drag: pan";
+        switch (tool) {
+            case ADD_NODE: return "Click: add a node · Esc: back to select";
+            case CONNECT: return "Drag from one node to another: add an edge · Esc: back to select";
+            default: return "Drag: move or select · Delete: remove · Esc: deselect · Scroll: zoom · Alt + drag: pan";
         }
     }
 
@@ -428,10 +477,14 @@ final class PatternCanvas extends JComponent {
             ghost = null;
             heldText = null;
             panning = SwingUtilities.isRightMouseButton(e) || SwingUtilities.isMiddleMouseButton(e) || e.isAltDown();
-            if (panning) return;
+            if (panning) {
+                viewChosen = true;
+                return;
+            }
             pressNode = nodeAt(press);
-            if (readOnly && tool != Tool.SELECT) tool = Tool.SELECT;
-            if (tool == Tool.ADD_NODE) {
+            collapseOnClick = false;
+            leftStartNode = false;
+            if (tool == Tool.ADD_NODE && pressNode == null) {
                 Point2D l = toLocal(press);
                 model.change("Add node", () -> {
                     TemplateDef t = model.def();
@@ -442,34 +495,40 @@ final class PatternCanvas extends JComponent {
                     model.selNodes.clear();
                     model.selEdges.clear();
                     model.selNodes.add(n.id);
+                    model.constraintFirst = false;
                 });
-                pressNode = null;
                 return;
             }
             if (tool == Tool.CONNECT) return;
+            boolean toggle = e.isShiftDown() || e.isMetaDown() || e.isControlDown();
             if (pressNode != null) {
-                boolean toggle = e.isShiftDown() || e.isMetaDown() || e.isControlDown();
                 if (toggle) {
                     if (!model.selNodes.remove(pressNode)) model.selNodes.add(pressNode);
                 } else if (!model.selNodes.contains(pressNode)) {
                     model.selNodes.clear();
                     model.selEdges.clear();
                     model.selNodes.add(pressNode);
+                } else {
+                    collapseOnClick = model.selNodes.size() > 1;
                 }
+                model.constraintFirst = false;
                 model.fire();
                 return;
             }
             String edge = edgeAt(press);
             if (edge != null) {
-                if (!(e.isShiftDown() || e.isMetaDown())) {
+                if (!toggle) {
                     model.selNodes.clear();
                     model.selEdges.clear();
                 }
                 model.selEdges.add(edge);
+                model.constraintFirst = false;
                 model.fire();
                 return;
             }
-            if (!(e.isShiftDown() || e.isMetaDown())) {
+            if (!toggle) {
+                // the first click on the background deselects the nodes, the next one the constraint as well
+                if (model.selNodes.isEmpty() && model.selEdges.isEmpty()) model.selConstraint = null;
                 model.selNodes.clear();
                 model.selEdges.clear();
                 model.fire();
@@ -490,6 +549,8 @@ final class PatternCanvas extends JComponent {
             last = p;
             if (tool == Tool.CONNECT) {
                 connectTo = p;
+                hoverNode = nodeAt(p);
+                if (pressNode != null && !pressNode.equals(hoverNode)) leftStartNode = true;
                 repaint();
                 return;
             }
@@ -497,7 +558,7 @@ final class PatternCanvas extends JComponent {
                 repaint();
                 return;
             }
-            if (pressNode == null || tool != Tool.SELECT || readOnly) return;
+            if (pressNode == null || tool != Tool.SELECT || readOnly || !model.selNodes.contains(pressNode)) return;
             if (!dragging && p.distance(press) < 3) return;
             if (!dragging) {
                 dragging = true;
@@ -515,19 +576,7 @@ final class PatternCanvas extends JComponent {
         @Override public void mouseReleased(MouseEvent e) {
             if (press == null) return;
             if (tool == Tool.CONNECT && pressNode != null) {
-                String to = nodeAt(e.getPoint());
-                String from = pressNode;
-                if (to != null) {
-                    model.change("Add edge", () -> {
-                        TemplateDef t = model.def();
-                        PatternEdge ed = new PatternEdge(t.nextEdgeId(), from, to, true);
-                        ed.conditions.add(Condition.any(Condition.SBGN_ROLE));
-                        t.edges.add(ed);
-                        model.selNodes.clear();
-                        model.selEdges.clear();
-                        model.selEdges.add(ed.id);
-                    });
-                }
+                connect(pressNode, nodeAt(e.getPoint()));
             } else if (banding) {
                 Rectangle r = rect(press, e.getPoint());
                 AffineTransform at = transform();
@@ -540,6 +589,11 @@ final class PatternCanvas extends JComponent {
                 dragStep();
                 model.endStep();
                 afterMove();
+            } else if (collapseOnClick && !panning) {
+                model.selNodes.clear();
+                model.selEdges.clear();
+                model.selNodes.add(pressNode);
+                model.fire();
             }
             press = null;
             pressNode = dragging ? pressNode : null;
@@ -570,11 +624,13 @@ final class PatternCanvas extends JComponent {
                 hoverNode = h;
                 repaint();
             }
-            setCursor(tool == Tool.ADD_NODE ? Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR)
-                    : h != null && tool == Tool.SELECT ? Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR) : Cursor.getDefaultCursor());
+            setCursor(h != null && tool == Tool.CONNECT ? Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+                    : tool == Tool.ADD_NODE ? Cursor.getPredefinedCursor(h != null ? Cursor.HAND_CURSOR : Cursor.CROSSHAIR_CURSOR)
+                    : h != null && !readOnly && tool == Tool.SELECT ? Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR) : Cursor.getDefaultCursor());
         }
 
         @Override public void mouseWheelMoved(MouseWheelEvent e) {
+            viewChosen = true;
             Point2D c = toLocal(e.getPoint());
             double f = Math.pow(1.1, -e.getPreciseWheelRotation());
             scale = Math.max(0.1, Math.min(8, scale * f));
@@ -582,6 +638,36 @@ final class PatternCanvas extends JComponent {
             ty = e.getY() - c.getY() * scale;
             repaint();
         }
+    }
+
+    /** Adds the edge the connect tool was dragged along, unless that was a mere click or the edge exists already. */
+    private void connect(String from, String to) {
+        if (to == null) return;
+        if (to.equals(from) && !leftStartNode) {
+            model.message = "Drag from one node to another to connect them.";
+            model.fire();
+            return;
+        }
+        for (PatternEdge x : model.def().edges) {
+            if (from.equals(x.source) && to.equals(x.target)) {
+                model.selNodes.clear();
+                model.selEdges.clear();
+                model.selEdges.add(x.id);
+                model.message = "These nodes are connected in this direction already.";
+                model.fire();
+                return;
+            }
+        }
+        model.change("Add edge", () -> {
+            TemplateDef t = model.def();
+            PatternEdge ed = new PatternEdge(t.nextEdgeId(), from, to, true);
+            ed.conditions.add(Condition.any(Condition.SBGN_ROLE));
+            t.edges.add(ed);
+            model.selNodes.clear();
+            model.selEdges.clear();
+            model.selEdges.add(ed.id);
+            model.constraintFirst = false;
+        });
     }
 
     /** One drag step: move the selected nodes by the pointer's offset, then (optionally) solve. */

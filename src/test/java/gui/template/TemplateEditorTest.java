@@ -6,10 +6,12 @@ import constraints.spec.ConstraintSpecs;
 import layout.template.io.TemplateLibrary;
 import layout.template.model.ComponentUse;
 import layout.template.model.Condition;
+import layout.template.model.LayoutRelation;
 import layout.template.model.PatternNode;
 import layout.template.model.Port;
 import layout.template.model.StructureLink;
 import layout.template.model.TemplateDef;
+import layout.template.model.TemplateValidator;
 
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -19,11 +21,15 @@ import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JList;
+import javax.swing.JPanel;
 import javax.swing.JSpinner;
 import javax.swing.ListModel;
 import javax.swing.SwingUtilities;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.Point;
+import java.awt.event.MouseEvent;
+import java.awt.geom.AffineTransform;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -243,7 +249,186 @@ public class TemplateEditorTest {
         });
     }
 
+    /** Every click on an order button shows, also a second one of the same kind in a row. */
+    @Test
+    public void repeatedOrderChangesShowInThePanel() throws Exception {
+        onEdt(() -> {
+            EditorModel model = new EditorModel(composite(3), new TemplateLibrary(null));
+            LayoutRelation r = new LayoutRelation(model.def().nextRelationId(), LayoutRelation.Type.ROW);
+            r.components.addAll(Arrays.asList("c1", "c2", "c3"));
+            model.def().relations.add(r);
+            model.selRelation = r.id;
+            CompositeProperties cp = new CompositeProperties(model, null);
+            for (int i = 0; i < 2; i++) {
+                JCheckBox third = (JCheckBox) find(cp, JCheckBox.class, k -> ((JCheckBox) k).getText().endsWith("Use 3"));
+                ((JButton) find(third.getParent(), JButton.class, k -> "↑".equals(((JButton) k).getText()))).doClick();
+            }
+            assertEquals(Arrays.asList("c3", "c1", "c2"), model.def().relation(r.id).components);
+            assertNotNull(search(cp, JCheckBox.class, k -> ((JCheckBox) k).getText().equals("1. Use 3")));
+            assertNotNull(search(cp, JCheckBox.class, k -> ((JCheckBox) k).getText().equals("3. Use 2")));
+        });
+    }
+
+    /** Changing a relation's type back and forth keeps it valid: members carry over, a pair is cut to two. */
+    @Test
+    public void relationTypeChangesKeepItValid() throws Exception {
+        onEdt(() -> {
+            EditorModel model = new EditorModel(composite(3), new TemplateLibrary(null));
+            LayoutRelation r = new LayoutRelation(model.def().nextRelationId(), LayoutRelation.Type.ROW);
+            r.components.addAll(Arrays.asList("c1", "c2", "c3"));
+            model.def().relations.add(r);
+            model.selRelation = r.id;
+            CompositeProperties cp = new CompositeProperties(model, null);
+            for (LayoutRelation.Type type : new LayoutRelation.Type[]{LayoutRelation.Type.ALIGN_PORTS_H, LayoutRelation.Type.LEFT_OF,
+                    LayoutRelation.Type.COLUMN, LayoutRelation.Type.ALIGN_PORTS_V, LayoutRelation.Type.ABOVE}) {
+                @SuppressWarnings("unchecked") JComboBox<Object> box = (JComboBox<Object>) find(cp, JComboBox.class,
+                        k -> ((JComboBox<?>) k).getItemCount() > 0 && ((JComboBox<?>) k).getItemAt(0) instanceof LayoutRelation.Type);
+                box.setSelectedItem(type);
+                assertEquals(type, model.def().relation(r.id).type);
+                for (TemplateValidator.Problem p : model.problems()) {
+                    assertFalse(p.toString(), r.id.equals(p.elementId) && p.severity == TemplateValidator.Severity.ERROR);
+                }
+            }
+            assertEquals(2, model.def().relation(r.id).components.size());
+        });
+    }
+
+    /** The two members of "left of": choosing the other one's component swaps them, so the relation stays valid. */
+    @Test
+    public void pairMembersStayDifferent() throws Exception {
+        onEdt(() -> {
+            EditorModel model = new EditorModel(composite(3), new TemplateLibrary(null));
+            LayoutRelation r = new LayoutRelation(model.def().nextRelationId(), LayoutRelation.Type.LEFT_OF);
+            r.components.addAll(Arrays.asList("c1", "c2"));
+            model.def().relations.add(r);
+            model.selRelation = r.id;
+            CompositeProperties cp = new CompositeProperties(model, null);
+            @SuppressWarnings("unchecked") JComboBox<Object> left = (JComboBox<Object>) find(cp, JComboBox.class,
+                    k -> ((JComboBox<?>) k).getSelectedItem() == model.def().component("c1"));
+            left.setSelectedItem(model.def().component("c2"));
+            assertEquals(Arrays.asList("c2", "c1"), model.def().relation(r.id).components);
+        });
+    }
+
+    /** Choosing a port for a port relation adds nothing until its button; the same port is not added twice. */
+    @Test
+    public void portsJoinARelationWithTheButton() throws Exception {
+        onEdt(() -> {
+            EditorModel model = new EditorModel(composite(2), new TemplateLibrary(null));
+            LayoutRelation r = new LayoutRelation(model.def().nextRelationId(), LayoutRelation.Type.ALIGN_PORTS_H);
+            model.def().relations.add(r);
+            model.selRelation = r.id;
+            CompositeProperties cp = new CompositeProperties(model, null);
+            @SuppressWarnings("unchecked") JComboBox<Object> comp = (JComboBox<Object>) find(cp, JComboBox.class,
+                    k -> ((JComboBox<?>) k).getItemCount() > 0 && ((JComboBox<?>) k).getItemAt(0) instanceof ComponentUse);
+            comp.setSelectedItem(model.def().component("c2"));
+            assertEquals(0, model.def().relation(r.id).ports.size());
+            for (int i = 0; i < 2; i++) ((JButton) find(cp, JButton.class, k -> "addRelationPort".equals(k.getName()))).doClick();
+            assertEquals(1, model.def().relation(r.id).ports.size());
+            assertEquals("c2", model.def().relation(r.id).ports.get(0).component);
+        });
+    }
+
+    /** A condition can go back to a value it had before; the panel never compares with an old state. */
+    @Test
+    public void conditionCanReturnToAnEarlierValue() throws Exception {
+        onEdt(() -> {
+            EditorModel model = new EditorModel(pattern(1), new TemplateLibrary(null));
+            model.selNodes.add("n1");
+            PatternProperties pp = new PatternProperties(model);
+            @SuppressWarnings("unchecked") JComboBox<Object> op = (JComboBox<Object>) find(pp, JComboBox.class,
+                    c -> ((JComboBox<?>) c).getItemCount() > 0 && ((JComboBox<?>) c).getItemAt(0) instanceof Condition.Op);
+            @SuppressWarnings("unchecked") JComboBox<Object> value = (JComboBox<Object>) find(pp, JComboBox.class, c -> ((JComboBox<?>) c).isEditable());
+            op.setSelectedItem(Condition.Op.EQUALS);
+            for (String v : Arrays.asList("A", "B", "A")) value.setSelectedItem(v);
+            assertEquals(Collections.singletonList("A"), model.def().node("n1").condition(Condition.SBGN_ROLE).values);
+        });
+    }
+
+    /** Further conditions added one after the other all get their row. */
+    @Test
+    public void everyAddedConditionShows() throws Exception {
+        onEdt(() -> {
+            EditorModel model = new EditorModel(pattern(1), new TemplateLibrary(null));
+            model.selNodes.add("n1");
+            PatternProperties pp = new PatternProperties(model);
+            int before = count(pp, JComboBox.class);
+            for (String a : Arrays.asList("label", "sbgn.compartment")) {
+                model.change("Add condition", () -> model.def().node("n1").setCondition(new Condition(a, Condition.Op.EXISTS, null)));
+            }
+            assertEquals(before + 4, count(pp, JComboBox.class));
+        });
+    }
+
+    /** A value stepped repeatedly is one undo step, its spinner stays, and showing a value never changes it. */
+    @Test
+    public void spinnerStepsAreOneUndoStepAndStoredValuesStayExact() throws Exception {
+        onEdt(() -> {
+            TemplateDef t = pattern(1);
+            t.node("n1").width = 49.987654321;
+            EditorModel model = new EditorModel(t, new TemplateLibrary(null));
+            model.selNodes.add("n1");
+            PatternProperties pp = new PatternProperties(model);
+            model.fire();
+            assertEquals(49.987654321, model.def().node("n1").width, 0);
+            assertFalse("showing a value changes nothing", model.canUndo());
+            JSpinner w = (JSpinner) find(pp, JSpinner.class, c -> true);
+            for (int i = 1; i <= 4; i++) w.setValue(50.0 + 5 * i);
+            assertEquals(70.0, model.def().node("n1").width, 0);
+            assertNotNull(search(pp, JSpinner.class, c -> c == w));
+            model.undo();
+            assertEquals(49.987654321, model.def().node("n1").width, 0);
+            assertFalse(model.canUndo());
+        });
+    }
+
+    /** New components take free places, two per row. */
+    @Test
+    public void newComponentsDoNotOverlap() {
+        TemplateDef t = composite(0);
+        for (int i = 0; i < 7; i++) {
+            ComponentUse c = new ComponentUse(t.nextComponentId(), "Use " + i, t.ref());
+            double[] at = ComponentCanvas.freePlace(t);
+            c.x = at[0];
+            c.y = at[1];
+            for (ComponentUse o : t.components) assertFalse(ComponentCanvas.box(o).intersects(ComponentCanvas.box(c)));
+            t.components.add(c);
+        }
+        assertEquals(40 + ComponentCanvas.BOX_W + 110, t.components.get(1).x, 0);
+        assertEquals(40, t.components.get(2).x, 0);
+    }
+
+    /** VANTED's view reports graph coordinates; the hit tests on the view take them back through the zoom. */
+    @Test
+    public void mouseEventsAreTakenBackToViewCoordinates() {
+        MouseEvent graphPoint = new MouseEvent(new JPanel(), MouseEvent.MOUSE_MOVED, 0, 0, 200, 100, 0, false);
+        assertEquals(new Point(100, 50), MatchInteraction.viewPoint(graphPoint, AffineTransform.getScaleInstance(0.5, 0.5)));
+        assertEquals(new Point(500, 250), MatchInteraction.viewPoint(graphPoint, AffineTransform.getScaleInstance(2.5, 2.5)));
+        assertEquals(new Point(200, 100), MatchInteraction.viewPoint(graphPoint, null));
+    }
+
     // ================================================================== helpers
+
+    /** A composite of {@code n} uses "Use 1", "Use 2", … of templates with one port each, ids c1, c2, …. */
+    private static TemplateDef composite(int n) {
+        TemplateDef t = TemplateDef.create("Composite", TemplateDef.Kind.COMPOSITE);
+        for (int i = 1; i <= n; i++) {
+            TemplateDef p = pattern(1);
+            p.ports.add(new Port("p1", "Port", "n1"));
+            t.components.add(new ComponentUse(t.nextComponentId(), "Use " + i, p.ref()));
+            t.dependencies.put(p.id + "@" + p.revision, p);
+        }
+        return t;
+    }
+
+    private static int count(Container root, Class<?> type) {
+        int n = 0;
+        for (Component c : root.getComponents()) {
+            if (type.isInstance(c)) n++;
+            if (c instanceof Container) n += count((Container) c, type);
+        }
+        return n;
+    }
 
     /** A pattern template with {@code n} nodes n1, n2, … in a row. */
     private static TemplateDef pattern(int n) {

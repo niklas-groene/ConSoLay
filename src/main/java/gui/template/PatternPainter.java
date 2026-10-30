@@ -151,7 +151,8 @@ public final class PatternPainter {
         }
         if (!marks.labels) return;
         String label = n.label == null || n.label.trim().isEmpty() ? prettyRole(n.role) : n.label.trim();
-        if (label.isEmpty()) return;
+        boolean unnamed = label.isEmpty();   // its id then, as the lists show it, so the node can be told apart
+        if (unnamed) label = n.id;
         Rectangle2D b = s.getBounds2D();
         float size = (float) Math.max(8, Math.min(12, b.getHeight() * 0.42));
         if (b.getWidth() < 18) return;
@@ -159,7 +160,7 @@ public final class PatternPainter {
         g.setFont(f);
         FontMetrics fm = g.getFontMetrics();
         String text = clip(label, fm, b.getWidth() - 4);
-        g.setColor(Ui.TEXT);
+        g.setColor(unnamed ? Ui.DISABLED : Ui.TEXT);
         g.drawString(text, (float) (b.getCenterX() - fm.stringWidth(text) / 2.0), (float) (b.getCenterY() + fm.getAscent() / 2.0 - 1));
     }
 

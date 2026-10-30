@@ -7,12 +7,14 @@ import constraints.ConstraintKind;
 import constraints.spec.ConstraintSpec;
 import constraints.spec.ConstraintSpecs;
 import layout.template.io.TemplateLibrary;
+import layout.template.model.ComponentUse;
 import layout.template.model.PatternEdge;
 import layout.template.model.PatternNode;
 import layout.template.model.Port;
 import layout.template.model.TemplateDef;
 import layout.template.model.TemplateSource;
 import layout.template.model.TemplateValidator;
+import layout.template.model.Templates;
 
 import org.AttributeHelper;
 import org.graffiti.graph.AdjListGraph;
@@ -57,7 +59,12 @@ final class EditorModel {
     final Set<String> selNodes = new LinkedHashSet<>();
     final Set<String> selEdges = new LinkedHashSet<>();
     String selConstraint;
+    /** The constraint was chosen last, not a node or edge: the properties show it first. */
+    boolean constraintFirst;
     String selComponent, selLink, selRelation;
+    /** Key and end of the changes merged into one undo step, see {@link #changeMerging}. */
+    private String mergeKey;
+    private long mergeUntil;
 
     private Graph graph;
     private final Map<String, Node> nodes = new HashMap<>();
@@ -125,12 +132,31 @@ final class EditorModel {
         endStep();
     }
 
+    /**
+     * {@link #change} for a value stepped repeatedly: changes with the same {@code key} less than a second apart (the
+     * arrows of a spinner, the arrow keys) make one undo step.
+     */
+    void changeMerging(String key, String name, Runnable change) {
+        long now = System.currentTimeMillis();
+        if (key.equals(mergeKey) && now < mergeUntil && canUndo()) {
+            notes.clear();
+            change.run();
+            endStep();
+        } else {
+            change(name, change);
+        }
+        mergeKey = key;
+        mergeUntil = now + 1000;
+    }
+
     /** Starts a change whose effects come in several steps (a drag): call {@link #endStep} at its end. */
     void beginStep(String name) {
         undo.push(def.copy());
         undoNames.push(name);
         redo.clear();
         redoNames.clear();
+        mergeKey = null;
+        message = null;
     }
 
     void endStep() {
@@ -179,6 +205,7 @@ final class EditorModel {
     }
 
     private void afterJump() {
+        mergeKey = null;
         notes.clear();
         dirty = true;
         selNodes.retainAll(def.nodeIds());
@@ -461,6 +488,20 @@ final class EditorModel {
             if (why != null) unmet.put(e.getKey(), why);
         }
         return unmet;
+    }
+
+    /** The first port of a component's template, or null if it has none. */
+    String firstPort(String component) {
+        TemplateDef inner = Templates.resolve(def.component(component), source());
+        return inner == null || inner.ports.isEmpty() ? null : inner.ports.get(0).id;
+    }
+
+    /** "Component.Port" for lists and hints. */
+    String portName(String component, String port) {
+        ComponentUse c = def.component(component);
+        TemplateDef inner = Templates.resolve(c, source());
+        Port p = inner == null ? null : inner.port(port);
+        return (c == null ? "?" : c.name) + "." + (p == null ? port + " (missing)" : p.name);
     }
 
     /** The definitions that name pattern node {@code id}. */

@@ -85,7 +85,7 @@ final class RuleSetSection extends Section {
         list.setFixedCellWidth(1);
         list.addListSelectionListener(e -> { if (!e.getValueIsAdjusting()) showRule(); });
         list.getAccessibleContext().setAccessibleName("Rules");
-        addRow(new JScrollPane(list) {
+        addRow(new gui.components.NestedScrollPane(list) {
             private static final long serialVersionUID = 1L;
             @Override public Dimension getPreferredSize() { return new Dimension(40, super.getPreferredSize().height); }
         }, Ui.GAP_S);

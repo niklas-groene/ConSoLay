@@ -17,11 +17,8 @@ import layout.template.model.Templates;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.FocusAdapter;
-import java.awt.event.FocusEvent;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Consumer;
 
 /**
  * Right part of the composite editor: the settings of the selected component, structure link or layout relation, or of
@@ -30,50 +27,32 @@ import java.util.function.Consumer;
  *
  * @author Niklas Gröne
  */
-final class CompositeProperties extends JPanel {
+final class CompositeProperties extends PropertiesPanel {
 
     private static final long serialVersionUID = 1L;
-    private static final int W = 250;
 
-    private final EditorModel model;
     private final TemplateEditor editor;
-    private final VerticalStack column = new VerticalStack();
-    private String shownKey = "";
-    private boolean selfChange;
+    /** The component a port was added from last: the next port likely comes from it too. */
+    private String addedFrom;
 
     CompositeProperties(EditorModel model, TemplateEditor editor) {
-        super(new BorderLayout());
-        this.model = model;
+        super(model);
         this.editor = editor;
-        setOpaque(false);
-        column.setBorder(Ui.columnPadding(Ui.GAP_L, Ui.GAP_L));
-        add(new gui.components.ScrollColumn(column, W + 20), BorderLayout.CENTER);
-        model.addListener(this::refresh);
         refresh();
     }
 
-    private void edit(String name, Runnable r) {
-        selfChange = true;
-        try {
-            model.change(name, r);
-        } finally {
-            selfChange = false;
-        }
+    @Override
+    String selectionKey() {
+        return model.selComponent + "|" + model.selLink + "|" + model.selRelation;
     }
 
-    void refresh() {
-        String key = model.selComponent + "|" + model.selLink + "|" + model.selRelation + "|" + model.def().components.size() + "|"
-                + model.def().links.size() + "|" + model.def().relations.size() + "|" + model.def().ports.size() + "|" + model.undoName();
-        if (selfChange && key.equals(shownKey)) return;
-        shownKey = key;
-        column.clearRows();
+    @Override
+    void build() {
         TemplateDef t = model.def();
         if (model.selComponent != null && t.component(model.selComponent) != null) column.addRow(componentSection(t.component(model.selComponent)));
         else if (model.selLink != null && t.link(model.selLink) != null) column.addRow(linkSection(t.link(model.selLink)));
         else if (model.selRelation != null && t.relation(model.selRelation) != null) column.addRow(relationSection(t.relation(model.selRelation)));
         column.addRow(templateSection(), column.getRowCount() == 0 ? 0 : Ui.SECTION_GAP);
-        column.revalidate();
-        column.repaint();
     }
 
     /**
@@ -121,16 +100,17 @@ final class CompositeProperties extends JPanel {
         TemplateDef inner = Templates.resolve(c, model.source());
         JTextField name = new JTextField(c.name, 2);
         name.setToolTipText(Ui.tooltip("The role of this use, e.g. Source or Target. Two uses of one template need two roles."));
-        commit(name, v -> {
-            if (v.isEmpty()) return;
+        onText(name, v -> {
+            ComponentUse now = model.def().component(c.id);
+            if (v.isEmpty() || now == null) return;
             for (ComponentUse o : model.def().components) {
-                if (o != c && o.name.equals(v)) {
-                    JOptionPane.showMessageDialog(this, "Another component is called '" + v + "' already; give each use its own role.",
-                            "Rename component", JOptionPane.WARNING_MESSAGE);
+                if (o != now && o.name.equals(v)) {
+                    model.message = "Another component is called '" + v + "' already; give each use its own role.";
+                    model.fire();
                     return;
                 }
             }
-            edit("Rename component", () -> model.def().component(c.id).name = v);
+            tweak("Rename component", () -> now.name = v);
         });
         sec.addRow(Ui.labeled("Role", name));
         sec.addRow(Ui.hint("Uses <b>" + Ui.esc(c.ref == null ? "?" : c.ref.toString()) + "</b>"
@@ -158,7 +138,7 @@ final class CompositeProperties extends JPanel {
         for (int i = 0; i < Priority.values().length; i++) prios[i + 1] = Priority.values()[i];
         JComboBox<Object> prio = Ui.comboBox(prios);
         prio.setSelectedItem(c.priority == null ? prios[0] : c.priority);
-        prio.addActionListener(e -> edit("Change component priority", () -> {
+        prio.addActionListener(e -> tweak("Change component priority", () -> {
             Object o = prio.getSelectedItem();
             model.def().component(c.id).priority = o instanceof Priority ? (Priority) o : null;
         }));
@@ -173,7 +153,7 @@ final class CompositeProperties extends JPanel {
                 on.setEnabled(c.includeConstraints && s.enabled);
                 if (!s.enabled) on.setToolTipText(Ui.tooltip("Switched off in the template itself; switch it on there "
                         + "(Edit template…)."));
-                on.addActionListener(e -> edit("Switch component constraint", () -> {
+                on.addActionListener(e -> tweak("Switch component constraint", () -> {
                     ComponentUse k = model.def().component(c.id);
                     if (on.isSelected()) k.disabledConstraints.remove(s.id);
                     else k.disabledConstraints.add(s.id);
@@ -223,7 +203,7 @@ final class CompositeProperties extends JPanel {
         if (l.type == StructureLink.Type.EDGE) {
             JComboBox<StructureLink.Direction> dir = Ui.comboBox(StructureLink.Direction.values());
             dir.setSelectedItem(l.direction);
-            dir.addActionListener(e -> edit("Change direction", () -> model.def().link(l.id).direction = (StructureLink.Direction) dir.getSelectedItem()));
+            dir.addActionListener(e -> tweak("Change direction", () -> model.def().link(l.id).direction = (StructureLink.Direction) dir.getSelectedItem()));
             sec.addRow(Ui.labeled("Direction", dir), Ui.GAP_S);
             Condition cur = null;
             for (Condition c : l.edgeConditions) if (Condition.SBGN_ROLE.equals(c.attribute)) cur = c;
@@ -232,11 +212,15 @@ final class CompositeProperties extends JPanel {
             roles.addAll(SbgnRoles.edgeRoles(TemplateWorkbench.activeGraph()));
             JComboBox<String> role = new JComboBox<>(roles.toArray(new String[0]));
             role.setEditable(true);
-            role.setSelectedItem(cur == null || cur.op == Condition.Op.ANY ? "(any role)" : String.join(", ", cur.values));
+            String shown = cur == null || cur.op == Condition.Op.ANY ? "(any role)" : String.join(", ", cur.values);
+            role.setSelectedItem(shown);
             role.setToolTipText(Ui.tooltip("The SBGN role the joining edge must have (checked in \"Structure and semantics\" searches)."));
+            final String[] last = {shown};
             role.addActionListener(e -> {
                 String v = String.valueOf(role.getSelectedItem()).trim();
-                edit("Change link role", () -> {
+                if (v.equals(last[0])) return;   // an editable box reports one choice twice
+                last[0] = v;
+                tweak("Change link role", () -> {
                     StructureLink k = model.def().link(l.id);
                     k.edgeConditions.removeIf(c -> Condition.SBGN_ROLE.equals(c.attribute));
                     if (!v.isEmpty() && !v.startsWith("(")) {
@@ -264,13 +248,40 @@ final class CompositeProperties extends JPanel {
 
     /** Combo boxes for a component and one of its ports; {@code onChange} receives the chosen ids. */
     private JComponent portChooser(String label, String comp, String port, java.util.function.BiConsumer<String, String> onChange) {
-        TemplateDef t = model.def();
-        JComboBox<ComponentUse> cc = Ui.comboBox(t.components.toArray(new ComponentUse[0]));
-        cc.setSelectedItem(t.component(comp));
-        JComboBox<Object> pc = Ui.comboBox(new Object[0]);
-        boolean[] filling = {false};
-        Runnable fill = () -> {
-            filling[0] = true;   // the first item added selects itself: that is no choice of the user's
+        return new PortChoice(label, comp, port, onChange).box;
+    }
+
+    /** A component and one of its ports, chosen in two combo boxes. */
+    private final class PortChoice {
+        final VerticalStack box = new VerticalStack();
+        private final JComboBox<ComponentUse> cc;
+        private final JComboBox<Object> pc = Ui.comboBox(new Object[0]);
+        private boolean filling;
+
+        PortChoice(String label, String comp, String port, java.util.function.BiConsumer<String, String> onChange) {
+            TemplateDef t = model.def();
+            cc = Ui.comboBox(t.components.toArray(new ComponentUse[0]));
+            cc.setSelectedItem(t.component(comp));
+            fill(comp, port);
+            TemplateDef inner0 = Templates.resolve(t.component(comp), model.source());
+            if (inner0 != null && inner0.port(port) != null) pc.setSelectedItem(inner0.port(port));
+            else if (pc.getItemCount() > 0) pc.setSelectedIndex(pc.getItemCount() - 1);
+            cc.addActionListener(e -> {
+                fill(comp, port);
+                String[] p = picked();
+                if (onChange != null && p != null) onChange.accept(p[0], p[1]);
+            });
+            pc.addActionListener(e -> {
+                if (filling) return;
+                String[] p = picked();
+                if (onChange != null && p != null && !(p[0].equals(comp) && p[1].equals(port))) onChange.accept(p[0], p[1]);
+            });
+            box.addRow(Ui.labeled(label, cc));
+            box.addRow(Ui.labeled("Port", pc), Ui.GAP_XS);
+        }
+
+        private void fill(String comp, String port) {
+            filling = true;   // the first item added selects itself: that is no choice of the user's
             try {
                 pc.removeAllItems();
                 ComponentUse c = (ComponentUse) cc.getSelectedItem();
@@ -280,30 +291,16 @@ final class CompositeProperties extends JPanel {
                     if (port != null && c != null && c.id.equals(comp)) pc.addItem("(deleted port " + port + ")");
                 }
             } finally {
-                filling[0] = false;
+                filling = false;
             }
-        };
-        fill.run();
-        ComponentUse c0 = t.component(comp);
-        TemplateDef inner0 = Templates.resolve(c0, model.source());
-        if (inner0 != null && inner0.port(port) != null) pc.setSelectedItem(inner0.port(port));
-        else if (pc.getItemCount() > 0) pc.setSelectedIndex(pc.getItemCount() - 1);
-        cc.addActionListener(e -> {
-            fill.run();
+        }
+
+        /** Component id and port id chosen now, or null if no real port is chosen. */
+        String[] picked() {
             ComponentUse c = (ComponentUse) cc.getSelectedItem();
             Object p = pc.getSelectedItem();
-            if (c != null && p instanceof Port) onChange.accept(c.id, ((Port) p).id);
-        });
-        pc.addActionListener(e -> {
-            if (filling[0]) return;
-            ComponentUse c = (ComponentUse) cc.getSelectedItem();
-            Object p = pc.getSelectedItem();
-            if (c != null && p instanceof Port && !(c.id.equals(comp) && ((Port) p).id.equals(port))) onChange.accept(c.id, ((Port) p).id);
-        });
-        VerticalStack box = new VerticalStack();
-        box.addRow(Ui.labeled(label, cc));
-        box.addRow(Ui.labeled("Port", pc), Ui.GAP_XS);
-        return box;
+            return c != null && p instanceof Port ? new String[]{c.id, ((Port) p).id} : null;
+        }
     }
 
     private Section relationSection(LayoutRelation r) {
@@ -311,75 +308,168 @@ final class CompositeProperties extends JPanel {
         sec.addRow(Ui.hint("A <b>layout wish</b>, applied as constraints after a match was found; it never decides whether something matches.", W));
         JComboBox<LayoutRelation.Type> type = Ui.comboBox(LayoutRelation.Type.values());
         type.setSelectedItem(r.type);
-        type.addActionListener(e -> edit("Change relation type", () -> {
-            LayoutRelation k = model.def().relation(r.id);
+        type.addActionListener(e -> {
             LayoutRelation.Type nt = (LayoutRelation.Type) type.getSelectedItem();
-            if (nt.onComponents() != k.type.onComponents()) {
-                if (nt.onComponents() && k.components.isEmpty()) for (LayoutRelation.PortRef p : k.ports) if (!k.components.contains(p.component)) k.components.add(p.component);
-            }
-            k.type = nt;
-        }));
+            if (nt != model.def().relation(r.id).type) edit("Change relation type", () -> setRelationType(model.def().relation(r.id), nt));
+        });
         sec.addRow(Ui.labeled("Type", type), Ui.GAP_S);
         sec.addRow(Ui.hint(meaning(r), W), Ui.GAP_XS);
         if (r.type.onComponents()) {
-            sec.addRow(subheading("Components, in order"), Ui.GAP_S);
-            for (ComponentUse c : model.def().components) {
-                int at = r.components.indexOf(c.id);
-                JCheckBox box = new JCheckBox((at >= 0 ? (at + 1) + ". " : "") + c.name, at >= 0);
-                box.setOpaque(false);
-                box.addActionListener(e -> edit("Change relation components", () -> {
-                    LayoutRelation k = model.def().relation(r.id);
-                    if (box.isSelected()) { if (!k.components.contains(c.id)) k.components.add(c.id); }
-                    else k.components.remove(c.id);
-                }));
-                JButton up = Ui.button("↑", "Earlier in the order", e -> edit("Reorder relation", () -> {
-                    LayoutRelation k = model.def().relation(r.id);
-                    int i = k.components.indexOf(c.id);
-                    if (i > 0) java.util.Collections.swap(k.components, i, i - 1);
-                }));
-                up.setEnabled(at > 0);
-                JPanel row = new JPanel(new BorderLayout());
-                row.setOpaque(false);
-                row.add(box, BorderLayout.CENTER);
-                row.add(up, BorderLayout.EAST);
-                sec.addRow(row, Ui.GAP_XS);
-            }
-            JSpinner gap = new JSpinner(new SpinnerNumberModel(r.gap, 0, 5000, 10));
-            gap.addChangeListener(e -> edit("Change distance", () -> model.def().relation(r.id).gap = ((Number) gap.getValue()).doubleValue()));
-            sec.addRow(Ui.labeled("At least (px)", gap), Ui.GAP_S);
+            if (isPair(r.type)) pairEditor(sec, r);
+            else orderedEditor(sec, r);
+            sec.addRow(Ui.labeled("At least (px)", spinner(r.gap, 0, 5000, 10, "gap " + r.id, "Change distance",
+                    v -> model.def().relation(r.id).gap = v)), Ui.GAP_S);
             if (r.type == LayoutRelation.Type.GRID) {
-                JSpinner cols = new JSpinner(new SpinnerNumberModel(r.columns, 1, 20, 1));
-                cols.addChangeListener(e -> edit("Change columns", () -> model.def().relation(r.id).columns = ((Number) cols.getValue()).intValue()));
-                sec.addRow(Ui.labeled("Columns", cols), Ui.GAP_XS);
+                sec.addRow(Ui.labeled("Columns", spinner(r.columns, 1, 20, 1, "columns " + r.id, "Change columns",
+                        v -> model.def().relation(r.id).columns = (int) v)), Ui.GAP_XS);
             }
         } else {
             sec.addRow(subheading("Ports to align"), Ui.GAP_S);
-            ComponentCanvas names = new ComponentCanvas(model, true);
             for (LayoutRelation.PortRef p : r.ports) {
                 JPanel row = new JPanel(new BorderLayout());
                 row.setOpaque(false);
-                row.add(new JLabel(names.portName(p.component, p.port)), BorderLayout.CENTER);
+                row.add(new JLabel(model.portName(p.component, p.port)), BorderLayout.CENTER);
                 row.add(Ui.button("✕", "Remove", e -> edit("Remove port from relation", () ->
                         model.def().relation(r.id).ports.removeIf(k -> k.component.equals(p.component) && k.port.equals(p.port)))), BorderLayout.EAST);
                 sec.addRow(row, Ui.GAP_XS);
             }
-            sec.addRow(portChooser("Add", null, null, (c, p) -> edit("Add port to relation", () -> {
-                LayoutRelation k = model.def().relation(r.id);
-                for (LayoutRelation.PortRef x : k.ports) if (x.component.equals(c) && x.port.equals(p)) return;
-                k.ports.add(new LayoutRelation.PortRef(c, p));
-            })), Ui.GAP_S);
+            sec.addRow(portAdder(r), Ui.GAP_S);
         }
         JComboBox<Priority> prio = gui.PriorityControls.comboBox("relationPriority");
         prio.setSelectedItem(r.priority);
-        prio.addActionListener(e -> edit("Change relation priority", () -> model.def().relation(r.id).priority = gui.PriorityControls.selected(prio)));
+        prio.addActionListener(e -> tweak("Change relation priority", () -> model.def().relation(r.id).priority = gui.PriorityControls.selected(prio)));
         sec.addRow(Ui.labeled("Priority", prio), Ui.GAP_S);
         JCheckBox on = new JCheckBox("Active", r.enabled);
         on.setOpaque(false);
-        on.addActionListener(e -> edit("Switch relation", () -> model.def().relation(r.id).enabled = on.isSelected()));
+        on.addActionListener(e -> tweak("Switch relation", () -> model.def().relation(r.id).enabled = on.isSelected()));
         sec.addRow(on, Ui.GAP_XS);
         sec.addRow(Ui.button("Remove", null, e -> deleteSelected(model)), Ui.GAP_M);
         problems(sec, r.id);
         return sec;
+    }
+
+    private static boolean isPair(LayoutRelation.Type t) {
+        return t == LayoutRelation.Type.LEFT_OF || t == LayoutRelation.Type.ABOVE;
+    }
+
+    /** Another type for {@code k}: its members carry over as far as they fit, so it stays valid where it can. */
+    private void setRelationType(LayoutRelation k, LayoutRelation.Type nt) {
+        if (nt.onComponents()) {
+            if (k.components.isEmpty()) for (LayoutRelation.PortRef p : k.ports) if (!k.components.contains(p.component)) k.components.add(p.component);
+            for (ComponentUse c : model.def().components) {
+                if (k.components.size() >= 2) break;
+                if (!k.components.contains(c.id)) k.components.add(c.id);
+            }
+            while (isPair(nt) && k.components.size() > 2) k.components.remove(k.components.size() - 1);
+        } else if (k.ports.isEmpty()) {
+            for (String id : k.components) {
+                String p = model.firstPort(id);
+                if (p != null) k.ports.add(new LayoutRelation.PortRef(id, p));
+            }
+        }
+        k.type = nt;
+    }
+
+    /** "Left of" and "above" take exactly two components: one box each, and a button to swap them. */
+    private void pairEditor(Section sec, LayoutRelation r) {
+        boolean leftOf = r.type == LayoutRelation.Type.LEFT_OF;
+        sec.addRow(pairMember(leftOf ? "Left" : "Upper", r, 0), Ui.GAP_S);
+        sec.addRow(pairMember(leftOf ? "Right" : "Lower", r, 1), Ui.GAP_XS);
+        JButton swap = Ui.button("Swap", "Exchanges the two components.", e -> edit("Swap relation components", () ->
+                java.util.Collections.reverse(model.def().relation(r.id).components)));
+        swap.setName("swapRelation");
+        swap.setEnabled(r.components.size() == 2);
+        sec.addRow(swap, Ui.GAP_XS);
+    }
+
+    private JComponent pairMember(String label, LayoutRelation r, int index) {
+        JComboBox<ComponentUse> box = Ui.comboBox(model.def().components.toArray(new ComponentUse[0]));
+        box.setSelectedItem(index < r.components.size() ? model.def().component(r.components.get(index)) : null);
+        box.addActionListener(e -> {
+            ComponentUse c = (ComponentUse) box.getSelectedItem();
+            if (c != null) edit("Change relation components", () -> setPairMember(model.def().relation(r.id), index, c.id));
+        });
+        return Ui.labeled(label, box);
+    }
+
+    /** Puts {@code id} at {@code index} of a pair; choosing the other member's component swaps the two. */
+    private static void setPairMember(LayoutRelation k, int index, String id) {
+        String a = !k.components.isEmpty() ? k.components.get(0) : null, b = k.components.size() > 1 ? k.components.get(1) : null;
+        if (index == 0) {
+            if (id.equals(b)) b = a;
+            a = id;
+        } else {
+            if (id.equals(a)) a = b;
+            b = id;
+        }
+        k.components.clear();
+        if (a != null) k.components.add(a);
+        if (b != null) k.components.add(b);
+    }
+
+    /** A row, column or grid: the members in their order, then the other components to add. */
+    private void orderedEditor(Section sec, LayoutRelation r) {
+        sec.addRow(subheading("Components, in order"), Ui.GAP_S);
+        List<ComponentUse> rows = new ArrayList<>();
+        for (String id : r.components) if (model.def().component(id) != null) rows.add(model.def().component(id));
+        for (ComponentUse c : model.def().components) if (!rows.contains(c)) rows.add(c);
+        for (ComponentUse c : rows) {
+            int at = r.components.indexOf(c.id);
+            JCheckBox box = new JCheckBox((at >= 0 ? (at + 1) + ". " : "") + c.name, at >= 0);
+            box.setOpaque(false);
+            box.addActionListener(e -> edit("Change relation components", () -> {
+                LayoutRelation k = model.def().relation(r.id);
+                if (box.isSelected()) { if (!k.components.contains(c.id)) k.components.add(c.id); }
+                else k.components.remove(c.id);
+            }));
+            JButton up = Ui.button("↑", "Earlier in the order", e -> moveMember(r, c.id, -1));
+            JButton down = Ui.button("↓", "Later in the order", e -> moveMember(r, c.id, 1));
+            up.setEnabled(at > 0);
+            down.setEnabled(at >= 0 && at < r.components.size() - 1);
+            JPanel row = new JPanel(new BorderLayout());
+            row.setOpaque(false);
+            row.add(box, BorderLayout.CENTER);
+            row.add(Ui.row(up, down), BorderLayout.EAST);
+            sec.addRow(row, Ui.GAP_XS);
+        }
+    }
+
+    private void moveMember(LayoutRelation r, String id, int d) {
+        edit("Reorder relation", () -> {
+            LayoutRelation k = model.def().relation(r.id);
+            int i = k.components.indexOf(id);
+            if (i >= 0 && i + d >= 0 && i + d < k.components.size()) java.util.Collections.swap(k.components, i, i + d);
+        });
+    }
+
+    /** Component and port to add to a port relation, added only with its button. */
+    private JComponent portAdder(LayoutRelation r) {
+        TemplateDef t = model.def();
+        String first = addedFrom != null && model.firstPort(addedFrom) != null ? addedFrom : null;
+        for (ComponentUse c : t.components) {
+            if (first == null && model.firstPort(c.id) != null) first = c.id;
+        }
+        if (first == null) return Ui.hint("<font color='#b06000'>No component has ports yet: make ports in their templates.</font>", W);
+        PortChoice choice = new PortChoice("Add", first, null, null);
+        JButton add = Ui.button("Add port", "Adds the chosen port to this relation.", e -> {
+            String[] picked = choice.picked();
+            if (picked == null) return;
+            addedFrom = picked[0];
+            LayoutRelation k = model.def().relation(r.id);
+            for (LayoutRelation.PortRef x : k.ports) {
+                if (x.component.equals(picked[0]) && x.port.equals(picked[1])) {
+                    model.message = model.portName(picked[0], picked[1]) + " is in this relation already.";
+                    model.fire();
+                    return;
+                }
+            }
+            edit("Add port to relation", () -> k.ports.add(new LayoutRelation.PortRef(picked[0], picked[1])));
+        });
+        add.setName("addRelationPort");
+        VerticalStack box = new VerticalStack();
+        box.addRow(choice.box);
+        box.addRow(add, Ui.GAP_XS);
+        return box;
     }
 
     /** The geometric meaning of a relation's type, as shown to the user. */
@@ -399,22 +489,16 @@ final class CompositeProperties extends JPanel {
         TemplateDef t = model.def();
         Section sec = new Section("Composite template");
         JTextField name = new JTextField(t.name, 2);
-        commit(name, v -> { if (!v.isEmpty()) edit("Rename template", () -> model.def().name = v); });
+        onText(name, v -> { if (!v.isEmpty()) tweak("Rename template", () -> model.def().name = v); });
         sec.addRow(Ui.labeled("Name", name));
-        JTextArea desc = new JTextArea(t.description, 3, 2);
-        desc.setLineWrap(true);
-        desc.setWrapStyleWord(true);
-        desc.addFocusListener(new FocusAdapter() {
-            @Override public void focusLost(FocusEvent e) {
-                if (!desc.getText().equals(model.def().description)) edit("Change description", () -> model.def().description = desc.getText());
-            }
-        });
-        sec.addRow(new JScrollPane(desc), Ui.GAP_XS);
+        sec.addRow(descriptionField(t.description, v -> tweak("Change description", () -> model.def().description = v)), Ui.GAP_XS);
         sec.addRow(subheading("Its own ports (to use it as a component)"), Ui.GAP_M);
-        ComponentCanvas names = new ComponentCanvas(model, true);
         for (Port p : t.ports) {
             JTextField pn = new JTextField(p.name, 2);
-            commit(pn, v -> { if (!v.isEmpty()) edit("Rename port", () -> model.def().port(p.id).name = v); });
+            onText(pn, v -> {
+                Port now = model.def().port(p.id);
+                if (!v.isEmpty() && now != null) tweak("Rename port", () -> now.name = v);
+            });
             JPanel row = new JPanel(new BorderLayout(Ui.GAP_S, 0));
             row.setOpaque(false);
             row.add(pn, BorderLayout.CENTER);
@@ -423,9 +507,10 @@ final class CompositeProperties extends JPanel {
                 edit("Delete port", () -> model.def().ports.removeIf(k -> k.id.equals(p.id)));
             }), BorderLayout.EAST);
             sec.addRow(row, Ui.GAP_XS);
-            sec.addRow(Ui.hint("→ " + Ui.esc(names.portName(p.component, p.componentPort)), W), Ui.GAP_XS);
+            sec.addRow(Ui.hint("→ " + Ui.esc(model.portName(p.component, p.componentPort)), W), Ui.GAP_XS);
         }
         JButton add = Ui.button("Add port…", "Passes on a port of a component under a name of the composite.", e -> addPort());
+        add.setName("addCompositePort");
         sec.addRow(add, Ui.GAP_S);
         if (model.library != null) {
             for (TemplateLibrary.Update u : model.library.updatesFor(t)) {
@@ -438,47 +523,36 @@ final class CompositeProperties extends JPanel {
 
     private void addPort() {
         TemplateDef t = model.def();
-        if (t.components.isEmpty()) return;
-        JComponent chooser = portChooser("Component", t.components.get(0).id, null, (c, p) -> { });
-        JTextField name = new JTextField("Port");
+        String first = model.selComponent != null && model.firstPort(model.selComponent) != null ? model.selComponent : null;
+        for (ComponentUse c : t.components) {
+            if (first == null && model.firstPort(c.id) != null) first = c.id;
+        }
+        if (first == null) {
+            model.message = t.components.isEmpty() ? "Insert a component first." : "No component has ports yet: make ports in their templates.";
+            model.fire();
+            return;
+        }
+        PortChoice choice = new PortChoice("Component", first, null, null);
+        JTextField name = new JTextField(2);
+        name.setToolTipText(Ui.tooltip("Empty: the name of the chosen port."));
         JPanel p = new JPanel(new GridLayout(0, 1, 0, 4));
-        p.add(chooser);
+        p.add(choice.box);
         p.add(Ui.labeled("Name", name));
         if (JOptionPane.showConfirmDialog(this, p, "Add port", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) != JOptionPane.OK_OPTION) return;
-        JComboBox<?>[] boxes = findCombos(chooser);
-        if (boxes.length < 2) return;
-        ComponentUse c = (ComponentUse) boxes[0].getSelectedItem();
-        Object port = boxes[1].getSelectedItem();
-        if (c == null || !(port instanceof Port) || name.getText().trim().isEmpty()) return;
-        if (t.portByName(name.getText().trim()) != null) {
-            JOptionPane.showMessageDialog(this, "A port with this name exists already.", "Add port", JOptionPane.WARNING_MESSAGE);
+        String[] picked = choice.picked();
+        if (picked == null) return;
+        TemplateDef inner = Templates.resolve(t.component(picked[0]), model.source());
+        String wanted = name.getText().trim().isEmpty() && inner != null ? inner.port(picked[1]).name : name.getText().trim();
+        if (t.portByName(wanted) != null) {
+            JOptionPane.showMessageDialog(this, "A port named '" + wanted + "' exists already.", "Add port", JOptionPane.WARNING_MESSAGE);
             return;
         }
         edit("Add port", () -> {
-            Port np = new Port(model.def().nextPortId(), name.getText().trim(), null);
-            np.component = c.id;
-            np.componentPort = ((Port) port).id;
+            Port np = new Port(model.def().nextPortId(), wanted, null);
+            np.component = picked[0];
+            np.componentPort = picked[1];
             model.def().ports.add(np);
         });
-    }
-
-    private static JComboBox<?>[] findCombos(Container c) {
-        List<JComboBox<?>> l = new ArrayList<>();
-        collect(c, l);
-        return l.toArray(new JComboBox<?>[0]);
-    }
-
-    private static void collect(Container c, List<JComboBox<?>> l) {
-        for (Component k : c.getComponents()) {
-            if (k instanceof JComboBox) l.add((JComboBox<?>) k);
-            else if (k instanceof Container) collect((Container) k, l);
-        }
-    }
-
-    private static JLabel subheading(String text) {
-        JLabel l = new JLabel(text);
-        l.setFont(Ui.small().deriveFont(Font.BOLD));
-        return l;
     }
 
     private void problems(Section sec, String id) {
@@ -489,20 +563,5 @@ final class CompositeProperties extends JPanel {
                     .append(Ui.esc(p.message)).append("</font><br>");
         }
         if (sb.length() > 0) sec.addRow(Ui.hint(sb.toString(), W), Ui.GAP_S);
-    }
-
-    private static void commit(JTextField f, Consumer<String> commit) {
-        final String[] before = {f.getText()};
-        Runnable r = () -> {
-            String v = f.getText().trim();
-            if (!v.equals(before[0].trim())) {
-                before[0] = v;
-                commit.accept(v);
-            }
-        };
-        f.addActionListener(e -> r.run());
-        f.addFocusListener(new FocusAdapter() {
-            @Override public void focusLost(FocusEvent e) { r.run(); }
-        });
     }
 }

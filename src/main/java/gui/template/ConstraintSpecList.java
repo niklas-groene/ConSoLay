@@ -57,6 +57,7 @@ final class ConstraintSpecList extends JPanel {
     private final JComboBox<Priority> newPriority = gui.PriorityControls.comboBox("editorPriority");
     private final PrimaryButton addButton = new PrimaryButton("Add");
     private final StatusLabel addStatus = new StatusLabel(" ");
+    private final JButton add, del;
     private boolean refreshing;
 
     ConstraintSpecList(EditorModel model) {
@@ -79,6 +80,7 @@ final class ConstraintSpecList extends JPanel {
             if (e.getValueIsAdjusting() || refreshing) return;
             ConstraintSpec s = list.getSelectedValue();
             model.selConstraint = s == null ? null : s.id;
+            model.constraintFirst = true;
             model.fire();
         });
         list.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), "del");
@@ -88,16 +90,13 @@ final class ConstraintSpecList extends JPanel {
             @Override public void actionPerformed(java.awt.event.ActionEvent e) { deleteSelected(); }
         });
         section.addRow(onlySelected);
-        section.addRow(new JScrollPane(list) {
+        section.addRow(new gui.components.NestedScrollPane(list) {
             private static final long serialVersionUID = 1L;
             @Override public Dimension getPreferredSize() { return new Dimension(40, super.getPreferredSize().height); }
         }, Ui.GAP_S);
-        JButton add = Ui.button("Add…", "Adds a constraint to the nodes selected on the canvas.", e -> {
-            addCard.setVisible(!addCard.isVisible());
-            revalidate();
-        });
+        add = Ui.button("Add…", "Adds a constraint to the nodes selected on the canvas.", e -> showAddCard(!addCard.isVisible()));
         add.setName("addSpec");
-        JButton del = Ui.button("Delete", "Deletes the selected constraint (Delete key).", e -> deleteSelected());
+        del = Ui.button("Delete", "Deletes the selected constraint (Delete key).", e -> deleteSelected());
         del.setName("deleteSpec");
         JButton derive = Ui.button("Derive from arrangement…", "Creates a small set of constraints (rows, columns, the order along edges) "
                 + "from the pattern's drawing; you can edit them afterwards.", e -> derive());
@@ -106,10 +105,19 @@ final class ConstraintSpecList extends JPanel {
         section.addRow(derive, Ui.GAP_XS);
         column.addRow(section);
         column.addRow(createAddCard(), Ui.GAP_M);
-        addCard.setVisible(false);
+        showAddCard(model.def().constraints.isEmpty());   // an empty list has nothing else to offer
         add(new gui.components.ScrollColumn(column, 260), BorderLayout.CENTER);
         model.addListener(this::refresh);
         refresh();
+    }
+
+    private void showAddCard(boolean on) {
+        addCard.setVisible(on);
+        add.setText(on ? "Hide adding" : "Add…");
+        // the list and the card fit together, so a constraint just added is seen
+        list.setVisibleRowCount(on ? 3 : 9);
+        revalidate();
+        if (on) SwingUtilities.invokeLater(() -> addCard.scrollRectToVisible(new Rectangle(0, 0, addCard.getWidth(), addCard.getHeight())));
     }
 
     private JComponent createAddCard() {
@@ -270,6 +278,7 @@ final class ConstraintSpecList extends JPanel {
         } finally {
             refreshing = false;
         }
+        del.setEnabled(model.selConstraint != null);
         updateAddButton();
         list.repaint();
     }

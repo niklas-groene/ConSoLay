@@ -12,6 +12,7 @@ import layout.template.model.TemplateSource;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.Rectangle2D;
@@ -51,7 +52,7 @@ final class CompositeSidebar extends JPanel {
         blockList.setName("buildingBlocks");
         blockList.setFixedCellHeight(42);
         blockList.setFixedCellWidth(1);
-        blockList.setVisibleRowCount(6);
+        blockList.setVisibleRowCount(5);
         blockList.setCellRenderer(new BlockRenderer());
         blockList.addMouseListener(new MouseAdapter() {
             @Override public void mouseClicked(MouseEvent e) { if (e.getClickCount() == 2) insert(); }
@@ -64,7 +65,7 @@ final class CompositeSidebar extends JPanel {
 
         Section ls = new Section("Structure (search conditions)");
         linkList.setName("linkList");
-        linkList.setVisibleRowCount(4);
+        linkList.setVisibleRowCount(3);
         linkList.setFixedCellWidth(1);
         linkList.setCellRenderer((l, k, i, sel, f) -> row(l, linkText(k), sel, ComponentCanvas.STRUCTURE));
         linkList.addListSelectionListener(e -> {
@@ -83,7 +84,7 @@ final class CompositeSidebar extends JPanel {
 
         Section rs = new Section("Layout (applied as constraints)");
         relationList.setName("relationList");
-        relationList.setVisibleRowCount(4);
+        relationList.setVisibleRowCount(3);
         relationList.setFixedCellWidth(1);
         relationList.setCellRenderer((l, r, i, sel, f) -> row(l, r.describe(this::compName) + (r.enabled ? "" : " (off)"), sel, ComponentCanvas.LAYOUT));
         relationList.addListSelectionListener(e -> {
@@ -94,7 +95,7 @@ final class CompositeSidebar extends JPanel {
             model.fire();
         });
         rs.addRow(narrowScroll(relationList));
-        JButton add = Ui.button("Add layout relation…", "Left of, above, a row, column or grid of components, or ports on one line.", null);
+        JButton add = Ui.button("Add layout relation…", "Left of, above, a row, column or grid of components (by their bounding boxes), or exactly the named port nodes on one line.", null);
         add.setName("addRelation");
         add.addActionListener(e -> {
             JPopupMenu menu = new JPopupMenu();
@@ -107,16 +108,22 @@ final class CompositeSidebar extends JPanel {
             menu.show(add, 0, add.getHeight());
         });
         rs.addRow(add, Ui.GAP_S);
-        rs.addRow(Ui.hint("Relations between components use their bounding boxes; port relations use exactly the named port nodes."), Ui.GAP_XS);
         column.addRow(rs, Ui.SECTION_GAP);
+        deleteKey(linkList);
+        deleteKey(relationList);
         add(new gui.components.ScrollColumn(column, 260), BorderLayout.CENTER);
         model.addListener(this::refresh);
         refresh();
     }
 
+    private void deleteKey(JList<?> list) {
+        for (int key : new int[]{KeyEvent.VK_DELETE, KeyEvent.VK_BACK_SPACE}) list.getInputMap().put(KeyStroke.getKeyStroke(key, 0), "delete");
+        list.getActionMap().put("delete", PatternCanvas.action(() -> CompositeProperties.deleteSelected(model)));
+    }
+
     /** A scroll pane that never widens the column: it takes the row's width. */
     private static JScrollPane narrowScroll(JList<?> list) {
-        return new JScrollPane(list) {
+        return new gui.components.NestedScrollPane(list) {
             private static final long serialVersionUID = 1L;
             @Override public Dimension getPreferredSize() { return new Dimension(40, super.getPreferredSize().height); }
         };
@@ -128,9 +135,8 @@ final class CompositeSidebar extends JPanel {
     }
 
     private String linkText(StructureLink l) {
-        ComponentCanvas names = new ComponentCanvas(model, true);
-        return names.portName(l.fromComponent, l.fromPort) + (l.type == StructureLink.Type.SAME_NODE ? " = " : " → ")
-                + names.portName(l.toComponent, l.toPort);
+        return model.portName(l.fromComponent, l.fromPort) + (l.type == StructureLink.Type.SAME_NODE ? " = " : " → ")
+                + model.portName(l.toComponent, l.toPort);
     }
 
     private static JLabel row(JList<?> l, String text, boolean sel, Color c) {
@@ -140,16 +146,21 @@ final class CompositeSidebar extends JPanel {
         r.setBorder(new EmptyBorder(3, 6, 3, 6));
         r.setBackground(sel ? l.getSelectionBackground() : Color.WHITE);
         r.setForeground(sel ? l.getSelectionForeground() : c);
+        r.setToolTipText(Ui.tooltip(Ui.esc(text)));
         return r;
     }
 
     void refresh() {
         refreshing = true;
         try {
-            TemplateDef keep = blockList.getSelectedValue();
-            blocks.clear();
-            if (model.library != null) for (TemplateDef t : model.library.templates()) if (!t.id.equals(model.def().id)) blocks.addElement(t);
-            if (keep != null) blockList.setSelectedValue(keep, false);
+            List<TemplateDef> now = new ArrayList<>();
+            if (model.library != null) for (TemplateDef t : model.library.templates()) if (!t.id.equals(model.def().id)) now.add(t);
+            if (!now.equals(java.util.Collections.list(blocks.elements()))) {
+                TemplateDef keep = blockList.getSelectedValue();
+                blocks.clear();
+                for (TemplateDef t : now) blocks.addElement(t);
+                if (keep != null) blockList.setSelectedValue(keep, false);
+            }
             links.clear();
             for (StructureLink l : model.def().links) links.addElement(l);
             relations.clear();
@@ -175,15 +186,28 @@ final class CompositeSidebar extends JPanel {
         editor.insertComponent(t);
     }
 
+    /** Adds a link from the selected component (or the first one with ports) to the next one with ports, not yet joined. */
     private void connect() {
         TemplateDef t = model.def();
-        if (t.components.size() < 2) {
-            JOptionPane.showMessageDialog(this, "Insert at least two components first.", "Connect ports", JOptionPane.INFORMATION_MESSAGE);
+        List<String> withPorts = new ArrayList<>();
+        if (model.selComponent != null && model.firstPort(model.selComponent) != null) withPorts.add(model.selComponent);
+        for (ComponentUse c : t.components) if (!withPorts.contains(c.id) && model.firstPort(c.id) != null) withPorts.add(c.id);
+        if (withPorts.size() < 2) {
+            model.message = t.components.size() < 2 ? "Insert at least two components first."
+                    : "Links join ports, and at least two components need some: make ports in their templates.";
+            model.fire();
             return;
         }
-        String a = t.components.get(0).id, b = t.components.get(1).id;
+        String a = withPorts.get(0), b = withPorts.get(1);
+        for (String k : withPorts.subList(1, withPorts.size())) {
+            if (!joined(t, a, k)) {
+                b = k;
+                break;
+            }
+        }
+        String to = b;
         model.change("Connect ports", () -> {
-            StructureLink l = new StructureLink(model.def().nextLinkId(), a, firstPort(a), b, firstPort(b));
+            StructureLink l = new StructureLink(model.def().nextLinkId(), a, model.firstPort(a), to, model.firstPort(to));
             model.def().links.add(l);
             model.selLink = l.id;
             model.selComponent = null;
@@ -192,15 +216,18 @@ final class CompositeSidebar extends JPanel {
         });
     }
 
-    private String firstPort(String comp) {
-        TemplateDef inner = layout.template.model.Templates.resolve(model.def().component(comp), model.source());
-        return inner == null || inner.ports.isEmpty() ? null : inner.ports.get(0).id;
+    private static boolean joined(TemplateDef t, String a, String b) {
+        for (StructureLink l : t.links) {
+            if ((a.equals(l.fromComponent) && b.equals(l.toComponent)) || (b.equals(l.fromComponent) && a.equals(l.toComponent))) return true;
+        }
+        return false;
     }
 
     private void addRelation(LayoutRelation.Type type) {
         TemplateDef t = model.def();
         if (t.components.size() < 2) {
-            JOptionPane.showMessageDialog(this, "Insert at least two components first.", "Add layout relation", JOptionPane.INFORMATION_MESSAGE);
+            model.message = "Insert at least two components first.";
+            model.fire();
             return;
         }
         model.change("Add layout relation", () -> {
@@ -213,7 +240,7 @@ final class CompositeSidebar extends JPanel {
                 r.components.addAll(ids.subList(0, Math.min(n, ids.size())));
             } else {
                 for (String id : ids.subList(0, 2)) {
-                    String p = firstPort(id);
+                    String p = model.firstPort(id);
                     if (p != null) r.ports.add(new LayoutRelation.PortRef(id, p));
                 }
             }
