@@ -4,7 +4,7 @@
 
   Layout:
     src/main/java/         Java sources
-    src/main/resources/    ConstraintLayout.xml + other classpath resources
+    src/main/resources/    ConSoLay.xml (add-on descriptor) + other classpath resources
     libs/adaptagrams.jar   The user's adaptagrams build (SWIG bindings + NativeLoader
                            + native libs for mac/linux/windows). Embedded into the
                            addon JAR so VANTED loads it from inside the addon.
@@ -126,7 +126,7 @@ Looked in:
             <classpath refid="compile.classpath"/>
         </javac>
 
-        <!-- copy ConstraintLayout.xml and any other classpath resources -->
+        <!-- copy ConSoLay.xml and any other classpath resources -->
         <copy todir="${classes.dir}">
             <fileset dir="${res.dir}"/>
         </copy>
@@ -137,10 +137,10 @@ Looked in:
         <jar destfile="${jar.dest.path}/${target.name}" filesetmanifest="mergewithoutmain">
             <manifest>
                 <attribute name="Built-By" value="${user.name}"/>
-                <attribute name="Vanted-Addon-Descriptor" value="ConstraintLayout.xml"/>
+                <attribute name="Vanted-Addon-Descriptor" value="ConSoLay.xml"/>
             </manifest>
 
-            <!-- our compiled classes + ConstraintLayout.xml at the JAR root -->
+            <!-- our compiled classes + ConSoLay.xml at the JAR root -->
             <fileset dir="${classes.dir}"/>
 
             <!-- embed the user's adaptagrams: SWIG bindings, NativeLoader, native libs -->

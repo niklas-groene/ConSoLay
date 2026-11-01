@@ -31,7 +31,7 @@ public class StartVantedWithAddon {
 
 	/** The plugin descriptor of the add-on in {@code src/main/resources}. */
 	public static String getAddonName() {
-		return "ConstraintLayout.xml";
+		return "ConSoLay.xml";
 	}
 
 }

@@ -39,5 +39,5 @@
   - loads the rule set and runs `TemplateValidator` (no problems found);
   - runs one `SearchRun`, applies every match (first variant) with `TemplateApplier`, and runs `ConstraintConflicts.resolve`;
   - optionally runs `CBLayoutAlgorithm.solveUserConstraints` (with `nofd` as the 6th argument, there is no force-directed run).
-  - Usage: `java -cp "<ConstraintLayout classes>:<vanted classes>:<vanted-libraries>/*" Run.java trn_nodes.tsv trn_edges.tsv "Transcription network.cblrules.json" out.gml prefix nofd`
+  - Usage: `java -cp "<ConSoLay classes>:<vanted classes>:<vanted-libraries>/*" Run.java trn_nodes.tsv trn_edges.tsv "Transcription network.cblrules.json" out.gml prefix nofd`
   - `headless_run.log` is its output for the files in this folder.
