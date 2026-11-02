@@ -2,7 +2,7 @@
 <!DOCTYPE plugin PUBLIC "-//GRAFFITI/DTD Plugin Descriptin 1.0//EN" "http://www.graffiti.org/dtd/1.0/plugin.dtd">
 <plugin>
     <author>Niklas Gröne</author>
-    <description>Constraint-based graph layout for VANTED with the Adaptagrams libraries (libcola, libvpsc, libavoid). Users state relations between nodes (alignments, gaps, orders, groups, pins and more) by hand, apply them in batches through templates matched in the graph, or let step-wise layout algorithms such as the included SBGN PD, ER and AF layouts create them. Conflicting constraints are resolved by priority, and every constraint is shown with its state. Adds the side-panel tab "Constraint-Based Layout". SBGN maps require the SBGN-ED add-on.</description>
+    <description>Constraint-based graph layout for VANTED.</description>
     <plugindesc>
         <name>ConSoLay</name>
         <main>cblayout.CBLayout</main>
