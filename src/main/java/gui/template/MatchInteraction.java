@@ -202,7 +202,7 @@ final class MatchInteraction extends MouseAdapter {
         hideCard();
         MatchCheck c = m.check;
         String html = "<html><b>" + TemplateWorkbench.esc(m.title()) + "</b> · " + MatchOverlay.stateText(m) + "<br>"
-                + m.nodes().size() + " nodes · " + m.task.plan.size() + " constraints"
+                + Ui.count(m.nodes().size(), "node") + " · " + Ui.count(m.task.plan.size(), "constraint")
                 + (m.variants().size() > 1 ? " · " + m.variants().size() + " assignments" : "") + "<br>"
                 + "<font color='#5f6368'>" + TemplateWorkbench.esc(firstLine(m.variant().explanation)) + "</font><br>"
                 + (c.status == MatchCheck.Status.NOT_CHECKED ? "<font color='#5f6368'>Not checked yet</font>"

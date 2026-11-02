@@ -395,4 +395,18 @@ public class StoreRoundTripTest {
         for (TemplateDef x : TemplateExamples.all()) if (x.id.equals(id)) return x;
         throw new AssertionError("example " + id + " exists");
     }
+
+    /** "Load constraints… › Replace" checks the file before it removes anything: a wrong file is refused. */
+    @Test
+    public void aFileThatHoldsNoConstraintsIsRefusedBeforeLoading() {
+        String store = "{\"format\": \"" + StoreCodec.FORMAT + "\", \"formatVersion\": " + StoreCodec.FORMAT_VERSION + "}";
+        org.junit.Assert.assertNull(GraphConstraints.problemOf(store));
+        org.junit.Assert.assertNull(GraphConstraints.problemOf("{\"nodes\": [], \"constraints\": []}"));   // no format: still a store
+        org.junit.Assert.assertNotNull(GraphConstraints.problemOf("{}"));
+        org.junit.Assert.assertNotNull(GraphConstraints.problemOf("{\"name\": \"some other JSON\"}"));
+        org.junit.Assert.assertNotNull(GraphConstraints.problemOf("{\"format\": \"cbl-store\""));   // cut off
+        org.junit.Assert.assertNotNull(GraphConstraints.problemOf("[1, 2]"));
+        org.junit.Assert.assertNotNull(GraphConstraints.problemOf("{\"format\": \"cbl-template\"}"));
+        org.junit.Assert.assertNotNull(GraphConstraints.problemOf("{\"format\": \"" + StoreCodec.FORMAT + "\", \"formatVersion\": 99}"));
+    }
 }

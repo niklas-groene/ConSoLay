@@ -10,9 +10,11 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The templates of a folder: every {@code .cbltemplate.json} file (the newest revision of one template each), the old
@@ -78,11 +80,26 @@ public final class TemplateLibrary implements TemplateSource {
         return Collections.unmodifiableList(entries);
     }
 
-    /** The readable templates of the folder and the ones added in memory. */
+    /**
+     * The readable templates of the folder and the ones added in memory, every revision held in memory among them (a
+     * template saved outside the folder twice is there twice); {@link #latestTemplates()} has each template once.
+     */
     public List<TemplateDef> templates() {
         List<TemplateDef> l = new ArrayList<>();
         for (Entry e : entries) if (e.template != null) l.add(e.template);
         for (TemplateDef t : extra.values()) if (find(t.id) == null) l.add(t);
+        return l;
+    }
+
+    /** Every template of {@link #templates()} once, in its newest revision ({@link #latest}), in the order of the listing. */
+    public List<TemplateDef> latestTemplates() {
+        List<TemplateDef> l = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (TemplateDef t : templates()) {
+            if (!seen.add(t.id)) continue;
+            TemplateDef newest = latest(t.id);
+            l.add(newest != null ? newest : t);
+        }
         return l;
     }
 
@@ -149,7 +166,7 @@ public final class TemplateLibrary implements TemplateSource {
     /** Every use of the template {@code id} in the library's composites: "Composite › Component (rev. n)". */
     public List<String> usesOf(String id) {
         List<String> l = new ArrayList<>();
-        for (TemplateDef t : templates()) {
+        for (TemplateDef t : latestTemplates()) {
             for (ComponentUse c : t.components) {
                 if (c.ref != null && c.ref.id.equals(id)) l.add(t.name + " › " + c.name + " (uses rev. " + c.ref.revision + ")");
             }

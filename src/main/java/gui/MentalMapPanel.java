@@ -130,20 +130,33 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         String pendingState;
         /** The {@link #stateFile} of each snapshot, where known. */
         final Map<Snapshot, File> stateFiles = new WeakHashMap<>();
+        /**
+         * The snapshots that hold a loaded state no layout run has placed yet, with the name of the state: putting one
+         * on the graph again makes it the {@link #pendingState} again.
+         */
+        final Map<Snapshot, String> pendingStates = new WeakHashMap<>();
         /** The graph shows a frame of the scrubber that nothing changed since (it may lie between two snapshots). */
         boolean showsFrame;
 
         /** Adds {@code s} to the history (see {@link SnapshotHistory#add(Snapshot, boolean)}) with the state file. */
         Snapshot add(Snapshot s, boolean makeReference) {
-            history.add(s, makeReference);
+            return add(s, makeReference, null);
+        }
+
+        /** {@link #add(Snapshot, boolean)}; the cap of the history does not drop {@code keep} to make room. */
+        Snapshot add(Snapshot s, boolean makeReference, Snapshot keep) {
+            history.add(s, makeReference, keep);
             if (stateFile != null) stateFiles.put(s, stateFile);
             return s;
         }
 
-        /** Snapshot {@code s} was put on the graph: its state file is the graph's now, no loaded state waits. */
+        /**
+         * Snapshot {@code s} was put on the graph: its state file is the graph's now, and the loaded state that waits
+         * for a run is the one {@code s} holds, if any.
+         */
         void restored(Snapshot s) {
             stateFile = stateFiles.get(s);
-            pendingState = null;
+            pendingState = pendingStates.get(s);
             showsFrame = false;
         }
     }
@@ -216,6 +229,8 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
     private final JCheckBox liveToggle;
     private Timer liveTimer;
     private boolean suppressLive = false;
+    /** The live toggle's state for graph events of other threads, which may not ask the toggle itself. */
+    private volatile boolean liveOn;
     // Timeline scrubber / morph animation
     private final JSlider scrubSlider;
     /** "k / n" under the scrubber: the snapshot nearest to its position. */
@@ -242,6 +257,13 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
     private final TimelineCamera camera = new TimelineCamera(this::onManualCameraChange, this::isTimelineRunning);
     private final SwitchToggle keepInViewSwitch = new SwitchToggle("Keep graph in view", true);
     private final JLabel keepInViewState = new JLabel();
+    /** Updates of the "… ago" texts of the snapshot cards, rebuilt with the cards. */
+    private final List<Runnable> agoUpdates = new ArrayList<>();
+    /** Keeps the "… ago" texts of the cards and of the reference status current. */
+    private final Timer agoTimer = new Timer(30_000, e -> {
+        for (Runnable r : agoUpdates) r.run();
+        updateReferenceStatus();
+    });
 
     /**
      * Builds the sections "Method", "Reference", "Timeline" and "History" in a transparent column without an outer
@@ -298,7 +320,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         liveToggle = new JCheckBox(Ui.wrapped("Auto re-layout while editing", CHECK_TEXT_WIDTH));
         liveToggle.setOpaque(false);
         liveToggle.setToolTipText(Ui.tooltip("Run the selected layout 0.4 s after an edit of the graph. "
-                + "The SBGN steps and the constraint re-solve after a move do not count as edits."));
+                + "Moving nodes, the SBGN steps and the constraint re-solve after a move do not count as edits."));
         liveToggle.addActionListener(e -> onLiveToggled());
 
         runStatusLabel = new StatusLabel("Ready");
@@ -326,7 +348,8 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         scrubber.add(scrubSlider, BorderLayout.CENTER);
         scrubber.add(scrubEnds(positionLabel), BorderLayout.SOUTH);
 
-        playButton = Ui.button("▶ Play", "Animate the morph across the whole timeline.", e -> togglePlay());
+        playButton = Ui.button("▶ Play", "Animate the morph from the scrubber's position to the newest snapshot; "
+                + "from the oldest one when the scrubber is at the end.", e -> togglePlay());
         backButton = Ui.button("← Back", "Glide to the previous snapshot.", e -> step(-1));
         nextButton = Ui.button("Next →", "Glide to the next snapshot.", e -> step(1));
         playButton.setName("mentalMapPlay");
@@ -364,6 +387,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         add(sections, BorderLayout.CENTER);
 
         refreshTimeline();
+        agoTimer.start();
 
         if (instance != null) instance.dispose();
         instance = this;
@@ -427,6 +451,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
     private void dispose() {
         stopTimeline();
         camera.release();
+        agoTimer.stop();
         if (liveTimer != null) liveTimer.stop();
         MainFrame mainFrame = MainFrame.getInstance();
         if (mainFrame != null) mainFrame.removeSessionListener(this);
@@ -504,6 +529,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
     }
 
     public void postGraphCleared(GraphEvent e) {
+        graphEdited();
     }
 
     public void postNodeAdded(GraphEvent e) {
@@ -544,9 +570,13 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
     private void graphEdited() {
         if (!SwingUtilities.isEventDispatchThread()) {
             // e.g. an algorithm run in the background: the panel's state belongs to the event thread, but only the
-            // stack of this thread shows whether the change is layout output
-            boolean layoutOutput = liveToggle.isSelected() && isLayoutOutput();
-            SwingUtilities.invokeLater(() -> graphEdited(layoutOutput));
+            // stack of this thread shows whether the change is layout output. The change belongs to the graph the panel
+            // listens to now; if another graph is active by the time the event thread gets to it, it is not this one's.
+            Graph edited = graph;
+            boolean layoutOutput = liveOn && isLayoutOutput();   // the stack walk only matters for a live run
+            SwingUtilities.invokeLater(() -> {
+                if (edited == graph) graphEdited(layoutOutput);
+            });
             return;
         }
         graphEdited(false);
@@ -599,7 +629,10 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
     /** Re-layout the live graph preserving the pinned reference snapshot. */
     private void runPreserve(boolean addToHistory) {
         Graph live = activeGraph();
-        if (live == null) return;
+        if (live == null) {
+            status("Open a graph first", StatusLabel.Kind.ERROR);
+            return;
+        }
         Snapshot ref = history.getReference();
         if (ref == null) {
             // Nothing pinned yet: capture the current layout as the first reference.
@@ -616,6 +649,8 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         long start = System.nanoTime();
         try {
             status("Running " + methodName(choice) + " …", StatusLabel.Kind.BUSY);
+            // the run blocks the event thread: paint the status now, or it is replaced before anyone sees it
+            if (addToHistory) runStatusLabel.paintImmediately(0, 0, runStatusLabel.getWidth(), runStatusLabel.getHeight());
             // The layout runs in the frame of the snapshots, without the display offset: the runner first puts every
             // node at its reference position (or next to its reference neighbours), so the offset does not reach it.
             GraphBounds.translate(live, -ox, -oy);
@@ -635,7 +670,11 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
                     String label = t.pendingState == null ? "After " + methodName(choice)
                             : t.pendingState + " · " + methodName(choice);
                     t.pendingState = null;
-                    t.add(Snapshot.capture(live, label), false);
+                    Snapshot result = Snapshot.capture(live, label);
+                    // a run that left the graph as the newest snapshot has it (e.g. Run layout clicked twice) adds
+                    // no step without any change to the timeline
+                    List<Snapshot> all = history.getAll();
+                    if (all.isEmpty() || !all.get(all.size() - 1).sameState(result)) t.add(result, false);
                 }
                 growOffset(GraphBounds.union(history.bounds(), GraphBounds.of(live)));
                 done = true;
@@ -650,9 +689,10 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
             long millis = (System.nanoTime() - start) / 1_000_000L;
             status("Finished in " + millis + " ms", StatusLabel.Kind.SUCCESS);
         } catch (RuntimeException | LinkageError ex) {
-            status("Layout failed: " + ex.getMessage(), StatusLabel.Kind.ERROR);
+            String why = ex.getMessage() == null || ex.getMessage().isEmpty() ? ex.getClass().getSimpleName() : ex.getMessage();
+            status("Layout failed: " + why, StatusLabel.Kind.ERROR);
             JOptionPane.showMessageDialog(this,
-                    "The selected layout could not be completed:\n" + ex.getMessage(),
+                    "The selected layout could not be completed:\n" + why,
                     "Layout error", JOptionPane.ERROR_MESSAGE);
         } finally {
             suppressLive = false;
@@ -686,7 +726,10 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
     private void captureSnapshot(String label) {
         engaged = true;
         Graph live = activeGraph();
-        if (live == null || live.getNumberOfNodes() == 0) return;
+        if (live == null || live.getNumberOfNodes() == 0) {
+            status(live == null ? "Open a graph first" : "The graph has no nodes to capture", StatusLabel.Kind.ERROR);
+            return;
+        }
         stopTimeline();
         GraphTimeline t = timeline;
         // A fixed name ("Snapshot n" as its card would show it now): names by place would change once the cap drops
@@ -694,8 +737,9 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         if (label == null) label = "Snapshot " + (history.addedCount() + 1);
         // In the frame of the timeline; nodes nobody moved since the panel put them there get exactly that position.
         // A capture moves nothing (it would bypass VANTED's undo history), so the display offset is not grown here.
-        Snapshot s = t.add(Snapshot.capture(live, label, t.offsetX, t.offsetY, t.shown), true);
+        Snapshot s = t.add(captureUnmodified(live, label, t), true);
         t.shown = s.positionsByUid();
+        status("Pinned “" + label + "” as the reference", StatusLabel.Kind.SUCCESS);
         camera.ensureScrollable(live, GraphBounds.of(live));
         refreshTimeline();
         showSliderAt(history.getAll().size() - 1);
@@ -795,16 +839,48 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         return f.isFile() ? f : null;
     }
 
-    /** The file after {@code f} in its folder (same extension, by name), or null. */
+    /** The file after {@code f} in its folder (same extension, by name with numbers in order: T2 before T10), or null. */
     private static File fileAfter(File f) {
         if (f == null || f.getParentFile() == null) return null;
         String ext = extensionOf(f.getName());
         File[] siblings = f.getParentFile().listFiles(x -> x.isFile() && !x.isHidden()
                 && extensionOf(x.getName()).equalsIgnoreCase(ext));
         if (siblings == null) return null;
-        Arrays.sort(siblings);
-        for (File s : siblings) if (s.getName().compareTo(f.getName()) > 0) return s;
+        Arrays.sort(siblings, (a, b) -> compareNames(a.getName(), b.getName()));
+        for (File s : siblings) if (compareNames(s.getName(), f.getName()) > 0) return s;
         return null;
+    }
+
+    /**
+     * Compares file names with every run of digits taken as a number, so that "T2" comes before "T10" (leading zeros
+     * do not count: "T02" and "T2" differ only by the final tie break on the plain names).
+     */
+    static int compareNames(String a, String b) {
+        int i = 0, j = 0;
+        while (i < a.length() && j < b.length()) {
+            char ca = a.charAt(i), cb = b.charAt(j);
+            if (Character.isDigit(ca) && Character.isDigit(cb)) {
+                int si = i, sj = j;
+                while (i < a.length() && Character.isDigit(a.charAt(i))) i++;
+                while (j < b.length() && Character.isDigit(b.charAt(j))) j++;
+                String na = stripZeros(a.substring(si, i)), nb = stripZeros(b.substring(sj, j));
+                if (na.length() != nb.length()) return na.length() - nb.length();
+                int c = na.compareTo(nb);
+                if (c != 0) return c;
+            } else {
+                if (ca != cb) return ca - cb;
+                i++;
+                j++;
+            }
+        }
+        int rest = (a.length() - i) - (b.length() - j);
+        return rest != 0 ? rest : a.compareTo(b);
+    }
+
+    private static String stripZeros(String digits) {
+        int k = 0;
+        while (k < digits.length() - 1 && digits.charAt(k) == '0') k++;
+        return digits.substring(k);
     }
 
     private static String extensionOf(String name) {
@@ -824,9 +900,22 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
      */
     private void autoCaptureOnLoad(Graph loaded) {
         if (loaded == null || loaded.getNumberOfNodes() == 0) return;
-        Snapshot s = history.add(Snapshot.capture(loaded, "On graph load", timeline.offsetX, timeline.offsetY, timeline.shown));
+        Snapshot s = history.add(captureUnmodified(loaded, "On graph load", timeline));
         timeline.shown = s.positionsByUid();
         refreshTimeline();
+    }
+
+    /**
+     * Captures {@code g} in the frame of {@code t}. The uids a capture gives the nodes ({@link Snapshot#ensureUid}) are
+     * no change of the map: a graph the user only looked at or captured does not ask to be saved afterwards.
+     */
+    private static Snapshot captureUnmodified(Graph g, String label, GraphTimeline t) {
+        boolean wasModified = g.isModified();
+        try {
+            return Snapshot.capture(g, label, t.offsetX, t.offsetY, t.shown);
+        } finally {
+            g.setModified(wasModified);
+        }
     }
 
     /**
@@ -866,7 +955,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         Graph live = activeGraph();
         if (live == null) return;
         stopTimeline();
-        keepLiveState();
+        keepLiveState(s);   // the snapshot being restored stays in the history, however full it is
         double ox = timeline.offsetX, oy = timeline.offsetY;
         growOffset(history.bounds());   // e.g. a captured state that reached negative coordinates
         // before the restore: its node deletions refresh the lists, which then need not rebuild the old run's rows
@@ -893,22 +982,26 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
     /**
      * Before the timeline puts a snapshot on the graph: the state the graph shows becomes the newest snapshot (the
      * reference stays pinned) unless a snapshot holds it or it is an unchanged frame of the scrubber, so that edits,
-     * the result of a live run and a loaded state are not lost.
+     * the result of a live run and a loaded state are not lost. The cap of the history does not drop {@code keep} (the
+     * snapshot about to be restored; may be null) to make room. Returns whether a snapshot was added.
      */
-    private void keepLiveState() {
+    private boolean keepLiveState(Snapshot keep) {
         Graph live = activeGraph();
         GraphTimeline t = timeline;
-        if (live == null || live.getNumberOfNodes() == 0 || history.isEmpty()) return;
-        if (t.showsFrame && showsTimelineFrame(live, t)) return;
+        if (live == null || live.getNumberOfNodes() == 0 || history.isEmpty()) return false;
+        if (t.showsFrame && showsTimelineFrame(live, t)) return false;
         String label = t.pendingState != null ? t.pendingState : "Snapshot " + (history.addedCount() + 1);
         Snapshot now = Snapshot.capture(live, label, t.offsetX, t.offsetY, t.shown);
         for (Snapshot s : history.getAll()) {
-            if (s.sameState(now)) return;
+            if (s.sameState(now)) return false;
         }
-        t.add(now, false);
+        t.add(now, false, keep);
+        // a loaded state that no run has placed yet: putting this snapshot on the graph again lets the next run name it
+        if (t.pendingState != null) t.pendingStates.put(now, t.pendingState);
         t.shown = now.positionsByUid();
         refreshTimeline();
         showSliderAt(history.getAll().size() - 1);
+        return true;
     }
 
     /** Every node of {@code live} stands where the timeline last put it ({@link GraphTimeline#shown}). */
@@ -924,6 +1017,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
 
     /** Live mode needs a reference taken before the first edit; switching it on counts as using the panel. */
     private void onLiveToggled() {
+        liveOn = liveToggle.isSelected();
         if (liveToggle.isSelected()) {
             engaged = true;
             if (history.getReference() == null) captureSnapshot("Initial");
@@ -960,7 +1054,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         if (ref == null) {
             referenceStatusLabel.setStatus("Nothing pinned yet", StatusLabel.Kind.INFO);
         } else {
-            referenceStatusLabel.setStatus("Pinned: " + ref.getNodeCount() + " nodes · " + ref.ago(),
+            referenceStatusLabel.setStatus("Pinned: " + Ui.count(ref.getNodeCount(), "node") + " · " + ref.ago(),
                     StatusLabel.Kind.SUCCESS);
         }
         if (referenceHint != null) referenceHint.setVisible(ref == null);
@@ -971,6 +1065,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         if (timelineListPanel == null) return;
         lastScrubIndex = -1; // history changed → scrubber must re-sync topology on next move
         timelineListPanel.clearRows();
+        agoUpdates.clear();
         List<Snapshot> all = history.getAll();
         if (all.isEmpty()) {
             timelineListPanel.addRow(Ui.hint("No snapshots yet – capture one to pin the reference."));
@@ -1052,7 +1147,16 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         }
         Graph live = activeGraph();
         if (live == null) return;
-        if (!isTimelineRunning()) keepLiveState();   // the scrubber was moved by hand
+        if (!isTimelineRunning()) {
+            // The scrubber was moved by hand: an edited state becomes the newest snapshot first (which puts the
+            // scrubber on it). The position the user chose keeps its place among the snapshots there were before.
+            int value = scrubSlider.getValue(), before = history.getAll().size();
+            if (keepLiveState(null) && before >= 2) {
+                int after = history.getAll().size(), dropped = before + 1 - after;   // the cap may drop the oldest
+                double g = Math.max(0, value / (double) SCRUB_MAX * (before - 1) - dropped);
+                showSliderValue((int) Math.round(g / (after - 1) * SCRUB_MAX));
+            }
+        }
         List<Snapshot> s = history.getAll();
         int n = s.size();
         if (n < 2) return;
@@ -1180,7 +1284,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
             restTimeline();
             return;
         }
-        keepLiveState();
+        keepLiveState(null);
         List<Snapshot> all = history.getAll();
         int n = all.size();
         if (n < 2) return;
@@ -1221,7 +1325,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
      * continue from the snapshot the running step heads for.
      */
     private void step(int direction) {
-        keepLiveState();
+        keepLiveState(null);
         List<Snapshot> all = history.getAll();
         int n = all.size();
         Graph live = activeGraph();
@@ -1343,7 +1447,10 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         title.setFont(Ui.bold());
         VerticalStack text = new VerticalStack();
         text.addRow(title);
-        text.addRow(Ui.hint(Ui.esc(s.ago() + " · " + s.getNodeCount() + " nodes"), CARD_TEXT_WIDTH), Ui.GAP_XS);
+        JLabel meta = text.addRow(Ui.hint(" ", CARD_TEXT_WIDTH), Ui.GAP_XS);
+        Runnable showMeta = () -> meta.setText(Ui.wrapped(Ui.esc(s.ago() + " · " + Ui.count(s.getNodeCount(), "node")), CARD_TEXT_WIDTH));
+        showMeta.run();
+        agoUpdates.add(showMeta);
         if (isRef) {
             JPanel badgeRow = new JPanel(new BorderLayout());   // keeps the badge at its own width
             badgeRow.setOpaque(false);

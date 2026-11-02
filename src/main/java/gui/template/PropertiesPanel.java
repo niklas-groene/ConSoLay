@@ -114,6 +114,15 @@ abstract class PropertiesPanel extends JPanel {
         commitOnChange(a, commit);
     }
 
+    /**
+     * Also runs {@code commit} before saving, undoing, closing or rebuilding: for an editable combo box, whose typed
+     * text reaches its listeners only with Enter or when it loses the focus (a keyboard shortcut takes no focus).
+     * {@code commit} must do nothing when the value did not change.
+     */
+    final void onPending(Runnable commit) {
+        pending.add(commit);
+    }
+
     private Runnable commitOnChange(JTextComponent c, Consumer<String> commit) {
         final String[] before = {c.getText().trim()};
         Runnable r = () -> {

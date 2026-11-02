@@ -6,6 +6,9 @@ import constraints.ConstraintCheck;
 import constraints.ConstraintKind;
 import constraints.spec.ConstraintSpec;
 import constraints.spec.ConstraintSpecs;
+import gui.components.Ui;
+import layout.template.io.Json;
+import layout.template.io.TemplateCodec;
 import layout.template.io.TemplateLibrary;
 import layout.template.model.ComponentUse;
 import layout.template.model.PatternEdge;
@@ -117,19 +120,59 @@ final class EditorModel {
 
     void setClean() {
         dirty = false;
+        mergeKey = null;   // a step after saving is a step of its own, not part of one from before
         fire();
     }
 
-    /** One undoable change: {@code change} mutates {@link #def()}; everything derived follows. */
-    void change(String name, Runnable change) {
-        beginStep(name);
+    /**
+     * One undoable change: {@code change} mutates {@link #def()}; everything derived follows. A change that leaves the
+     * template as it was (a combo box set to the value it had, a selection) makes no undo step and does not mark the
+     * template changed. Returns whether it made an undo step.
+     */
+    boolean change(String name, Runnable change) {
+        TemplateDef before = def.copy();
+        mergeKey = null;
+        message = null;
+        notes.clear();
+        try {
+            change.run();
+        } catch (RuntimeException | Error e) {
+            // what the change did up to the failure can be undone
+            pushStep(before, name);
+            endStep();
+            throw e;
+        }
+        if (sameContent(before, def)) {
+            rebuild();
+            fire();
+            return false;
+        }
+        pushStep(before, name);
+        endStep();
+        return true;
+    }
+
+    private void pushStep(TemplateDef before, String name) {
+        undo.push(before);
+        undoNames.push(name);
+        redo.clear();
+        redoNames.clear();
         while (undo.size() > 200) {
             undo.removeLast();
             undoNames.removeLast();
         }
-        notes.clear();
-        change.run();
-        endStep();
+    }
+
+    /**
+     * True if {@code a} and {@code b} would be saved alike. Compared as JSON text: the maps hold arrays (star angles,
+     * offsets), which a map comparison would compare by identity.
+     */
+    private static boolean sameContent(TemplateDef a, TemplateDef b) {
+        try {
+            return Json.write(TemplateCodec.toJson(a)).equals(Json.write(TemplateCodec.toJson(b)));
+        } catch (RuntimeException e) {
+            return false;   // cannot tell: count it as a change
+        }
     }
 
     /**
@@ -142,8 +185,8 @@ final class EditorModel {
             notes.clear();
             change.run();
             endStep();
-        } else {
-            change(name, change);
+        } else if (!change(name, change)) {
+            return;   // nothing changed: the next step of this key must not merge into the step before
         }
         mergeKey = key;
         mergeUntil = now + 1000;
@@ -221,6 +264,7 @@ final class EditorModel {
     /** Replaces the template (after "Save as copy", or navigation back to it). */
     void replace(TemplateDef t) {
         def = t;
+        mergeKey = null;
         rebuild();
         fire();
     }
@@ -394,8 +438,8 @@ final class EditorModel {
         selEdges.removeAll(goneEdges);
         int updated = 0, invalid = 0;
         for (String n : notes.values()) if (n.startsWith("Invalid")) invalid++; else updated++;
-        message = (gone.size() + goneEdges.size()) + " elements deleted" + (updated > 0 ? "; " + updated + " constraints updated" : "")
-                + (invalid > 0 ? "; " + invalid + " constraints are invalid now (see the list)" : "") + ".";
+        message = Ui.count(gone.size() + goneEdges.size(), "element") + " deleted" + (updated > 0 ? "; " + Ui.count(updated, "constraint") + " updated" : "")
+                + (invalid > 0 ? "; " + Ui.count(invalid, "constraint") + (invalid == 1 ? " is" : " are") + " invalid now (see the list)" : "") + ".";
     }
 
     /**

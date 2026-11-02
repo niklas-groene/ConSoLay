@@ -4,8 +4,11 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.ActionListener;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 import java.awt.font.TextAttribute;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -124,6 +127,32 @@ public final class Ui {
     /** A tooltip that wraps at 260 px. */
     public static String tooltip(String html) {
         return html == null ? null : wrapped(html, 260);
+    }
+
+    /** "1 node", "3 nodes": {@code n} and the noun in the singular, or with an "s" for every other number. */
+    public static String count(long n, String singular) {
+        return count(n, singular, singular + "s");
+    }
+
+    /** "1 entry", "3 entries": {@code n} and the noun in the singular or the given plural. */
+    public static String count(long n, String singular, String plural) {
+        return n + " " + (n == 1 ? singular : plural);
+    }
+
+    /**
+     * The menu shortcut of {@code keyCode} as the platform writes it: "⌘S" / "⇧⌘Z" on the Mac, "Ctrl+S" /
+     * "Ctrl+Shift+Z" elsewhere (the key bindings use the menu shortcut key of the toolkit as well).
+     */
+    public static String shortcut(int keyCode, boolean shift) {
+        String key = KeyEvent.getKeyText(keyCode);
+        // Apple writes the symbols in the order ⌃⌥⇧⌘ without separators; the JDK's text would be "⌘+⇧"
+        if (isMac()) return (shift ? "⇧" : "") + "⌘" + key;
+        int mask = Toolkit.getDefaultToolkit().getMenuShortcutKeyMask() | (shift ? InputEvent.SHIFT_MASK : 0);
+        return KeyEvent.getKeyModifiersText(mask) + "+" + key;
+    }
+
+    private static boolean isMac() {
+        return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).startsWith("mac");
     }
 
     // ---------------------------------------------------------------- factories

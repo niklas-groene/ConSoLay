@@ -87,8 +87,8 @@ final class MatchPopover {
         body.addRow(chip(MatchOverlay.stateText(m), c), Ui.GAP_XS);
 
         StringBuilder info = new StringBuilder();
-        info.append(m.nodes().size()).append(" nodes · ").append(m.edges().size()).append(" edges · ")
-                .append(m.task.plan.size()).append(m.task.plan.size() == 1 ? " constraint" : " constraints");
+        info.append(Ui.count(m.nodes().size(), "node")).append(" · ").append(Ui.count(m.edges().size(), "edge")).append(" · ")
+                .append(Ui.count(m.task.plan.size(), "constraint"));
         if (m.task.template.isComposite()) {
             info.append("<br>Whole composite: ");
             int k = 0;
@@ -151,8 +151,8 @@ final class MatchPopover {
             TemplateInstance inst = (TemplateInstance) m.instance;
             addInstanceActions(body, inst, () -> wb.openPopover(m));
         } else if (m.state != Match.State.INVALID) {
-            PrimaryButton apply = Ui.primaryButton("Apply this match", "Makes its " + m.task.plan.size()
-                    + " constraints on these nodes and solves the layout once (Edit › Undo reverts it).", e -> {
+            PrimaryButton apply = Ui.primaryButton("Apply this match", "Makes its " + Ui.count(m.task.plan.size(), "constraint")
+                    + " on these nodes and solves the layout once (Edit › Undo reverts it).", e -> {
                         String msg = wb.apply(java.util.Collections.singletonList(m), null);
                         wb.openPopover(m);
                         TemplatePanel.status(msg);

@@ -103,6 +103,8 @@ public final class TemplateWorkbench {
     List<Match> chooser;
     /** Instance emphasised on the graph (from the instance list), or null. */
     TemplateInstance focusInstance;
+    /** The instance chosen in the instance list, or null: it is emphasised again once an instance popover closes. */
+    TemplateInstance listInstance;
     /** {@link #focusInstance} came from a click on the graph: it goes with the popover. */
     private boolean instancePopover;
     /** The markings on the graph are the planned constraints of the open match. */
@@ -242,6 +244,8 @@ public final class TemplateWorkbench {
         GraphState s = state(g);
         if (s == null) return;
         s.page = Math.max(0, Math.min(pageCount(g) - 1, page));
+        hover = null;
+        MatchInteraction.get().hideCard();   // the hover card of a match that is no longer shown
         closePopover();
         fire();
     }
@@ -369,6 +373,7 @@ public final class TemplateWorkbench {
         st.page = 0;
         st.message = null;
         hover = null;
+        MatchInteraction.get().hideCard();   // the hover card of a match of the old run
         closePopover();
         run.start(new SearchRun.Listener() {
             @Override public void delivered(SearchRun r, List<Match> added, List<Match> changed) {
@@ -636,6 +641,7 @@ public final class TemplateWorkbench {
             }
         }
         if (focusInstance == inst) focusInstance = null;
+        if (listInstance == inst) listInstance = null;
         refreshConstraintViews();
         fire();
     }
@@ -732,7 +738,7 @@ public final class TemplateWorkbench {
         if (chooser != null) hover = null;   // what the chooser previewed
         focus = null;
         chooser = null;
-        if (instancePopover) focusInstance = null;
+        if (instancePopover) focusInstance = listInstance != null && listInstance.graph == activeGraph() ? listInstance : null;
         instancePopover = false;
         clearPlannedMarkings();
         MatchPopover.hideAll();

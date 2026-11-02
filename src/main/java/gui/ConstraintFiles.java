@@ -20,6 +20,8 @@ import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.Component;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -43,6 +45,9 @@ final class ConstraintFiles {
         if (fc.showSaveDialog(parent) != JFileChooser.APPROVE_OPTION) return;
         File f = fc.getSelectedFile();
         if (!f.getName().toLowerCase().endsWith(".json")) f = new File(f.getParentFile(), f.getName() + GraphConstraints.COMPANION_EXT);
+        // the map's own companion file is written on every File › Save as well; any other file is replaced only if wanted
+        if (f.exists() && !f.equals(suggested) && JOptionPane.showConfirmDialog(parent, f.getName() + " exists. Replace it?",
+                SAVE_TITLE, JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) return;
         try {
             GraphConstraints.writeCompanion(g, ConstraintStore.constraints, f);
             MainFrame.showMessage("Constraints saved to " + f.getName() + ".", MessageType.INFO);
@@ -59,6 +64,19 @@ final class ConstraintFiles {
         if (suggested != null && suggested.isFile()) fc.setSelectedFile(suggested);
         if (fc.showOpenDialog(parent) != JFileChooser.APPROVE_OPTION) return;
         File f = fc.getSelectedFile();
+        // Read and check the file first: a file that cannot be read, or holds no constraints, leaves the map's as they are.
+        String text;
+        try {
+            text = new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(parent, "Could not read the file: " + e.getMessage(), LOAD_TITLE, JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        String problem = GraphConstraints.problemOf(text);
+        if (problem != null) {
+            JOptionPane.showMessageDialog(parent, f.getName() + ": " + problem + " Nothing was loaded.", LOAD_TITLE, JOptionPane.ERROR_MESSAGE);
+            return;
+        }
         if (!ConstraintStore.constraints.getAllConstraints().isEmpty() || !InstanceRegistry.of(g).isEmpty()) {
             Object[] options = {"Replace", "Add", "Cancel"};
             int choice = JOptionPane.showOptionDialog(parent, "The map already has constraints. Replace them with the file's, "
@@ -69,21 +87,18 @@ final class ConstraintFiles {
                 for (TemplateInstance inst : InstanceRegistry.of(g)) TemplateApplier.remove(inst, ConstraintStore.constraints);
                 ConflictLog.forget(new ArrayList<>(ConstraintStore.constraints.getAllConstraints()));
                 ConstraintStore.constraints.clear();
+                DisplayConstraints.clearMarkings();   // the markings of the constraints just removed
             }
         }
-        try {
-            GraphConstraints.markAttached(g);
-            StoreCodec.Report r = GraphConstraints.readCompanion(f, g, ConstraintStore.constraints, gui.template.TemplatePanel.templateSource());
-            AddonTab.afterConstraintsLoaded(g, r);
-            if (!r.problems.isEmpty()) {
-                StringBuilder sb = new StringBuilder("<html>").append(Ui.esc(r.summary())).append("<br><br>");
-                List<String> ps = r.problems;
-                for (int i = 0; i < Math.min(12, ps.size()); i++) sb.append("• ").append(Ui.esc(ps.get(i))).append("<br>");
-                if (ps.size() > 12) sb.append("… and ").append(ps.size() - 12).append(" more");
-                JOptionPane.showMessageDialog(parent, sb.toString(), LOAD_TITLE, JOptionPane.WARNING_MESSAGE);
-            }
-        } catch (IOException e) {
-            JOptionPane.showMessageDialog(parent, "Could not read the file: " + e.getMessage(), LOAD_TITLE, JOptionPane.ERROR_MESSAGE);
+        GraphConstraints.markAttached(g);
+        StoreCodec.Report r = GraphConstraints.read(text, g, ConstraintStore.constraints, gui.template.TemplatePanel.templateSource());
+        AddonTab.afterConstraintsLoaded(g, r);
+        if (!r.problems.isEmpty()) {
+            StringBuilder sb = new StringBuilder("<html>").append(Ui.esc(r.summary())).append("<br><br>");
+            List<String> ps = r.problems;
+            for (int i = 0; i < Math.min(12, ps.size()); i++) sb.append("• ").append(Ui.esc(ps.get(i))).append("<br>");
+            if (ps.size() > 12) sb.append("… and ").append(ps.size() - 12).append(" more");
+            JOptionPane.showMessageDialog(parent, sb.toString(), LOAD_TITLE, JOptionPane.WARNING_MESSAGE);
         }
     }
 

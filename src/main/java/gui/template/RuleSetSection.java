@@ -83,6 +83,7 @@ final class RuleSetSection extends Section {
         });
         list.setVisibleRowCount(4);
         list.setFixedCellWidth(1);
+        list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);   // the editor and the buttons act on one rule
         list.addListSelectionListener(e -> { if (!e.getValueIsAdjusting()) showRule(); });
         list.getAccessibleContext().setAccessibleName("Rules");
         addRow(new gui.components.NestedScrollPane(list) {
@@ -124,7 +125,8 @@ final class RuleSetSection extends Section {
             load();
         });
         JButton open = Ui.button("Open…", "Opens a rule set file (" + TemplateFiles.RULES_EXT + ").", e -> open());
-        JButton save = Ui.button("Save…", "Saves the rule set with every template it needs.", e -> save());
+        JButton save = Ui.button("Save…", "Saves the rule set with every template it needs; asks where, proposing the file "
+                + "it was opened from or saved to last.", e -> save());
         save.setName("saveRules");
         addRow(Ui.row(neu, open, save), Ui.GAP_S);
     }
@@ -272,8 +274,12 @@ final class RuleSetSection extends Section {
                     StatusLabel.Kind.ERROR);
             return;
         }
-        panel.startSearch(tasks);
-        status.setStatus("Searching " + tasks.size() + (tasks.size() == 1 ? " rule" : " rules") + (skipped.isEmpty() ? "" : "; skipped: " + String.join(", ", skipped)),
+        String why = panel.startSearch(tasks);
+        if (why != null) {
+            status.setStatus("Not searched: " + why, StatusLabel.Kind.ERROR);
+            return;
+        }
+        status.setStatus("Searching " + Ui.count(tasks.size(), "rule") + (skipped.isEmpty() ? "" : "; skipped: " + String.join(", ", skipped)),
                 skipped.isEmpty() ? StatusLabel.Kind.INFO : StatusLabel.Kind.ERROR);
     }
 
@@ -284,7 +290,7 @@ final class RuleSetSection extends Section {
             rules = TemplateFiles.loadRules(fc.getSelectedFile());
             file = fc.getSelectedFile();
             load();
-            status.setStatus("Opened '" + rules.name + "' (" + rules.rules.size() + " rules). The graph is not changed.", StatusLabel.Kind.SUCCESS);
+            status.setStatus("Opened '" + rules.name + "' (" + Ui.count(rules.rules.size(), "rule") + "). The graph is not changed.", StatusLabel.Kind.SUCCESS);
         } catch (IOException | TemplateCodec.FormatException ex) {
             JOptionPane.showMessageDialog(this, ex.getMessage(), "Open rule set", JOptionPane.ERROR_MESSAGE);
         }
@@ -292,18 +298,18 @@ final class RuleSetSection extends Section {
 
     private void save() {
         rules.name = nameField.getText().trim().isEmpty() ? "Untitled rule set" : nameField.getText().trim();
-        File target = file;
-        if (target == null) {
-            JFileChooser fc = new JFileChooser(panel.library() == null ? null : panel.library().getFolder());
-            fc.setSelectedFile(new File(fc.getCurrentDirectory(), TemplateFiles.fileName(rules.name, TemplateFiles.RULES_EXT)));
-            if (fc.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return;
-            target = fc.getSelectedFile();
-            if (!target.getName().endsWith(TemplateFiles.RULES_EXT)) target = new File(target.getParentFile(), target.getName() + TemplateFiles.RULES_EXT);
-        }
+        // always asks (the button says so), proposing the file of the rule set: saving under another name is possible too
+        JFileChooser fc = new JFileChooser(file != null ? file.getParentFile() : panel.library() == null ? null : panel.library().getFolder());
+        fc.setSelectedFile(file != null ? file : new File(fc.getCurrentDirectory(), TemplateFiles.fileName(rules.name, TemplateFiles.RULES_EXT)));
+        if (fc.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return;
+        File target = fc.getSelectedFile();
+        if (!target.getName().endsWith(TemplateFiles.RULES_EXT)) target = new File(target.getParentFile(), target.getName() + TemplateFiles.RULES_EXT);
+        if (target.exists() && !target.equals(file) && JOptionPane.showConfirmDialog(this, target.getName() + " exists. Replace it?",
+                "Save rule set", JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) return;
         try {
             TemplateFiles.saveRules(rules, target);
             file = target;
-            status.setStatus("Saved " + target.getName() + " with " + rules.templates.size() + " templates.", StatusLabel.Kind.SUCCESS);
+            status.setStatus("Saved " + target.getName() + " with " + Ui.count(rules.templates.size(), "template") + ".", StatusLabel.Kind.SUCCESS);
         } catch (IOException ex) {
             JOptionPane.showMessageDialog(this, ex.getMessage(), "Save rule set", JOptionPane.ERROR_MESSAGE);
         }

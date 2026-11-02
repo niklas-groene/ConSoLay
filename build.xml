@@ -194,6 +194,7 @@ Looked in:
             <arg value="adaptagrams_bridge.UserSolveTest"/>
             <arg value="gui.DragUndoTest"/>
             <arg value="gui.NestedScrollTest"/>
+            <arg value="gui.MentalMapNamesTest"/>
             <arg value="layout.store.StoreInstancesTest"/>
             <arg value="constraints.ConflictLogTest"/>
             <arg value="layout.sbgn.StepRunTest"/>

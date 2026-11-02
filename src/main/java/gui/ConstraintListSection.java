@@ -77,7 +77,7 @@ final class ConstraintListSection extends Section {
             ConstraintGroup group = groupOf(c);
             if (group != null) {
                 List<Constraint> ms = membersOf(c);
-                StringBuilder sb = new StringBuilder("<b>" + Ui.esc(group.label) + "</b><br>" + ms.size() + " constraints of step "
+                StringBuilder sb = new StringBuilder("<b>" + Ui.esc(group.label) + "</b><br>" + Ui.count(ms.size(), "constraint") + " of step "
                         + Ui.esc(group.step) + "; the switch, the priority and Delete act on all of them.");
                 int k = 0;
                 for (Constraint m : ms) {
@@ -322,10 +322,11 @@ final class ConstraintListSection extends Section {
             list.setSelectedIndices(ix);
             lostSelection = keep.size() < selected.size() || (editing != null && !model.contains(editing));
             setTrailingText(represented.isEmpty() ? (model.size() == total ? String.valueOf(total) : model.size() + " of " + total)
-                    : model.size() + " entries · " + total);
+                    : Ui.count(model.size(), "entry", "entries") + " · " + total);
             list.setVisibleRowCount(Math.max(2, Math.min(6, model.size())));
             emptyHint.setVisible(model.isEmpty());
-            emptyHint.setText(Ui.wrapped(total == 0 ? "No constraints yet: choose one above and add it to selected nodes."
+            emptyHint.setText(Ui.wrapped(active == null ? "Open a graph first." : total == 0
+                    ? "No constraints yet: choose one above and add it to selected nodes."
                     : "No constraint matches the filter.", Ui.TEXT_WIDTH));
         } finally {
             refreshing = false;

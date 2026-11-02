@@ -431,6 +431,49 @@ public class TemplateEditorTest {
     }
 
     /** A pattern template with {@code n} nodes n1, n2, … in a row. */
+    /**
+     * A change that leaves the template as it was (a value chosen again) makes no undo step and leaves it unchanged,
+     * also with array values (the star's angles) in it; a real change makes one.
+     */
+    @Test
+    public void aChangeThatChangesNothingMakesNoUndoStep() throws Exception {
+        onEdt(() -> {
+            TemplateDef t = pattern(4);
+            ConstraintSpec star = new ConstraintSpec(t.nextConstraintId(), ConstraintKind.STAR);
+            star.role("hub", Collections.singletonList("n1")).role("ring", Arrays.asList("n2", "n3", "n4"))
+                    .param("radius", 100.0).param("angles", new double[]{0, 120, 240});
+            t.constraints.add(star);
+            EditorModel model = new EditorModel(t, new TemplateLibrary(null));
+            assertFalse(model.change("Change priority", () -> model.def().constraint("k1").priority = model.def().constraint("k1").priority));
+            assertFalse(model.canUndo());
+            assertFalse(model.isDirty());
+            org.junit.Assert.assertTrue(model.change("Rename node", () -> model.def().node("n1").label = "Hub"));
+            org.junit.Assert.assertTrue(model.canUndo());
+            org.junit.Assert.assertTrue(model.isDirty());
+        });
+    }
+
+    /**
+     * A condition the controls cannot show exactly ("is" with two values) stays as it is when the panel commits what
+     * its controls hold (before saving, undoing, rebuilding): only an edit by the user changes it.
+     */
+    @Test
+    public void aConditionTheControlsCannotShowStaysUntilItIsEdited() throws Exception {
+        onEdt(() -> {
+            TemplateDef t = pattern(2);
+            t.node("n1").setCondition(new Condition(Condition.SBGN_ROLE, Condition.Op.EQUALS, Arrays.asList("macromolecule", "complex")));
+            EditorModel model = new EditorModel(t, new TemplateLibrary(null));
+            model.selNodes.add("n1");
+            PatternProperties pp = new PatternProperties(model);
+            pp.commitPending();
+            model.fire();
+            pp.commitPending();
+            assertFalse(model.canUndo());
+            assertFalse(model.isDirty());
+            assertEquals(Arrays.asList("macromolecule", "complex"), model.def().node("n1").condition(Condition.SBGN_ROLE).values);
+        });
+    }
+
     private static TemplateDef pattern(int n) {
         TemplateDef t = TemplateDef.create("Pattern", TemplateDef.Kind.PATTERN);
         for (int i = 0; i < n; i++) t.nodes.add(new PatternNode(t.nextNodeId(), 60 * i, 0));

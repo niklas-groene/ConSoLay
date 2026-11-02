@@ -66,18 +66,29 @@ final class TemplateEditor extends JFrame {
     private PropertiesPanel properties;
     /** The open editor of each template: opening it again brings that window to the front. */
     private static final Map<String, TemplateEditor> OPEN = new HashMap<>();
-    private final String openKey;
+    /** Every open editor window, also one whose template another window is found by. */
+    private static final List<TemplateEditor> ALL = new ArrayList<>();
+    /** The key of this window in {@link #OPEN}: the id of the template it edits, once saved (see {@link #open}). */
+    private String openKey;
+    /**
+     * The template's revision exists already (a file, the library, a composite that embeds it): a changed version is
+     * saved as the next revision. False for a template made just now (from the selection, an example, a copy), which
+     * its first save stores as it is.
+     */
+    private boolean stored;
     /** Components looked into, from the edited template down (read-only views). */
     private final List<ComponentUse> path = new ArrayList<>();
     private final List<TemplateDef> pathTemplates = new ArrayList<>();
     /** The canvas and info panel of the read-only look inside shown now (null: none), replaced on each navigation. */
     private JComponent viewCanvas, viewInfo;
 
-    private TemplateEditor(TemplateDef def, File file, TemplateLibrary library, String bannerMessage, Consumer<TemplateDef> onSaved) {
+    private TemplateEditor(TemplateDef def, String key, boolean stored, File file, TemplateLibrary library, String bannerMessage,
+                           Consumer<TemplateDef> onSaved) {
         super("Template: " + def.name);
         this.file = file;
         this.onSaved = onSaved;
-        this.openKey = def.id;
+        this.openKey = key;
+        this.stored = stored || file != null;
         this.model = new EditorModel(def, library);
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
         addWindowListener(new WindowAdapter() {
@@ -129,18 +140,43 @@ final class TemplateEditor extends JFrame {
         setLocationByPlatform(true);
     }
 
-    /** Opens an editor window for {@code def} (a copy is edited). */
+    /**
+     * Opens an editor window for {@code def} (a copy is edited); the window is known by the template's id, and the
+     * template counts as stored if it has a file.
+     */
     static TemplateEditor open(TemplateDef def, File file, TemplateLibrary library, String banner, Consumer<TemplateDef> onSaved) {
-        TemplateEditor known = OPEN.get(def.id);
+        return open(def, def.id, file != null, file, library, banner, onSaved);
+    }
+
+    /**
+     * Opens an editor window for {@code def} (a copy is edited), or brings the window opened under {@code key} to the
+     * front (with {@code banner}, if one is given). {@code key} is the id of the template the window edits, or for a
+     * window that edits a copy under a new id (an example, a GML import, an imported file) a key of its own, so that
+     * choosing the same thing again finds this window and nothing else does. {@code stored}: see {@link #stored}.
+     */
+    static TemplateEditor open(TemplateDef def, String key, boolean stored, File file, TemplateLibrary library, String banner,
+                               Consumer<TemplateDef> onSaved) {
+        TemplateEditor known = OPEN.get(key);
         if (known != null) {
+            if (banner != null && !banner.isEmpty()) known.setBanner(banner);
             known.setVisible(true);
             known.toFront();
             return known;
         }
-        TemplateEditor e = new TemplateEditor(def.copy(), file, library, banner, onSaved);
-        OPEN.put(def.id, e);
+        TemplateEditor e = new TemplateEditor(def.copy(), key, stored, file, library, banner, onSaved);
+        OPEN.put(key, e);
+        ALL.add(e);
         e.setVisible(true);
         return e;
+    }
+
+    /** Brings the window opened under {@code key} to the front; false if there is none. */
+    static boolean toFront(String key) {
+        TemplateEditor known = OPEN.get(key);
+        if (known == null) return false;
+        known.setVisible(true);
+        known.toFront();
+        return true;
     }
 
     // ================================================================== layout
@@ -151,7 +187,8 @@ final class TemplateEditor extends JFrame {
         JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, Ui.GAP_M, Ui.GAP_S));
         bar.setOpaque(false);
         saveButton.setName("saveTemplate");
-        saveButton.setToolTipText(Ui.tooltip("Checks the template and saves it as a new revision (⌘S)."));
+        saveButton.setToolTipText(Ui.tooltip("Checks the template and saves it; a changed template becomes a new revision ("
+                + Ui.shortcut(KeyEvent.VK_S, false) + ")."));
         saveButton.addActionListener(e -> save(false));
         JButton copy = Ui.button("Save as copy…", "Saves the template as a new, independent template.", e -> save(true));
         copy.setName("saveCopy");
@@ -255,10 +292,19 @@ final class TemplateEditor extends JFrame {
         JButton solve = new JButton("Apply constraints");
         solve.setToolTipText(Ui.tooltip("Solves the template's constraints once on the pattern (like a solve in the graph)."));
         solve.addActionListener(e -> {
-            model.beginStep("Apply constraints");
-            java.util.Map<String, String> unmet = model.solve(false);
-            model.message = unmet.isEmpty() ? "All constraints hold." : unmet.size() + " constraints do not hold (see the list).";
-            model.endStep();
+            if (model.def().constraints.isEmpty()) {
+                model.message = "The template has no constraints to apply yet.";
+                model.fire();
+                return;
+            }
+            // an undo step only if the solve moved a node; solve() reports itself when the solver is not available
+            model.change("Apply constraints", () -> {
+                java.util.Map<String, String> unmet = model.solve(false);
+                if (model.message == null) {
+                    model.message = unmet.isEmpty() ? "All constraints hold."
+                            : Ui.count(unmet.size(), "constraint") + (unmet.size() == 1 ? " does" : " do") + " not hold (see the list).";
+                }
+            });
         });
         bar2.add(keep);
         bar2.add(all);
@@ -322,8 +368,10 @@ final class TemplateEditor extends JFrame {
         setTitle((model.isDirty() ? "• " : "") + "Template: " + t.name + " (rev. " + t.revision + ")" + (t.isComposite() ? " — composite" : ""));
         undoButton.setEnabled(model.canUndo());
         redoButton.setEnabled(model.canRedo());
-        undoButton.setToolTipText(Ui.tooltip(model.canUndo() ? "Undo: " + model.undoName() + " (⌘Z)" : "Nothing to undo"));
-        redoButton.setToolTipText(Ui.tooltip(model.canRedo() ? "Redo: " + model.redoName() + " (⇧⌘Z)" : "Nothing to redo"));
+        undoButton.setToolTipText(Ui.tooltip(model.canUndo() ? "Undo: " + Ui.esc(model.undoName()) + " ("
+                + Ui.shortcut(KeyEvent.VK_Z, false) + ")" : "Nothing to undo"));
+        redoButton.setToolTipText(Ui.tooltip(model.canRedo() ? "Redo: " + Ui.esc(model.redoName()) + " ("
+                + Ui.shortcut(KeyEvent.VK_Z, true) + ")" : "Nothing to redo"));
         int err = 0, na = 0, warn = 0;
         for (TemplateValidator.Problem p : model.problems()) {
             if (p.severity == TemplateValidator.Severity.ERROR) err++;
@@ -421,10 +469,12 @@ final class TemplateEditor extends JFrame {
             File dir = model.library == null ? null : model.library.getFolder();
             target = dir != null ? freeFile(dir, t.name) : chooseFile(t.name);
             if (target == null) return false;
-            TemplateDef known = model.library == null ? null : model.library.latest(t.id);
-            if (model.isDirty() && known != null) t.revision = Math.max(t.revision, known.revision) + 1;   // a changed known template
-        } else if (model.isDirty()) {
-            t.revision = model.def().revision + 1;
+        }
+        // A changed version of a revision that exists (a file, the library, a composite that embeds it, an imported
+        // file) is the next revision, also after the newest the library knows; the uses of the old one keep it.
+        TemplateDef known = model.library == null ? null : model.library.latest(t.id);
+        if (!asCopy && model.isDirty() && (stored || known != null)) {
+            t.revision = Math.max(t.revision, known == null ? 0 : known.revision) + 1;
         }
         try {
             TemplateFiles.save(t, target, model.library);
@@ -433,6 +483,15 @@ final class TemplateEditor extends JFrame {
             return false;
         }
         file = target;
+        stored = true;
+        // A copy, an example or an import saved for the first time: the window is found by the template it saved now,
+        // unless another window edits that template already (it stays the one found; this one keeps its key).
+        TemplateEditor other = OPEN.get(t.id);
+        if (!t.id.equals(openKey) && (other == null || other == this)) {
+            OPEN.remove(openKey, this);
+            openKey = t.id;
+            OPEN.put(openKey, this);
+        }
         model.replace(t);
         model.setClean();
         boolean notApplicable = !TemplateValidator.canApply(ps);
@@ -440,7 +499,17 @@ final class TemplateEditor extends JFrame {
                 ? " It contains parts this version cannot apply; they were kept unchanged." : "");
         model.fire();
         if (onSaved != null) onSaved.accept(t.copy());
+        // composites open in other windows may use it: their "update to rev. n" offers follow
+        for (TemplateEditor e : new ArrayList<>(ALL)) {
+            if (e != this) e.libraryChanged();
+        }
         return true;
+    }
+
+    /** A template of the library was saved in another window: what this one derives from the library is made anew. */
+    private void libraryChanged() {
+        model.rebuild();
+        model.fire();
     }
 
     /** A file for a new template in the library folder, under its name (numbered if that exists). */
@@ -472,7 +541,8 @@ final class TemplateEditor extends JFrame {
             if (a == JOptionPane.CANCEL_OPTION || a == JOptionPane.CLOSED_OPTION) return;
             if (a == JOptionPane.YES_OPTION && !save(false)) return;
         }
-        OPEN.remove(openKey);
+        OPEN.remove(openKey, this);
+        ALL.remove(this);
         dispose();
     }
 
@@ -663,9 +733,11 @@ final class TemplateEditor extends JFrame {
         TemplateLibrary.Entry entry = model.library == null ? null : model.library.find(t.id);
         List<String> uses = model.library == null ? new ArrayList<>() : model.library.usesOf(t.id);
         String banner = "You are changing the reused template '" + t.name + "'. Saving makes a new revision; '" + model.def().name
-                + "' and every other use keep their revision until they are updated" + (uses.isEmpty() ? "." : " (" + uses.size() + " uses: "
+                + "' and every other use keep their revision until they are updated" + (uses.isEmpty() ? "." : " (" + Ui.count(uses.size(), "use") + ": "
                 + String.join("; ", uses.subList(0, Math.min(3, uses.size()))) + (uses.size() > 3 ? "; …" : "") + ").");
-        open(t, entry == null || TemplateFiles.isGmlFile(entry.file) ? null : entry.file, model.library, banner, saved -> {
+        // the revision exists (in the library or embedded in this composite): a changed version is the next revision
+        boolean gml = entry != null && TemplateFiles.isGmlFile(entry.file);
+        open(t, t.id, !gml, entry == null || gml ? null : entry.file, model.library, banner, saved -> {
             if (onSaved != null) onSaved.accept(saved);
             if (model.library != null) model.library.reload();
             model.rebuild();
@@ -727,7 +799,7 @@ final class TemplateEditor extends JFrame {
         Collections.addAll(ports, explicit);
         if (ports.isEmpty() || model.library == null) return true;
         List<String> uses = new ArrayList<>();
-        for (TemplateDef t : model.library.templates()) {
+        for (TemplateDef t : model.library.latestTemplates()) {
             for (ComponentUse c : t.components) {
                 if (c.ref == null || !c.ref.id.equals(model.def().id)) continue;
                 for (Port p : ports) {

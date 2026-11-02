@@ -298,12 +298,16 @@ final class PatternProperties extends PropertiesPanel {
         sec.addRow(conditionEditor("Semantic role", n.condition(Condition.SBGN_ROLE), SbgnRoles.nodeRoles(TemplateWorkbench.activeGraph()),
                 c -> tweak("Change role condition", () -> {
                     PatternNode k = model.def().node(n.id);
+                    if (k == null) return;   // committed after the node went (undo)
                     k.setCondition(c);
                     if (c.op == Condition.Op.EQUALS && !c.values.isEmpty()) k.role = c.values.get(0);
                 })), Ui.GAP_S);
         for (Condition c : n.conditions) {
             if (Condition.SBGN_ROLE.equals(c.attribute)) continue;
-            sec.addRow(extraCondition(c, cond -> tweak("Change condition", () -> model.def().node(n.id).setCondition(cond)),
+            sec.addRow(extraCondition(c, cond -> tweak("Change condition", () -> {
+                        PatternNode k = model.def().node(n.id);
+                        if (k != null) k.setCondition(cond);
+                    }),
                     () -> edit("Remove condition", () -> model.def().node(n.id).conditions.removeIf(k -> k.attribute.equals(c.attribute)))), Ui.GAP_S);
         }
         JButton addCond = Ui.button("Add condition…", "A further search condition, e.g. on the label or another attribute.", e -> {
@@ -403,6 +407,7 @@ final class PatternProperties extends PropertiesPanel {
         sec.addRow(conditionEditor("Semantic role", e.condition(Condition.SBGN_ROLE), SbgnRoles.edgeRoles(TemplateWorkbench.activeGraph()),
                 c -> tweak("Change edge role", () -> {
                     PatternEdge k = model.def().edge(e.id);
+                    if (k == null) return;   // committed after the edge went (undo)
                     k.setCondition(c);
                     if (c.op == Condition.Op.EQUALS && !c.values.isEmpty()) k.role = c.values.get(0);
                 })), Ui.GAP_S);
@@ -421,8 +426,8 @@ final class PatternProperties extends PropertiesPanel {
         onText(name, v -> { if (!v.isEmpty()) tweak("Rename template", () -> model.def().name = v); });
         sec.addRow(Ui.labeled("Name", name));
         sec.addRow(descriptionField(t.description, v -> tweak("Change description", () -> model.def().description = v)), Ui.GAP_XS);
-        sec.addRow(Ui.hint("Revision " + t.revision + " · " + t.nodes.size() + " nodes · " + t.edges.size() + " edges · "
-                + t.constraints.size() + " constraints · " + t.ports.size() + " ports<br><font color='#9aa0a6'>id " + Ui.esc(t.id)
+        sec.addRow(Ui.hint("Revision " + t.revision + " · " + Ui.count(t.nodes.size(), "node") + " · " + Ui.count(t.edges.size(), "edge") + " · "
+                + Ui.count(t.constraints.size(), "constraint") + " · " + Ui.count(t.ports.size(), "port") + "<br><font color='#9aa0a6'>id " + Ui.esc(t.id)
                 + "</font><br>Positions are local (origin = top left of the pattern); fitting the view never changes them.", W), Ui.GAP_S);
         return sec;
     }
@@ -448,14 +453,20 @@ final class PatternProperties extends PropertiesPanel {
             }
         });
         value.setSelectedItem(String.join(", ", c.values));
-        final Condition[] shown = {current};
-        Runnable commit = () -> {
+        // The condition the controls stand for. It is compared with what they stood for when built, not with the stored
+        // condition: one the controls cannot show exactly (two values for "is", spaces) changes only when the user edits
+        // it, and no condition and "any value" are the same.
+        java.util.function.Supplier<Condition> read = () -> {
             Condition.Op o = (Condition.Op) op.getSelectedItem();
             String v = value.getEditor().getItem() == null ? "" : String.valueOf(value.getEditor().getItem()).trim();
             List<String> vals = new ArrayList<>();
             if (o == Condition.Op.IN_LIST) for (String p : v.split(",")) { if (!p.trim().isEmpty()) vals.add(p.trim()); }
             else if (o == Condition.Op.EQUALS && !v.isEmpty()) vals.add(v);
-            Condition n = new Condition(c.attribute, o, vals);
+            return new Condition(c.attribute, o, vals);
+        };
+        final Condition[] shown = {read.get()};
+        Runnable commit = () -> {
+            Condition n = read.get();
             if (!n.equals(shown[0])) {
                 shown[0] = n;
                 onChange.accept(n);
@@ -467,6 +478,7 @@ final class PatternProperties extends PropertiesPanel {
         });
         value.setEnabled(c.op == Condition.Op.EQUALS || c.op == Condition.Op.IN_LIST);
         value.addActionListener(e -> { if ("comboBoxEdited".equals(e.getActionCommand()) || "comboBoxChanged".equals(e.getActionCommand())) commit.run(); });
+        onPending(commit);   // a value typed without Enter counts before ⌘S, undo or closing too
         box.addRow(Ui.row(op, value), Ui.GAP_XS);
         return box;
     }

@@ -112,8 +112,8 @@ public class TilePalette<T> extends JPanel {
                         case KeyEvent.VK_DOWN: next = i + columns; break;
                         default: return;
                     }
+                    e.consume();   // also at the edge: the arrow keys would scroll the column away from the palette
                     if (next < 0 || next >= tiles.size()) return;
-                    e.consume();
                     setSelectedIndex(next);
                     tiles.get(next).requestFocusInWindow();
                 }

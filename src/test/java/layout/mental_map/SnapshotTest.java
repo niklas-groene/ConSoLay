@@ -181,4 +181,21 @@ public class SnapshotTest {
         assertSame(initial, h.getAll().get(0));
         assertSame(last, h.getAll().get(29));
     }
+
+    /** Restoring the oldest snapshot of a full history first keeps the live state: the cap drops another one. */
+    @Test
+    public void capKeepsTheSnapshotBeingRestored() {
+        Graph g = new AdjListGraph();
+        node(g, "A", 100, 100);
+        SnapshotHistory h = new SnapshotHistory();
+        Snapshot initial = h.add(Snapshot.capture(g, "Initial"));
+        for (int i = 0; i < 29; i++) h.add(Snapshot.capture(g, "After " + i), false);
+        Snapshot oldestOther = h.getAll().get(1), next = h.getAll().get(2);
+        Snapshot live = h.add(Snapshot.capture(g, "Live"), false, oldestOther);
+        assertEquals(30, h.getAll().size());
+        assertSame(initial, h.getAll().get(0));
+        assertSame(oldestOther, h.getAll().get(1));
+        assertFalse(h.getAll().contains(next));
+        assertSame(live, h.getAll().get(29));
+    }
 }

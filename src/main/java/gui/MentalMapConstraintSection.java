@@ -263,7 +263,7 @@ final class MentalMapConstraintSection extends Section {
             List<Constraint> cs = e.getValue();
             String title = (info == null ? e.getKey().name() : info.title) + (cs.size() > 1 ? " (" + cs.size() + "×)" : "");
             rows.add(new Row("kind-" + e.getKey().name(), e.getKey(), title,
-                    nodeCount(cs) + " nodes · " + cs.size() + (cs.size() == 1 ? " constraint" : " constraints"),
+                    Ui.count(nodeCount(cs), "node") + " · " + cs.size() + (cs.size() == 1 ? " constraint" : " constraints"),
                     info == null ? "" : info.description, e.getKey(), cs));
         }
         for (int i = 0; i < groupShapes.size(); i++) {
@@ -313,7 +313,7 @@ final class MentalMapConstraintSection extends Section {
         }
         String range = Math.abs(max - min) < 0.05 ? ConstraintCatalog.px(min)
                 : ConstraintCatalog.number(min) + "–" + ConstraintCatalog.px(max);
-        return nodeCount(seps) + " nodes · " + seps.size() + (seps.size() == 1 ? " gap ≥ " : " gaps ≥ ") + range;
+        return Ui.count(nodeCount(seps), "node") + " · " + seps.size() + (seps.size() == 1 ? " gap ≥ " : " gaps ≥ ") + range;
     }
 
     private static int nodeCount(List<Constraint> cs) {

@@ -22,7 +22,7 @@ import java.util.List;
 /**
  * Left part of the composite editor: the building blocks of the library (insert one as a component), the structural
  * links and the layout relations of the composite. Every step of the workflow has a visible control here as well
- * (dragging between ports on the canvas is a shortcut for "Connect ports…").
+ * (dragging between ports on the canvas is a shortcut for "Connect ports").
  *
  * @author Niklas Gröne
  */
@@ -76,7 +76,7 @@ final class CompositeSidebar extends JPanel {
             model.fire();
         });
         ls.addRow(narrowScroll(linkList));
-        JButton connect = Ui.button("Connect ports…", "Adds a structural link: an edge (or a shared node) between a port of one "
+        JButton connect = Ui.button("Connect ports", "Adds a structural link: an edge (or a shared node) between a port of one "
                 + "component and a port of another. Shortcut: drag from port to port on the canvas.", e -> connect());
         connect.setName("connectPorts");
         ls.addRow(connect, Ui.GAP_S);
@@ -154,7 +154,7 @@ final class CompositeSidebar extends JPanel {
         refreshing = true;
         try {
             List<TemplateDef> now = new ArrayList<>();
-            if (model.library != null) for (TemplateDef t : model.library.templates()) if (!t.id.equals(model.def().id)) now.add(t);
+            if (model.library != null) for (TemplateDef t : model.library.latestTemplates()) if (!t.id.equals(model.def().id)) now.add(t);
             if (!now.equals(java.util.Collections.list(blocks.elements()))) {
                 TemplateDef keep = blockList.getSelectedValue();
                 blocks.clear();
@@ -271,7 +271,7 @@ final class CompositeSidebar extends JPanel {
         public Component getListCellRendererComponent(JList<? extends TemplateDef> l, TemplateDef t, int i, boolean sel, boolean f) {
             this.t = t;
             name.setText(t.name);
-            sub.setText((t.isComposite() ? "Composite" : t.nodes.size() + " nodes") + " · " + t.ports.size() + " ports"
+            sub.setText((t.isComposite() ? "Composite" : Ui.count(t.nodes.size(), "node")) + " · " + Ui.count(t.ports.size(), "port")
                     + ("example".equals(t.source) ? " · Example" : ""));
             setBackground(sel ? l.getSelectionBackground() : i % 2 == 0 ? l.getBackground() : Ui.SURFACE_HOVER);
             name.setForeground(sel ? l.getSelectionForeground() : Ui.TEXT);

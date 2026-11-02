@@ -78,7 +78,7 @@ final class CompositeProperties extends PropertiesPanel {
                 }
                 t.ports.removeIf(p -> id.equals(p.component));
                 model.selComponent = null;
-                model.message = "Removed '" + c.name + "'" + (links + rels > 0 ? " with " + links + " links and " + rels + " layout relations" : "") + ".";
+                model.message = "Removed '" + c.name + "'" + (links + rels > 0 ? " with " + Ui.count(links, "link") + " and " + Ui.count(rels, "layout relation") : "") + ".";
             });
         } else if (model.selLink != null) {
             String id = model.selLink;
@@ -215,13 +215,14 @@ final class CompositeProperties extends PropertiesPanel {
             String shown = cur == null || cur.op == Condition.Op.ANY ? "(any role)" : String.join(", ", cur.values);
             role.setSelectedItem(shown);
             role.setToolTipText(Ui.tooltip("The SBGN role the joining edge must have (checked in \"Structure and semantics\" searches)."));
-            final String[] last = {shown};
-            role.addActionListener(e -> {
-                String v = String.valueOf(role.getSelectedItem()).trim();
+            final String[] last = {shown.trim()};   // as the commit reads it back: unchanged text is no change
+            java.util.function.Consumer<Object> commit = item -> {
+                String v = String.valueOf(item == null ? "" : item).trim();
                 if (v.equals(last[0])) return;   // an editable box reports one choice twice
                 last[0] = v;
                 tweak("Change link role", () -> {
                     StructureLink k = model.def().link(l.id);
+                    if (k == null) return;   // committed after the link went (undo)
                     k.edgeConditions.removeIf(c -> Condition.SBGN_ROLE.equals(c.attribute));
                     if (!v.isEmpty() && !v.startsWith("(")) {
                         List<String> vals = new ArrayList<>();
@@ -229,7 +230,10 @@ final class CompositeProperties extends PropertiesPanel {
                         k.edgeConditions.add(new Condition(Condition.SBGN_ROLE, vals.size() == 1 ? Condition.Op.EQUALS : Condition.Op.IN_LIST, vals));
                     }
                 });
-            });
+            };
+            role.addActionListener(e -> commit.accept(role.getSelectedItem()));
+            // a role typed without Enter counts before ⌘S, undo or closing too
+            onPending(() -> commit.accept(role.getEditor().getItem()));
             sec.addRow(Ui.labeled("Edge role", role), Ui.GAP_XS);
         }
         JButton swap = Ui.button("Swap ends", null, e -> edit("Swap link ends", () -> {
@@ -257,19 +261,23 @@ final class CompositeProperties extends PropertiesPanel {
         private final JComboBox<ComponentUse> cc;
         private final JComboBox<Object> pc = Ui.comboBox(new Object[0]);
         private boolean filling;
+        /** The component whose ports {@link #pc} lists. */
+        private ComponentUse listed;
 
         PortChoice(String label, String comp, String port, java.util.function.BiConsumer<String, String> onChange) {
             TemplateDef t = model.def();
             cc = Ui.comboBox(t.components.toArray(new ComponentUse[0]));
             cc.setSelectedItem(t.component(comp));
             fill(comp, port);
-            TemplateDef inner0 = Templates.resolve(t.component(comp), model.source());
-            if (inner0 != null && inner0.port(port) != null) pc.setSelectedItem(inner0.port(port));
-            else if (pc.getItemCount() > 0) pc.setSelectedIndex(pc.getItemCount() - 1);
+            selectPort(comp, port);
             cc.addActionListener(e -> {
+                // a combo box reports choosing the item it shows as well: that keeps the port
+                if (cc.getSelectedItem() == listed) return;
                 fill(comp, port);
+                ComponentUse c = (ComponentUse) cc.getSelectedItem();
+                if (c != null && c.id.equals(comp)) selectPort(comp, port);   // back to the component it had
                 String[] p = picked();
-                if (onChange != null && p != null) onChange.accept(p[0], p[1]);
+                if (onChange != null && p != null && !(p[0].equals(comp) && p[1].equals(port))) onChange.accept(p[0], p[1]);
             });
             pc.addActionListener(e -> {
                 if (filling) return;
@@ -280,11 +288,24 @@ final class CompositeProperties extends PropertiesPanel {
             box.addRow(Ui.labeled("Port", pc), Ui.GAP_XS);
         }
 
+        /** Selects {@code port} of component {@code comp} (or the last entry: the deleted port, if it is one). */
+        private void selectPort(String comp, String port) {
+            filling = true;
+            try {
+                TemplateDef inner = Templates.resolve(model.def().component(comp), model.source());
+                if (inner != null && inner.port(port) != null) pc.setSelectedItem(inner.port(port));
+                else if (pc.getItemCount() > 0) pc.setSelectedIndex(pc.getItemCount() - 1);
+            } finally {
+                filling = false;
+            }
+        }
+
         private void fill(String comp, String port) {
             filling = true;   // the first item added selects itself: that is no choice of the user's
             try {
                 pc.removeAllItems();
                 ComponentUse c = (ComponentUse) cc.getSelectedItem();
+                listed = c;
                 TemplateDef inner = Templates.resolve(c, model.source());
                 if (inner != null) for (Port p : inner.ports) pc.addItem(p);
                 if (inner == null || inner.port(port) == null) {

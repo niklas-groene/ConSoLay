@@ -5,6 +5,7 @@ import gui.components.VerticalStack;
 
 import javax.swing.*;
 import java.awt.*;
+import java.text.ParseException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,6 +27,8 @@ public final class ConstraintParamForm extends VerticalStack {
 
     private final List<ConstraintCatalog.Param> params;
     private final Map<String, JSpinner> spinners = new LinkedHashMap<>();
+    /** {@link #commitTyped} is taking over typed values: the change listeners are not told. */
+    private boolean committing;
     private final Map<String, JCheckBox> autos = new LinkedHashMap<>();
     private final Map<String, JCheckBox> flags = new LinkedHashMap<>();
 
@@ -62,7 +65,7 @@ public final class ConstraintParamForm extends VerticalStack {
             spinner.setName(p.key);
             if (p.type == ConstraintCatalog.ParamType.DECIMAL) spinner.setEditor(new JSpinner.NumberEditor(spinner, "0.0"));
             if (p.tooltip != null) spinner.setToolTipText(Ui.tooltip(p.tooltip));
-            if (onChange != null) spinner.addChangeListener(e -> onChange.run());
+            if (onChange != null) spinner.addChangeListener(e -> { if (!committing) onChange.run(); });
             spinners.put(p.key, spinner);
 
             JPanel field = new JPanel(new BorderLayout(Ui.GAP_S, 0));
@@ -101,6 +104,7 @@ public final class ConstraintParamForm extends VerticalStack {
 
     /** The current values by key: Double for numbers (NaN while "auto" is ticked), Boolean for yes / no settings. */
     public Map<String, Object> values() {
+        commitTyped();
         Map<String, Object> v = new LinkedHashMap<>();
         for (ConstraintCatalog.Param p : params) {
             if (p.type == ConstraintCatalog.ParamType.BOOLEAN) {
@@ -112,6 +116,29 @@ public final class ConstraintParamForm extends VerticalStack {
             }
         }
         return v;
+    }
+
+    /**
+     * Takes over a number typed into a field but not confirmed with Enter or Tab: a click on a button does not always
+     * take the focus from the field (on the Mac it never does), so the value would otherwise be the one before. Only
+     * typed text is parsed: parsing the shown text back would round an exact value to the field's format. The change
+     * this makes tells no one: the caller reads all values anyway.
+     */
+    private void commitTyped() {
+        committing = true;
+        try {
+            for (JSpinner s : spinners.values()) {
+                if (!s.isEnabled() || !(s.getEditor() instanceof JSpinner.DefaultEditor)) continue;
+                JFormattedTextField text = ((JSpinner.DefaultEditor) s.getEditor()).getTextField();
+                try {
+                    if (!text.getText().equals(text.getFormatter().valueToString(s.getValue()))) s.commitEdit();
+                } catch (ParseException ignored) {
+                    // not a number: the field keeps its last value
+                }
+            }
+        } finally {
+            committing = false;
+        }
     }
 
     public boolean isEmpty() {

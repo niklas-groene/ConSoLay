@@ -97,6 +97,15 @@ public class ConstraintsTab extends JPanel {
         if (instance != null) instance.updateSelection();
     }
 
+    /** Another graph is active: the status and the note of the last Add belong to the graph it was made on. */
+    static void graphChanged() {
+        if (instance == null) return;
+        instance.lastAdded = Collections.emptyList();
+        instance.appliedBeforeAdd = Collections.emptySet();
+        instance.addStatus.setVisible(false);
+        instance.addNote.setVisible(false);
+    }
+
     private final SwitchToggle forceSwitch = new SwitchToggle("Force-directed", false);
     private final JLabel forceState = new JLabel();
     private final JLabel forceHint = Ui.hint(" ");
@@ -188,7 +197,7 @@ public class ConstraintsTab extends JPanel {
         section.addRow(switchRow("Avoid overlaps", overlapSwitch, overlapState), Ui.GAP_M);
         section.addRow(overlapHint, Ui.GAP_XS);
         JButton save = Ui.button("Save constraints\u2026", "Writes the constraints of the active graph into a file next to its map "
-                + "(<map>" + GraphConstraints.COMPANION_EXT + "). A map saved as GML or GraphML carries its constraints inside the file; "
+                + "(" + Ui.esc("<map>") + GraphConstraints.COMPANION_EXT + "). A map saved as GML or GraphML carries its constraints inside the file; "
                 + "SBGN-ML does not, so save them here: the file is read with the map.",
                 e -> ConstraintFiles.save(this));
         save.setName("saveConstraints");
@@ -337,6 +346,10 @@ public class ConstraintsTab extends JPanel {
         ConstraintCatalog.Info info = ConstraintCatalog.info(currentKind);
         ConstraintCatalog.Selection sel = currentSelection();
         String problem = info.problem(sel);
+        // a helper window of a running layout (the PD skeleton) shares the map's store: its nodes are no map nodes
+        if (sel.graph != null && ConstraintStore.isSideGraph(sel.graph)) {
+            problem = "This window is a helper view of a layout run: add constraints on the map itself.";
+        }
         if (problem == null) {
             selectionStatus.setStatus(info.selectionText(sel), StatusLabel.Kind.SUCCESS);
             addButton.setEnabled(true);

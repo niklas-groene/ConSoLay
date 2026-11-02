@@ -143,7 +143,7 @@ public class StepLayoutPanel extends JPanel {
 
         runAllButton = Ui.primaryButton("Run all steps",
                 "Run every step of the " + algorithm.title() + " layout on the active map, one after the other. If the map has no run yet, "
-                        + "a new one is prepared first.",
+                        + "a new one is prepared first; an unfinished run on another map is undone then (one run at a time).",
                 this::onRunAll);
         runAllButton.setName("runAll");
 
@@ -155,7 +155,7 @@ public class StepLayoutPanel extends JPanel {
         newLayoutButton.setName("newRun");
 
         resetButton = Ui.button("Reset",
-                "Undo the run: restore the node positions from before the first step, remove the edge bends and the "
+                "Undo the run: restore the node positions and the edge bends from before the first step, remove the "
                         + "constraints the steps added, and hide the constraint markings.",
                 this::onReset);
         resetButton.setName("reset");
@@ -231,7 +231,7 @@ public class StepLayoutPanel extends JPanel {
                 instance.executedSteps.clear();
                 instance.rebuildStepButtons();
                 if (instance.ownLayout() == null) instance.status("No run active.");
-                else instance.status("Run ready (" + instance.stepCount() + " steps).");
+                else instance.status("Run ready (" + Ui.count(instance.stepCount(), "step") + ").");
             });
         }
     }
@@ -273,7 +273,7 @@ public class StepLayoutPanel extends JPanel {
 
     private void onNewLayout(ActionEvent e) {
         if (!setupLayoutForActiveGraph(true)) return;
-        status("New run ready (" + stepCount() + " steps).");
+        status("New run ready (" + Ui.count(stepCount(), "step") + ").");
     }
 
     private void onRunAll(ActionEvent e) {
@@ -410,10 +410,12 @@ public class StepLayoutPanel extends JPanel {
             // marked any more.
             if (ConstraintStore.constraints != null) gone.removeAll(ConstraintStore.constraints.getAllConstraints());
             DisplayConstraints.hideConstraints(gone);
+            // the first step starts the run anew and drops what every later step added: those are to do again
+            if (index == 0) executedSteps.clear();
             if (!executedSteps.contains(index)) executedSteps.add(index);
             rebuildStepButtons();
             int n = (diff != null) ? diff.size() : 0;
-            status("Step " + (index + 1) + " done" + (n > 0 ? ": +" + n + " constraints." : "."), StatusLabel.Kind.SUCCESS);
+            status("Step " + (index + 1) + " done" + (n > 0 ? ": +" + Ui.count(n, "constraint") + "." : "."), StatusLabel.Kind.SUCCESS);
             if (showConstraintsBox.isSelected() && diff != null) {
                 for (Constraint c : diff) {
                     if (c != null) {
@@ -474,7 +476,7 @@ public class StepLayoutPanel extends JPanel {
         int count = stepCount();
         for (int i = 0; i < count; i++) executedSteps.add(i);
         rebuildStepButtons();
-        status("Run complete (" + count + " steps).", StatusLabel.Kind.SUCCESS);
+        status("Run complete (" + Ui.count(count, "step") + ").", StatusLabel.Kind.SUCCESS);
     }
 
     /** Status line under the actions; the full text is its tooltip because the line is clipped to the tab width. */

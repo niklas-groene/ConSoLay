@@ -66,6 +66,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * The add-on's inspector tab "Constraint-Based Layout" with three main tabs: "Algorithms" ({@link AlgorithmsTab}: SBGN,
@@ -138,14 +139,15 @@ public class AddonTab extends InspectorTab implements ViewListener, SessionListe
         // keeps its graph, store and listeners until its own switch back to the map or the user's next click.
         Graph pinned = ConstraintStore.pinnedGraph();
         if (pinned != null && (s == null || s.getGraph() != pinned)) return;
-        if (s != null) {
-            if (graph != null) {
-                try {
-                    graph.getListenerManager().removeGraphListener(this);
-                } catch (ListenerNotFoundException e) {
-                    ErrorMsg.addErrorMessage(e);
-                }
+        // the previous graph's listener goes in either case: without an active session as well
+        if (graph != null) {
+            try {
+                graph.getListenerManager().removeGraphListener(this);
+            } catch (ListenerNotFoundException e) {
+                ErrorMsg.addErrorMessage(e);
             }
+        }
+        if (s != null) {
             graph = s.getGraph();
             graph.getListenerManager().addDelayedGraphListener(this);
         } else {
@@ -156,8 +158,12 @@ public class AddonTab extends InspectorTab implements ViewListener, SessionListe
         Graph before = ConstraintStore.activeGraph();
         forgetClosedStores();
         ConstraintStore.activate(graph);
-        if (ConstraintStore.activeGraph() != before) ConflictLog.graphChanged();
-        else ConflictLog.storeReplaced();
+        if (ConstraintStore.activeGraph() != before) {
+            ConflictLog.graphChanged();
+            ConstraintsTab.graphChanged();
+        } else {
+            ConflictLog.storeReplaced();
+        }
         if (graph != null && !ConstraintStore.isSideGraph(graph)) attachSavedConstraints(s);
         ConstraintsTab.graphSelectionChanged();
         ListModels.updateAllLists();
@@ -286,9 +292,34 @@ public class AddonTab extends InspectorTab implements ViewListener, SessionListe
             }
         }
         if (!removed.isEmpty()) {
-            DisplayConstraints.clearMarkings();
+            onEventThread(DisplayConstraints::clearMarkings);
+            updateLists();
+            onEventThread(() -> afterConstraintsRemoved(removed));
+        }
+    }
+
+    /**
+     * Runs {@code r} now on the event thread. Graph events can come from another thread (a VANTED algorithm that runs in
+     * the background deletes nodes there): the markings, the lists and the conflict log belong to the event thread, so
+     * {@code r} runs there later; the store itself changes at once.
+     */
+    private static void onEventThread(Runnable r) {
+        if (SwingUtilities.isEventDispatchThread()) r.run();
+        else SwingUtilities.invokeLater(r);
+    }
+
+    /** A refresh of the lists is queued on the event thread for graph events of another thread. */
+    private static final AtomicBoolean listsQueued = new AtomicBoolean();
+
+    /** {@link ListModels#updateAllLists()} now on the event thread; from another thread once for a burst of events. */
+    private static void updateLists() {
+        if (SwingUtilities.isEventDispatchThread()) {
             ListModels.updateAllLists();
-            afterConstraintsRemoved(removed);
+        } else if (listsQueued.compareAndSet(false, true)) {
+            SwingUtilities.invokeLater(() -> {
+                listsQueued.set(false);
+                ListModels.updateAllLists();
+            });
         }
     }
 
@@ -327,9 +358,9 @@ public class AddonTab extends InspectorTab implements ViewListener, SessionListe
         boolean touched = false;   // a constraint that only loses the node changes as well
         for (Constraint c : ConstraintStore.constraints.getAllConstraints()) touched |= c.getNodes().contains(e.getNode());
         List<Constraint> removed = ConstraintStore.constraints.removeNode(e.getNode());
-        if (!removed.isEmpty()) DisplayConstraints.clearMarkings();
-        ListModels.updateAllLists();
-        if (touched) afterConstraintsRemoved(removed);
+        if (!removed.isEmpty()) onEventThread(DisplayConstraints::clearMarkings);
+        updateLists();
+        if (touched) onEventThread(() -> afterConstraintsRemoved(removed));
     }
 
     public void transactionFinished(TransactionEvent e, BackgroundTaskStatusProviderSupportingExternalCall status) {
@@ -363,9 +394,9 @@ public class AddonTab extends InspectorTab implements ViewListener, SessionListe
         }
         for (org.graffiti.graph.Node n : gone) removed.addAll(store.removeNode(n));
         if (removed.isEmpty() && gone.isEmpty()) return;
-        DisplayConstraints.clearMarkings();
-        ListModels.updateAllLists();
-        afterConstraintsRemoved(removed);
+        onEventThread(DisplayConstraints::clearMarkings);
+        updateLists();
+        onEventThread(() -> afterConstraintsRemoved(removed));
     }
 
     /**

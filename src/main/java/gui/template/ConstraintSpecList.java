@@ -249,8 +249,8 @@ final class ConstraintSpecList extends JPanel {
                     JOptionPane.INFORMATION_MESSAGE);
             return;
         }
-        model.change("Derive " + made.size() + " constraints", () -> model.def().constraints.addAll(made));
-        model.message = made.size() + " constraints derived from the arrangement; edit or delete them as you like.";
+        model.change("Derive " + Ui.count(made.size(), "constraint"), () -> model.def().constraints.addAll(made));
+        model.message = Ui.count(made.size(), "constraint") + " derived from the arrangement; edit or delete them as you like.";
         model.fire();
     }
 

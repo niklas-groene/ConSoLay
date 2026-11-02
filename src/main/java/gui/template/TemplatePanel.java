@@ -88,7 +88,8 @@ public class TemplatePanel extends JPanel {
     private final PrimaryButton findButton = new PrimaryButton("Find matches");
     private final StatusLabel searchStatus = new StatusLabel(" ");
     private final JLabel outdated = Ui.hint(" ");
-    private final JButton searchAgain = Ui.button("Search again", "The graph changed after the search: search anew.", e -> find());
+    private final JButton searchAgain = Ui.button("Search again", "The graph changed after the search: the same search anew "
+            + "(the same template or rules, options and nodes).", e -> searchAgain());
     private final JButton findMore = Ui.button("Find more", null, e -> findMore());
 
     // ---- matches
@@ -103,6 +104,8 @@ public class TemplatePanel extends JPanel {
         @Override protected void processMouseEvent(MouseEvent e) {
             if (e.getID() == MouseEvent.MOUSE_PRESSED) pressOnBox = e.getX() < BOX_COLUMN;
             super.processMouseEvent(e);
+            // only the selection this press makes is one for applying: the arrow keys open matches again afterwards
+            if (e.getID() == MouseEvent.MOUSE_RELEASED) pressOnBox = false;
         }
     };
     private final JLabel pageLabel = Ui.hint(" ");
@@ -276,9 +279,10 @@ public class TemplatePanel extends JPanel {
         TemplateDef t = i.template;
         StringBuilder sb = new StringBuilder();
         if (t.description != null && !t.description.isEmpty()) sb.append(Ui.esc(t.description)).append("<br>");
-        sb.append(t.isComposite() ? t.components.size() + " components, " + t.links.size() + " links, " + t.relations.size() + " layout relations"
-                : t.nodes.size() + " nodes, " + t.edges.size() + " edges, " + t.constraints.size() + " constraints");
-        if (!t.ports.isEmpty()) sb.append(", ").append(t.ports.size()).append(" ports");
+        sb.append(t.isComposite() ? Ui.count(t.components.size(), "component") + ", " + Ui.count(t.links.size(), "link") + ", "
+                + Ui.count(t.relations.size(), "layout relation")
+                : Ui.count(t.nodes.size(), "node") + ", " + Ui.count(t.edges.size(), "edge") + ", " + Ui.count(t.constraints.size(), "constraint"));
+        if (!t.ports.isEmpty()) sb.append(", ").append(Ui.count(t.ports.size(), "port"));
         List<TemplateValidator.Problem> ps = TemplateValidator.validate(t, sourceFor(t));
         for (TemplateValidator.Problem p : ps) {
             String color = p.severity == TemplateValidator.Severity.WARNING ? "#b06000" : "#c5221f";
@@ -311,7 +315,12 @@ public class TemplatePanel extends JPanel {
             t.revision = 1;
             t.source = "editor";
         }
-        TemplateEditor.open(t, file, library, banner, this::saved);
+        // An example or a GML file is edited as a copy under a new id: its window has a key of its own (choosing the
+        // entry again finds it, editing the original from a composite does not). A template of the library (also one
+        // held in memory only) is a stored revision, the copy is new.
+        boolean gml = i.file != null && TemplateFiles.isGmlFile(i.file);
+        boolean copy = i.example || gml;
+        TemplateEditor.open(t, copy ? "copy:" + i.template.id : i.template.id, !copy, file, library, banner, this::saved);
     }
 
     private void newFromSelection() {
@@ -330,8 +339,8 @@ public class TemplatePanel extends JPanel {
         TemplateCapture.Result r = TemplateCapture.capture(s.getGraph(), sel, ConstraintStore.constraints, ConstraintCatalog::describe,
                 "Template from selection");
         StringBuilder banner = new StringBuilder();
-        banner.append(sel.size()).append(" nodes, ").append(r.template.edges.size()).append(" edges and ").append(r.taken)
-                .append(r.taken == 1 ? " constraint" : " constraints").append(" taken over.");
+        banner.append(Ui.count(sel.size(), "node")).append(", ").append(Ui.count(r.template.edges.size(), "edge")).append(" and ")
+                .append(Ui.count(r.taken, "constraint")).append(" taken over.");
         if (!r.notTaken.isEmpty()) {
             banner.append(" Not taken over (").append(r.notTaken.size()).append("): ");
             for (int k = 0; k < r.notTaken.size() && k < 6; k++) banner.append(k > 0 ? "; " : "").append(r.notTaken.get(k));
@@ -351,13 +360,45 @@ public class TemplatePanel extends JPanel {
         JFileChooser fc = new JFileChooser(library.getFolder());
         if (fc.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
         File f = fc.getSelectedFile();
+        String key = "import:" + f.getAbsolutePath();   // known by the file until it is saved
+        if (TemplateEditor.toFront(key)) return;          // imported already and not saved yet: that window
+        TemplateDef t;
+        boolean gml = TemplateFiles.isGmlFile(f);
         try {
-            TemplateDef t = TemplateFiles.isGmlFile(f) ? TemplateFiles.importGml(f) : TemplateFiles.load(f);
-            TemplateEditor.open(t, null, library, TemplateFiles.isGmlFile(f) ? t.note
-                    : "Imported from " + f.getName() + ". Save to add it to the library folder.", this::saved);
+            t = gml ? TemplateFiles.importGml(f) : TemplateFiles.load(f);
         } catch (Exception ex) {
             JOptionPane.showMessageDialog(this, ex.getMessage(), "Import template", JOptionPane.ERROR_MESSAGE);
+            return;
         }
+        String banner = gml ? t.note : "Imported from " + f.getName() + ". Save to add it to the library folder.";
+        File file = null;
+        boolean stored = !gml;
+        // The same template (same id) in the library: saving the file as it is would list two templates with one id.
+        TemplateDef known = gml ? null : library.latest(t.id);
+        if (known != null) {
+            boolean newer = t.revision > known.revision;
+            String asNew = "Import as a new template", update = "Use as revision " + t.revision;
+            Object[] options = newer ? new Object[]{update, asNew, "Cancel"} : new Object[]{asNew, "Cancel"};
+            String message = "<html>The library has this template already: <b>" + Ui.esc(known.name) + "</b>, revision "
+                    + known.revision + ".<br>The file holds revision " + t.revision + (newer ? ", a newer one." : ".") + "</html>";
+            int a = JOptionPane.showOptionDialog(this, message, "Import template", JOptionPane.DEFAULT_OPTION,
+                    JOptionPane.QUESTION_MESSAGE, null, options, options[0]);
+            if (a < 0 || "Cancel".equals(options[a])) return;
+            if (update.equals(options[a])) {
+                TemplateLibrary.Entry entry = library.find(t.id);
+                file = entry == null || TemplateFiles.isGmlFile(entry.file) ? null : entry.file;
+                banner = "Revision " + t.revision + " of '" + known.name + "' from " + f.getName()
+                        + ". Saving puts it into the library in place of revision " + known.revision + ".";
+            } else {
+                t.id = TemplateDef.newId();
+                t.revision = 1;
+                t.source = "copy";
+                stored = false;
+                banner = "Imported from " + f.getName() + " as a template of its own (the library has the original). "
+                        + "Save to add it to the library folder.";
+            }
+        }
+        TemplateEditor.open(t, key, stored, file, library, banner, this::saved);
     }
 
     /** The editor saved a template: list it and select it. */
@@ -437,31 +478,50 @@ public class TemplatePanel extends JPanel {
 
     /** The search stopped at its match limit: search again, collecting twice as many. */
     private void findMore() {
+        SearchRun r = TemplateWorkbench.get().run(TemplateWorkbench.activeGraph());
+        if (r != null) repeat(r, r.options.maxMatches * 2);
+    }
+
+    /**
+     * The graph changed after the search: the same search anew (the template or the rules of the rule set, the options
+     * and the nodes it searched among), not one for the template chosen in the library now.
+     */
+    private void searchAgain() {
+        SearchRun r = TemplateWorkbench.get().run(TemplateWorkbench.activeGraph());
+        if (r == null) find();
+        else if (repeat(r, r.options.maxMatches)) TemplateWorkbench.get().setSuggestionMode(true);   // as a new search
+    }
+
+    /** Runs the search of {@code r} again on the active graph, collecting at most {@code maxMatches} matches; true if it started. */
+    private boolean repeat(SearchRun r, int maxMatches) {
         Graph g = TemplateWorkbench.activeGraph();
-        SearchRun r = TemplateWorkbench.get().run(g);
-        if (r == null) return;
-        int more = r.options.maxMatches * 2;
-        List<Node> scope = r.snapshot.scope();   // the same nodes as the run it extends
+        if (g == null) return false;
+        List<Node> scope = r.snapshot.scope();   // the same nodes as the run it repeats
         if (scope != null) {
             scope.removeIf(n -> !g.containsNode(n));
             if (scope.isEmpty()) {
-                searchStatus.setStatus("The nodes searched among are deleted; search again.", StatusLabel.Kind.ERROR);
-                return;
+                searchStatus.setStatus("The nodes searched among are deleted: select nodes and find matches anew.", StatusLabel.Kind.ERROR);
+                return false;
             }
         }
-        String why = TemplateWorkbench.get().search(r.tasks, r.options.semantics, r.options.exact, scope, more);
+        String why = TemplateWorkbench.get().search(r.tasks, r.options.semantics, r.options.exact, scope, maxMatches);
         if (why != null) searchStatus.setStatus(why, StatusLabel.Kind.ERROR);
+        return why == null;
     }
 
-    /** Starts a search for these tasks with the chosen options (also used by the rule set). */
-    void startSearch(List<SearchTask> tasks) {
+    /**
+     * Starts a search for these tasks with the chosen options (also used by the rule set). Returns null if it started,
+     * else why not (the status line shows it as well).
+     */
+    String startSearch(List<SearchTask> tasks) {
         String why = TemplateWorkbench.get().search(tasks, semanticsMode.isSelected(), exact.isSelected(), withinSelection.isSelected());
         if (why != null) {
             searchStatus.setStatus(why, StatusLabel.Kind.ERROR);
-            return;
+            return why;
         }
         // the matches are reviewed on the graph: the suggestion mode starts with the search
         TemplateWorkbench.get().setSuggestionMode(true);
+        return null;
     }
 
     // ================================================================== matches
@@ -553,8 +613,8 @@ public class TemplatePanel extends JPanel {
         if (sel.isEmpty()) return;
         MatchCheck together = wb.checkTogether(sel);
         if (together.status == MatchCheck.Status.CONFLICT || together.status == MatchCheck.Status.BLOCKED) {
-            StringBuilder sb = new StringBuilder("<html><b>" + sel.size() + " selected matches · " + TemplateWorkbench.constraintCount(sel)
-                    + " constraints</b><br><br>" + Ui.esc(together.summary) + "<br>");
+            StringBuilder sb = new StringBuilder("<html><b>" + Ui.count(sel.size(), "selected match", "selected matches") + " · "
+                    + Ui.count(TemplateWorkbench.constraintCount(sel), "constraint") + "</b><br><br>" + Ui.esc(together.summary) + "<br>");
             for (int k = 0; k < together.details.size() && k < 6; k++) sb.append("• ").append(Ui.esc(together.details.get(k))).append("<br>");
             sb.append("<br>Apply anyway? Constraints that lose keep their settings and are listed as not applied.</html>");
             if (JOptionPane.showConfirmDialog(this, sb.toString(), "Apply selected matches", JOptionPane.OK_CANCEL_OPTION,
@@ -587,10 +647,11 @@ public class TemplatePanel extends JPanel {
                 : " — " + Ui.esc(run.state().label()).toLowerCase(Locale.ROOT) + ": there may be more in the graph").append(".<br>");
         sb.append("This step applies <b>").append(now).append("</b>").append(applicable > now ? " (limit " + TemplateLimits.maxApplyPerStep
                 + " per step; " + (applicable - now) + " stay for the next step)" : "").append(": about ")
-                .append(TemplateWorkbench.constraintCount(todo)).append(" constraints.<br>");
-        if (applied > 0) sb.append(applied).append(" already applied are skipped.<br>");
-        if (invalid > 0) sb.append(invalid).append(" no longer fit and are skipped.<br>");
-        if (stale > 0) sb.append(Math.min(stale, now)).append(" outdated ones are checked again first.<br>");
+                .append(Ui.count(TemplateWorkbench.constraintCount(todo), "constraint")).append(".<br>");
+        if (applied > 0) sb.append(applied).append(applied == 1 ? " already applied is skipped.<br>" : " already applied are skipped.<br>");
+        if (invalid > 0) sb.append(invalid).append(invalid == 1 ? " no longer fits and is skipped.<br>" : " no longer fit and are skipped.<br>");
+        if (stale > 0) sb.append(Math.min(stale, now)).append(Math.min(stale, now) == 1 ? " outdated one is checked again first.<br>"
+                : " outdated ones are checked again first.<br>");
         sb.append("<br>The layout is solved once for all of them; Edit › Undo reverts the step.</html>");
         if (now == 0) {
             JOptionPane.showMessageDialog(this, "Nothing left to apply: every found match is applied or no longer fits.",
@@ -612,10 +673,12 @@ public class TemplatePanel extends JPanel {
         instanceList.setFixedCellHeight(38);
         instanceList.setFixedCellWidth(1);
         instanceList.setVisibleRowCount(4);
+        instanceList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);   // the actions act on one instance
         instanceList.getAccessibleContext().setAccessibleName("Applied template instances");
         instanceList.addListSelectionListener(e -> {
             if (e.getValueIsAdjusting() || updatingInstances) return;
             TemplateInstance i = instanceList.getSelectedValue();
+            TemplateWorkbench.get().listInstance = i;
             TemplateWorkbench.get().focusInstance = i;
             updateInstanceActions();
             MatchOverlay.repaintAll();
@@ -661,6 +724,7 @@ public class TemplatePanel extends JPanel {
             updatingInstances = false;
         }
         TemplateWorkbench wb = TemplateWorkbench.get();
+        wb.listInstance = instanceList.getSelectedValue();
         if (wb.focusInstance != null && wb.focusInstance.graph == g && !instanceModel.contains(wb.focusInstance)) wb.focusInstance = null;
         instanceSection.setTrailingText(String.valueOf(instanceModel.size()));
         instanceList.setVisibleRowCount(Math.max(1, Math.min(5, instanceModel.size())));
@@ -864,7 +928,7 @@ public class TemplatePanel extends JPanel {
             if (it.template == null) b.add("cannot be read");
             else {
                 if (it.example) b.add("Example");
-                if (it.template.isComposite()) b.add("Composite · " + it.template.components.size() + " parts");
+                if (it.template.isComposite()) b.add("Composite · " + Ui.count(it.template.components.size(), "part"));
                 if (it.file != null && TemplateFiles.isGmlFile(it.file)) b.add("GML · no constraints yet");
                 else if (!it.example) b.add("rev. " + it.template.revision);
                 if (!it.example && it.file == null) b.add("not in the library folder");

@@ -326,7 +326,7 @@ public final class ConstraintCatalog {
         put(new Info(ConstraintKind.ALIGN_LEFT, "Left", "Align left edges",
                 "The left edges of the nodes on one vertical line.", alignX, 2, 0, params(), editables(),
                 (s, v) -> one(new VerticalConstraint(s.nodes, VerticalConstraint.VerticalConstraintType.LEFT))));
-        put(new Info(ConstraintKind.ALIGN_CENTER, "Center", "Align centres vertically",
+        put(new Info(ConstraintKind.ALIGN_CENTER, "Centre", "Align centres vertically",
                 "The centres of the nodes on one vertical line.", alignX, 2, 0, params(), editables(),
                 (s, v) -> one(new VerticalConstraint(s.nodes, VerticalConstraint.VerticalConstraintType.MIDDLE))));
         put(new Info(ConstraintKind.ALIGN_RIGHT, "Right", "Align right edges",

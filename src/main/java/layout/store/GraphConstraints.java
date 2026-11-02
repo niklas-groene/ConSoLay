@@ -294,6 +294,33 @@ public final class GraphConstraints {
         return r;
     }
 
+    /**
+     * Why {@code text} cannot be read as saved constraints at all (no JSON object, another format, a newer version), or
+     * null: checked before a load replaces the constraints of a map, so a wrong file leaves them as they are.
+     */
+    public static String problemOf(String text) {
+        Object o;
+        try {
+            o = Json.parse(text);
+        } catch (Json.ParseException e) {
+            return "The file is no JSON: " + e.getMessage();
+        }
+        if (!(o instanceof Map)) return "The file is no JSON object.";
+        Map<?, ?> doc = (Map<?, ?>) o;
+        Object format = doc.get("format");
+        if (format != null && !StoreCodec.FORMAT.equals(format)) return "The file holds no constraints (format \"" + format + "\").";
+        // without a format: at least the parts of a saved store, or it is some other JSON file
+        if (format == null && !doc.containsKey("constraints") && !doc.containsKey("instances") && !doc.containsKey("nodes")) {
+            return "The file holds no constraints.";
+        }
+        Object version = ((Map<?, ?>) o).get("formatVersion");
+        if (version instanceof Number && ((Number) version).intValue() > StoreCodec.FORMAT_VERSION) {
+            return "The constraints were saved by a newer version (format " + ((Number) version).intValue() + "); this version reads format "
+                    + StoreCodec.FORMAT_VERSION + ".";
+        }
+        return null;
+    }
+
     /** {@code map.sbgn} → {@code map.sbgn.cbl.json} next to it. */
     public static File companionOf(File graphFile) {
         return new File(graphFile.getAbsoluteFile().getParentFile(), graphFile.getName() + COMPANION_EXT);

@@ -30,6 +30,14 @@ public class SnapshotHistory {
      * otherwise the current reference is kept, so that repeated layout runs keep preserving the same reference.
      */
     public Snapshot add(Snapshot s, boolean makeReference) {
+        return add(s, makeReference, null);
+    }
+
+    /**
+     * {@link #add(Snapshot, boolean)}; when the history is full, the oldest snapshot that is neither pinned nor
+     * {@code keep} (e.g. the one about to be restored; may be null) makes room.
+     */
+    public Snapshot add(Snapshot s, boolean makeReference, Snapshot keep) {
         if (s == null) return null;
         snapshots.add(s);
         added++;
@@ -37,7 +45,9 @@ public class SnapshotHistory {
             reference = s;
         }
         while (snapshots.size() > MAX_SIZE) {
-            snapshots.remove(snapshots.get(0) == reference ? 1 : 0);   // the oldest that is not pinned
+            int oldest = 0;
+            while (oldest < snapshots.size() - 1 && (snapshots.get(oldest) == reference || snapshots.get(oldest) == keep)) oldest++;
+            snapshots.remove(oldest);
         }
         return s;
     }
