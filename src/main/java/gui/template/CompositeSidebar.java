@@ -48,7 +48,7 @@ final class CompositeSidebar extends JPanel {
         VerticalStack column = new VerticalStack();
         column.setBorder(Ui.columnPadding(Ui.GAP_L, Ui.GAP_L));
 
-        Section lib = new Section("Building blocks");
+        Section lib = new Section("Templates");
         blockList.setName("buildingBlocks");
         blockList.setFixedCellHeight(42);
         blockList.setFixedCellWidth(1);
@@ -63,7 +63,7 @@ final class CompositeSidebar extends JPanel {
         lib.addRow(insert, Ui.GAP_S);
         column.addRow(lib);
 
-        Section ls = new Section("Structure (search conditions)");
+        Section ls = new Section("Structure links (search)");
         linkList.setName("linkList");
         linkList.setVisibleRowCount(3);
         linkList.setFixedCellWidth(1);
@@ -82,7 +82,7 @@ final class CompositeSidebar extends JPanel {
         ls.addRow(connect, Ui.GAP_S);
         column.addRow(ls, Ui.SECTION_GAP);
 
-        Section rs = new Section("Layout (applied as constraints)");
+        Section rs = new Section("Layout relations (constraints)");
         relationList.setName("relationList");
         relationList.setVisibleRowCount(3);
         relationList.setFixedCellWidth(1);
@@ -179,7 +179,7 @@ final class CompositeSidebar extends JPanel {
     private void insert() {
         TemplateDef t = blockList.getSelectedValue();
         if (t == null) {
-            model.message = "Choose a building block first.";
+            model.message = "Choose a template first.";
             model.fire();
             return;
         }

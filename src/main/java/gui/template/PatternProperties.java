@@ -21,15 +21,18 @@ import javax.swing.*;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
  * Right part of the pattern editor, showing the properties of the selection: for a constraint its name, state,
- * priority, values and elements per role; for a node its label, search conditions, size and ports; for an edge its
- * direction and role condition. The template's name and description are always shown below.
+ * priority, values and elements per role; for a node its label and semantic role, with further conditions, size and
+ * ports in parts that open on demand; for an edge its direction and role condition. The template's name and
+ * description are always shown below.
  *
  * @author Niklas Gröne
  */
@@ -43,6 +46,11 @@ final class PatternProperties extends PropertiesPanel {
     private int keepRoleIndex = -1;
     /** The texts of the shown constraint that depend on its values. */
     private JLabel constraintTitle, constraintState;
+    /** The parts of the node section the user opened ("size", "conditions", "ports"): they stay open across rebuilds. */
+    private final Set<String> openParts = new HashSet<>();
+    /** The size part of the shown node and the node, whose header shows the size. */
+    private Section sizePart;
+    private String sizeNode;
 
     PatternProperties(EditorModel model) {
         super(model);
@@ -59,6 +67,7 @@ final class PatternProperties extends PropertiesPanel {
         ConstraintSpec s = model.selConstraint == null ? null : model.def().constraint(model.selConstraint);
         constraintTitle = null;
         constraintState = null;
+        sizePart = null;
         // what was chosen last comes first, so it is in view without scrolling past the other
         if (s != null && model.constraintFirst) column.addRow(constraintSection(s));
         if (model.selNodes.size() == 1) {
@@ -74,6 +83,8 @@ final class PatternProperties extends PropertiesPanel {
 
     @Override
     void controlsKept() {
+        PatternNode n = sizePart == null ? null : model.def().node(sizeNode);
+        if (n != null) sizePart.setTrailingText(sizeText(n));
         ConstraintSpec s = model.selConstraint == null ? null : model.def().constraint(model.selConstraint);
         if (s == null || constraintTitle == null) return;
         constraintTitle.setText(TemplateEditor.title(s));
@@ -259,7 +270,7 @@ final class PatternProperties extends PropertiesPanel {
         };
         chosen.run();
         list.addListSelectionListener(e -> chosen.run());
-        box.addRow(Ui.row(add, remove, up, down), Ui.GAP_XS);
+        box.addRow(r.ordered ? Ui.row(add, remove, up, down) : Ui.row(add, remove), Ui.GAP_XS);
         return box;
     }
 
@@ -302,9 +313,12 @@ final class PatternProperties extends PropertiesPanel {
                     k.setCondition(c);
                     if (c.op == Condition.Op.EQUALS && !c.values.isEmpty()) k.role = c.values.get(0);
                 })), Ui.GAP_S);
+        int extra = 0;
+        for (Condition c : n.conditions) if (!Condition.SBGN_ROLE.equals(c.attribute)) extra++;
+        Section more = part("conditions", "More conditions", extra == 0 ? null : String.valueOf(extra));
         for (Condition c : n.conditions) {
             if (Condition.SBGN_ROLE.equals(c.attribute)) continue;
-            sec.addRow(extraCondition(c, cond -> tweak("Change condition", () -> {
+            more.addRow(extraCondition(c, cond -> tweak("Change condition", () -> {
                         PatternNode k = model.def().node(n.id);
                         if (k != null) k.setCondition(cond);
                     }),
@@ -316,13 +330,22 @@ final class PatternProperties extends PropertiesPanel {
             if (path == null || path.trim().isEmpty()) return;
             edit("Add condition", () -> model.def().node(n.id).setCondition(new Condition(path.trim(), Condition.Op.EXISTS, null)));
         });
-        sec.addRow(addCond, Ui.GAP_XS);
+        more.addRow(addCond, extra == 0 ? 0 : Ui.GAP_XS);
+        sec.addRow(more, Ui.GAP_M);
+
+        Section size = part("size", "Size", sizeText(n));
+        sizePart = size;
+        sizeNode = n.id;
         JSpinner w = spinner(n.width, 1, 5000, 5, "width " + n.id, "Resize node", v -> model.def().node(n.id).width = v);
         JSpinner h = spinner(n.height, 1, 5000, 5, "height " + n.id, "Resize node", v -> model.def().node(n.id).height = v);
-        sec.addRow(Ui.labeled("Size", Ui.row(w, h)), Ui.GAP_S);
+        size.addRow(Ui.labeled("W × H", Ui.row(w, h)));
+        sec.addRow(size, Ui.GAP_M);
 
-        sec.addRow(subheading("Ports (named connection points)"), Ui.GAP_M);
-        for (Port p : model.def().portsOf(n.id)) {
+        List<Port> ports = model.def().portsOf(n.id);
+        Section portPart = part("ports", "Ports", ports.isEmpty() ? null : String.valueOf(ports.size()));
+        portPart.setToolTipText(Ui.tooltip("Named connection points: composite templates connect their components at ports."));
+        boolean firstPort = true;
+        for (Port p : ports) {
             JTextField pn = new JTextField(p.name, 2);
             pn.setToolTipText(Ui.tooltip("Renaming keeps every use working (uses refer to the port's id " + p.id + ")."));
             onText(pn, v -> {
@@ -338,7 +361,8 @@ final class PatternProperties extends PropertiesPanel {
             row.add(new JLabel("⚑"), BorderLayout.WEST);
             row.add(pn, BorderLayout.CENTER);
             row.add(del, BorderLayout.EAST);
-            sec.addRow(row, Ui.GAP_XS);
+            portPart.addRow(row, firstPort ? 0 : Ui.GAP_XS);
+            firstPort = false;
         }
         JButton makePort = Ui.button("Make port…", "Names this node as a connection point (e.g. Input, Output, Centre) for composite templates.", e -> {
             String name = JOptionPane.showInputDialog(this, "Name of the port (e.g. Input, Output, Centre):", suggestPortName(n));
@@ -350,7 +374,8 @@ final class PatternProperties extends PropertiesPanel {
             edit("Make port", () -> model.def().ports.add(new Port(model.def().nextPortId(), name.trim(), n.id)));
         });
         makePort.setName("makePort");
-        sec.addRow(makePort, Ui.GAP_XS);
+        portPart.addRow(makePort, ports.isEmpty() ? 0 : Ui.GAP_XS);
+        sec.addRow(portPart, Ui.GAP_M);
 
         List<ConstraintSpec> cs = model.constraintsOf(n.id);
         sec.addRow(subheading(cs.isEmpty() ? "In no constraint."
@@ -370,6 +395,21 @@ final class PatternProperties extends PropertiesPanel {
         });
         sec.addRow(del, Ui.GAP_M);
         return sec;
+    }
+
+    /** A part of the node section that opens on demand and remembers whether the user left it open. */
+    private Section part(String key, String title, String trailing) {
+        Section s = Section.collapsible(title, openParts.contains(key));
+        s.setTrailingText(trailing);
+        s.setOnToggle(() -> {
+            if (s.isExpanded()) openParts.add(key);
+            else openParts.remove(key);
+        });
+        return s;
+    }
+
+    private static String sizeText(PatternNode n) {
+        return Math.round(n.width) + " × " + Math.round(n.height);
     }
 
     private static String suggestPortName(PatternNode n) {

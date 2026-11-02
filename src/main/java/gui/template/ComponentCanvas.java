@@ -352,7 +352,7 @@ final class ComponentCanvas extends JComponent {
             if (t.components.isEmpty()) {
                 g.setColor(Ui.MUTED);
                 g.setFont(Ui.font());
-                String s = readOnly ? "No components." : "Insert building blocks from the library on the left.";
+                String s = readOnly ? "No components." : "Insert templates from the list on the left.";
                 g.drawString(s, (getWidth() - g.getFontMetrics().stringWidth(s)) / 2, getHeight() / 2);
             }
             if (isFocusOwner()) {

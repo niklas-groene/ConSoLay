@@ -15,13 +15,17 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Point2D;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Mouse and keyboard handling of the suggestion mode on the graph view: hovering a match highlights it and shows a short
  * card, a click (not a drag) opens its action popover or, where matches overlap, a chooser, a click on an applied
- * instance opens its actions, and Escape closes the popover or leaves the mode. The listeners only observe, so VANTED's
- * own tools still receive every event.
+ * instance opens its actions, and Escape closes the popover (it is bound only while one is open, so VANTED keeps its own
+ * Escape otherwise). The listeners only observe, so VANTED's own tools still receive every event.
  *
  * @author Niklas Gröne
  */
@@ -38,9 +42,8 @@ final class MatchInteraction extends MouseAdapter {
     }
 
     private JComponent attached;
-    private JRootPane root;
-    /** What Escape was bound to in the root pane's own key map before (put back on detach), or null. */
-    private Object rootEscape;
+    /** The root panes Escape is bound in, each with what it was bound to there before (put back later), or null. */
+    private final Map<JRootPane, Object> escapeRoots = new LinkedHashMap<>();
     private Point pressed;
     private boolean dragging, extending;
     private final Timer hoverTimer;
@@ -62,17 +65,6 @@ final class MatchInteraction extends MouseAdapter {
         attached = c;
         c.addMouseListener(this);
         c.addMouseMotionListener(this);
-        root = SwingUtilities.getRootPane(c);
-        if (root != null) {
-            InputMap im = root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
-            KeyStroke[] own = im.keys();   // this map's own bindings, not those of its parents
-            if (own != null) for (KeyStroke k : own) if (ESCAPE.equals(k)) rootEscape = im.get(k);
-            im.put(ESCAPE, ESC_KEY);
-            root.getActionMap().put(ESC_KEY, new AbstractAction() {
-                private static final long serialVersionUID = 1L;
-                @Override public void actionPerformed(ActionEvent e) { escape(); }
-            });
-        }
     }
 
     void detach() {
@@ -81,21 +73,52 @@ final class MatchInteraction extends MouseAdapter {
             attached.removeMouseListener(this);
             attached.removeMouseMotionListener(this);
         }
-        if (root != null) {
-            InputMap im = root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
-            if (rootEscape != null) im.put(ESCAPE, rootEscape);
-            else im.remove(ESCAPE);
-            root.getActionMap().remove(ESC_KEY);
-        }
         attached = null;
-        root = null;
-        rootEscape = null;
     }
 
+    /**
+     * While a popover or the chooser is open, Escape closes it: bound in the graph view's own (internal) window, which
+     * sees the key first while the view has the focus, and in the main window, which holds the popover and the
+     * Templates page, so the key also works after a click in the popover or in a list of the page.
+     */
+    void bindEscape() {
+        List<JRootPane> want = new ArrayList<>();
+        View v = TemplateWorkbench.activeView();
+        JRootPane inner = v == null || v.getViewComponent() == null ? null : SwingUtilities.getRootPane(v.getViewComponent());
+        JRootPane main = MatchPopover.mainRoot();
+        if (inner != null) want.add(inner);
+        if (main != null && main != inner) want.add(main);
+        if (escapeRoots.keySet().equals(new HashSet<>(want))) return;
+        unbindEscape();
+        for (JRootPane r : want) {
+            InputMap im = r.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+            Object before = null;
+            KeyStroke[] own = im.keys();   // this map's own bindings, not those of its parents
+            if (own != null) for (KeyStroke k : own) if (ESCAPE.equals(k)) before = im.get(k);
+            escapeRoots.put(r, before);
+            im.put(ESCAPE, ESC_KEY);
+            r.getActionMap().put(ESC_KEY, new AbstractAction() {
+                private static final long serialVersionUID = 1L;
+                @Override public void actionPerformed(ActionEvent e) { escape(); }
+            });
+        }
+    }
+
+    /** Gives Escape back to the windows (what it was bound to before, if anything). */
+    void unbindEscape() {
+        for (Map.Entry<JRootPane, Object> e : escapeRoots.entrySet()) {
+            InputMap im = e.getKey().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+            if (e.getValue() != null) im.put(ESCAPE, e.getValue());
+            else im.remove(ESCAPE);
+            e.getKey().getActionMap().remove(ESC_KEY);
+        }
+        escapeRoots.clear();
+    }
+
+    /** Escape closes the popover or the chooser; the matches stay on the graph ("Clear results" drops them). */
     void escape() {
         TemplateWorkbench wb = TemplateWorkbench.get();
-        if (wb.focus != null || wb.chooser != null || MatchPopover.isOpen()) wb.closePopover();
-        else wb.setSuggestionMode(false);
+        wb.closePopover();
         wb.fire();
     }
 

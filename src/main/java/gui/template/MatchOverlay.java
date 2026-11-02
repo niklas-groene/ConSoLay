@@ -255,6 +255,12 @@ public final class MatchOverlay extends JComponent {
         return SUGGEST;
     }
 
+    /** Only suggested: up to date, not applied and without a known conflict (it can be selected for applying). */
+    static boolean isSuggestion(Match m) {
+        return m.state != Match.State.INVALID && m.state != Match.State.STALE && m.state != Match.State.APPLIED
+                && m.check.status != MatchCheck.Status.CONFLICT && m.check.status != MatchCheck.Status.BLOCKED;
+    }
+
     static String symbolOf(Match m) {
         if (m.state == Match.State.INVALID) return "✕";
         if (m.state == Match.State.STALE) return "?";

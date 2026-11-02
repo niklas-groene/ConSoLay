@@ -269,7 +269,10 @@ public final class TemplateWorkbench {
         return suggestionMode;
     }
 
-    /** Suggestion mode: matches are drawn on the graph and react to hover and click; Escape leaves it. */
+    /**
+     * Suggestion mode: matches are drawn on the graph and react to hover and click. It is on while the active graph has
+     * search results (a search turns it on, "Clear results" and a graph without results turn it off).
+     */
     public void setSuggestionMode(boolean on) {
         if (on == suggestionMode) return;
         suggestionMode = on;
@@ -292,7 +295,35 @@ public final class TemplateWorkbench {
         closePopover();
         focusInstance = null;
         forgetClosedGraphs();
-        if (suggestionMode) MatchInteraction.get().attach();
+        // the matches of the graph shown now are on it, if it has any; without, the graph is left alone
+        boolean results = hasResults(activeGraph());
+        if (results != suggestionMode) setSuggestionMode(results);
+        else if (suggestionMode) MatchInteraction.get().attach();
+        fire();
+    }
+
+    /** True if {@code g} has a search that runs or found something. */
+    private boolean hasResults(Graph g) {
+        SearchRun r = run(g);
+        return r != null && (r.state() == SearchRun.State.RUNNING || !r.matches().isEmpty());
+    }
+
+    /**
+     * Drops the search of {@code g}: its matches leave the list and the graph (the applied instances stay), and the
+     * graph is left alone until the next search.
+     */
+    public void clearResults(Graph g) {
+        GraphState s = g == null ? null : states.get(g);
+        if (s == null) return;
+        if (s.run != null) s.run.cancel();
+        s.run = null;
+        s.runOutdated = false;
+        s.page = 0;
+        s.message = null;
+        hover = null;
+        MatchInteraction.get().hideCard();
+        closePopover();
+        if (g == activeGraph()) setSuggestionMode(false);
         fire();
     }
 
@@ -388,6 +419,8 @@ public final class TemplateWorkbench {
                 TemplateMetrics.search(names.toString(), snap.nodeCount(), snap.edges.length, r.assignments(), r.matches().size(),
                         r.durationMillis(), r.state().name());
                 if (st.run != r) return;
+                // nothing found (or cancelled before anything was): the graph is left alone again
+                if (g == activeGraph() && !hasResults(g)) setSuggestionMode(false);
                 fire();
             }
         });
@@ -406,6 +439,7 @@ public final class TemplateWorkbench {
         if (i != null) {
             m.state = Match.State.APPLIED;
             m.instance = i;
+            m.selected = false;   // nothing left to apply (its check box shows it unticked, too)
         }
     }
 
@@ -436,9 +470,10 @@ public final class TemplateWorkbench {
         if (focus != null) MatchPopover.show(focus);
     }
 
+    /** The matches selected for applying that can still be applied (neither applied nor gone). */
     public List<Match> selected(Graph g) {
         List<Match> l = new ArrayList<>();
-        for (Match m : matches(g)) if (m.selected) l.add(m);
+        for (Match m : matches(g)) if (m.selected && TemplatePanel.selectable(m)) l.add(m);
         return l;
     }
 
@@ -754,6 +789,15 @@ public final class TemplateWorkbench {
         JComponent comp = v == null ? null : v.getViewComponent();
         if (comp == null || m.run.snapshot.graph != v.getGraph()) return;
         java.awt.geom.Rectangle2D r = MatchOverlay.bounds(m, comp);
+        if (r != null) comp.scrollRectToVisible(r.getBounds());
+    }
+
+    /** Brings an applied instance into the visible part of the graph view (chosen in the list); the zoom stays. */
+    void revealInstance(TemplateInstance inst) {
+        View v = activeView();
+        JComponent comp = v == null ? null : v.getViewComponent();
+        if (comp == null || inst.graph != v.getGraph()) return;
+        java.awt.geom.Rectangle2D r = MatchOverlay.bounds(inst, comp);
         if (r != null) comp.scrollRectToVisible(r.getBounds());
     }
 

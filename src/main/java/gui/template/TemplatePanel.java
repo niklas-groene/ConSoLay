@@ -58,7 +58,7 @@ public class TemplatePanel extends JPanel {
     private static final long serialVersionUID = 1L;
     private static final Preferences PREFS = Preferences.userNodeForPackage(TemplatePanel.class);
     /** Width of the check box column of the match list. */
-    private static final int BOX_COLUMN = 24;
+    private static final int BOX_COLUMN = 28;
     private static TemplatePanel instance;
 
     /** Shows a message in the status line of the panel (popover actions report here). */
@@ -74,27 +74,36 @@ public class TemplatePanel extends JPanel {
 
     // ---- library
     private TemplateLibrary library;
-    private final JTextField folderField = new JTextField(2);
     private final DefaultListModel<Item> libraryModel = new DefaultListModel<>();
-    private final JList<Item> libraryList = new JList<>(libraryModel);
+    private final JList<Item> libraryList = new JList<Item>(libraryModel) {
+        private static final long serialVersionUID = 1L;
+        @Override public String getToolTipText(MouseEvent e) {
+            int i = locationToIndex(e.getPoint());
+            if (i < 0 || !getCellBounds(i, i).contains(e.getPoint())) return null;
+            return Ui.tooltip(describe(libraryModel.get(i)));
+        }
+    };
+    /** Problems of the chosen template and updates of its components; hidden while there are none. */
     private final JLabel templateInfo = Ui.hint(" ");
+    /** The library folder, under the list. */
+    private final JLabel folderLabel = new JLabel(" ");
 
     // ---- search
-    private final JRadioButton semanticsMode = new JRadioButton("Structure and semantics", true);
-    private final JRadioButton structureMode = new JRadioButton("Structure only");
+    private final JCheckBox structureOnly = new JCheckBox("Structure only (no conditions)");
     private final JCheckBox withinSelection = new JCheckBox("Only among the selected nodes");
     private final JCheckBox exact = new JCheckBox("Exact structure within a match");
     private final JCheckBox place = new JCheckBox("Place matched nodes like the template", true);
+    private final Section options = Section.collapsible("Options", false);
     private final PrimaryButton findButton = new PrimaryButton("Find matches");
     private final StatusLabel searchStatus = new StatusLabel(" ");
-    private final JLabel outdated = Ui.hint(" ");
-    private final JButton searchAgain = Ui.button("Search again", "The graph changed after the search: the same search anew "
-            + "(the same template or rules, options and nodes).", e -> searchAgain());
-    private final JButton findMore = Ui.button("Find more", null, e -> findMore());
+    /** After a search: the graph changed since, or the search stopped at its limit; with the links that act on it. */
+    private final JLabel notice = Ui.hint(" ");
+    private final JButton searchAgain = Ui.link("Search again", "The same search anew (the same template or rules, options "
+            + "and nodes).", e -> searchAgain());
+    private final JButton findMore = Ui.link("Find more", null, e -> findMore());
+    private final JPanel noticeLinks = Ui.flow(Ui.GAP_M, searchAgain, findMore);
 
     // ---- matches
-    private final SwitchToggle showSwitch = new SwitchToggle("Show matches on the graph", false);
-    private final JLabel showState = new JLabel();
     private final Section matchesSection = new Section("Matches");
     private final DefaultListModel<Match> matchModel = new DefaultListModel<>();
     /** A press in a row's check box column selects the match for applying: it does not open it. */
@@ -102,34 +111,42 @@ public class TemplatePanel extends JPanel {
     private final JList<Match> matchList = new JList<Match>(matchModel) {
         private static final long serialVersionUID = 1L;
         @Override protected void processMouseEvent(MouseEvent e) {
-            if (e.getID() == MouseEvent.MOUSE_PRESSED) pressOnBox = e.getX() < BOX_COLUMN;
+            if (e.getID() == MouseEvent.MOUSE_PRESSED) pressOnBox = onCheckBox(e.getPoint());
             super.processMouseEvent(e);
             // only the selection this press makes is one for applying: the arrow keys open matches again afterwards
             if (e.getID() == MouseEvent.MOUSE_RELEASED) pressOnBox = false;
         }
     };
-    private final JLabel pageLabel = Ui.hint(" ");
+    private JScrollPane matchScroll;
+    private final JLabel noMatches = Ui.hint("No matches yet: choose a template in the library and find where it fits.");
+    private final JLabel pageLabel = new JLabel(" ");
     private final JButton prevPage = Ui.button("◀", "Previous matches", null), nextPage = Ui.button("▶", "Next matches", null);
-    private final JButton selectAll = Ui.button("Select all", "Selects every match of the search for applying (not only the shown ones).", null);
-    private final JButton clearSel = Ui.button("Clear", "Deselects all matches.", null);
-    private final JLabel selectionInfo = Ui.hint(" ");
+    private JPanel pager;
+    /** "3 of 12 selected" with the links that select all or none, and the one that drops the results. */
+    private final JLabel selectedLabel = new JLabel(" ");
+    private final JButton selectAll = Ui.link("All", "Selects every match of the search for applying (not only the shown ones).", null);
+    private final JButton clearSel = Ui.link("None", "Deselects all matches.", null);
+    private final JButton clearResults = Ui.link("Clear results", "Drops the matches of this search from the list and from "
+            + "the graph; the applied instances stay.", null);
+    private JPanel selectionRow;
     private final PrimaryButton applySelected = new PrimaryButton("Apply selected");
-    private final JButton applyAll = Ui.button("Apply all found…", null, null);
     private boolean updatingMatches;
 
     // ---- instances
     private final Section instanceSection = new Section("Applied instances");
     private final DefaultListModel<TemplateInstance> instanceModel = new DefaultListModel<>();
     private final JList<TemplateInstance> instanceList = new JList<>(instanceModel);
-    private final JButton instOnOff = Ui.button("Switch off", "Switches all constraints of the instance off or on together; their own settings are kept.", null);
-    private final JButton instRemove = Ui.button("Remove", "Removes exactly the constraints of this instance (Edit › Undo brings them back).", null);
-    private final JButton instShow = Ui.button("Constraints", "Marks the instance's constraints on the graph.", null);
-    private final JButton instPrefer = Ui.button("Prefer…", "Raises the priorities of its constraints that are not applied so they win; shows first what changes.", null);
+    private JScrollPane instanceScroll;
     private final VerticalStack partsBox = new VerticalStack();
     private final JLabel instanceInfo = Ui.hint(" ");
     private boolean updatingInstances;
 
+    // ---- rule set: edited in a window of its own, used from here
     private final RuleSetSection ruleSection;
+    private JFrame ruleWindow;
+    private final JLabel ruleSummary = Ui.hint(" ");
+    /** What the last search with the rules left out (shown only then). */
+    private final StatusLabel ruleStatus = new StatusLabel(" ");
 
     /** One entry of the library list. */
     static final class Item {
@@ -161,7 +178,8 @@ public class TemplatePanel extends JPanel {
         sections.addRow(createSearchSection(), Ui.SECTION_GAP);
         sections.addRow(createMatchesSection(), Ui.SECTION_GAP);
         sections.addRow(createInstanceSection(), Ui.SECTION_GAP);
-        sections.addRow(ruleSection, Ui.SECTION_GAP);
+        sections.addRow(createRuleSection(), Ui.SECTION_GAP);
+        ruleSection.onChanged = this::showRuleSummary;
         add(sections, BorderLayout.CENTER);
         String folder = PREFS.get("folder", null);
         setFolder(folder == null ? null : new File(folder));
@@ -174,9 +192,6 @@ public class TemplatePanel extends JPanel {
 
     private Section createLibrarySection() {
         Section s = new Section("Library");
-        folderField.setEditable(false);
-        s.addRow(Ui.labeled("Folder", folderField, Ui.button("Choose…", "Choose the folder that holds your template files "
-                + "(" + TemplateFiles.TEMPLATE_EXT + "; old GML templates are imported).", e -> chooseFolder())));
         libraryList.setName("templateLibrary");
         libraryList.setCellRenderer(new ItemRenderer());
         libraryList.setFixedCellHeight(46);
@@ -188,20 +203,59 @@ public class TemplatePanel extends JPanel {
             @Override public void mouseClicked(MouseEvent e) { if (e.getClickCount() == 2) editSelected(); }
         });
         libraryList.getAccessibleContext().setAccessibleName("Templates");
+        ToolTipManager.sharedInstance().registerComponent(libraryList);
         s.addRow(scroll(libraryList));
         s.addRow(templateInfo, Ui.GAP_XS);
-        JButton fromSel = Ui.button("From selection", "A new template from the selected nodes, their edges and the constraints "
-                + "that lie completely inside the selection. Opens the editor.", e -> newFromSelection());
-        fromSel.setName("newFromSelection");
+
+        // New: the three ways to make a template, in one menu
+        JButton newButton = Ui.button("New ▾", "Make a template: from the nodes selected in the graph, as a composite of "
+                + "other templates, or from a file.", null);
+        newButton.setName("newTemplate");
+        JPopupMenu menu = new JPopupMenu();
+        menu.add(menuItem("From selection", "newFromSelection", "A new template from the selected nodes, their edges and the "
+                + "constraints that lie completely inside the selection. Opens the editor.", this::newFromSelection));
+        menu.add(menuItem("Composite of templates", "newComposite", "A template made of other templates: connect their ports "
+                + "and add layout relations.", this::newComposite));
+        menu.add(menuItem("Import file…", "importTemplate", "Adds a template file (" + TemplateFiles.TEMPLATE_EXT
+                + " or old .gml) from anywhere.", this::importFile));
+        newButton.addActionListener(e -> menu.show(newButton, 0, newButton.getHeight()));
         JButton edit = Ui.button("Edit…", "Opens the chosen template in the editor (double-click works too).", e -> editSelected());
         edit.setName("editTemplate");
-        JButton composite = Ui.button("Composite…", "A template made of other templates: connect their ports and add layout relations.",
-                e -> newComposite());
-        composite.setName("newComposite");
-        JButton imp = Ui.button("Import…", "Adds a template file (" + TemplateFiles.TEMPLATE_EXT + " or old .gml) from anywhere.", e -> importFile());
-        s.addRow(Ui.row(fromSel, edit), Ui.GAP_S);
-        s.addRow(Ui.row(composite, imp), Ui.GAP_XS);
+        s.addRow(Ui.row(newButton, edit), Ui.GAP_S);
+
+        folderLabel.setFont(Ui.small());
+        folderLabel.setForeground(Ui.MUTED);
+        JButton change = Ui.link("Change…", "Choose the folder that holds your template files (" + TemplateFiles.TEMPLATE_EXT
+                + "; old GML templates are imported).", e -> chooseFolder());
+        change.setName("chooseFolder");
+        JPanel folderRow = new JPanel(new BorderLayout(Ui.GAP_S, 0));
+        folderRow.setOpaque(false);
+        folderRow.add(folderLabel, BorderLayout.CENTER);
+        folderRow.add(change, BorderLayout.EAST);
+        s.addRow(folderRow, Ui.GAP_S);
         return s;
+    }
+
+    private static JMenuItem menuItem(String text, String name, String tooltip, Runnable action) {
+        JMenuItem item = new JMenuItem(text);
+        item.setName(name);
+        item.setToolTipText(Ui.tooltip(tooltip));
+        item.addActionListener(e -> action.run());
+        return item;
+    }
+
+    /** Name, description and size of a library entry (its tooltip). */
+    private static String describe(Item it) {
+        if (it.template == null) return "<b>" + Ui.esc(it.toString()) + "</b><br>" + Ui.esc(it.error);
+        TemplateDef t = it.template;
+        StringBuilder sb = new StringBuilder("<b>").append(Ui.esc(t.name)).append("</b>");
+        if (t.description != null && !t.description.isEmpty()) sb.append("<br>").append(Ui.esc(t.description));
+        sb.append("<br>").append(t.isComposite() ? Ui.count(t.components.size(), "component") + ", " + Ui.count(t.links.size(), "link")
+                + ", " + Ui.count(t.relations.size(), "layout relation")
+                : Ui.count(t.nodes.size(), "node") + ", " + Ui.count(t.edges.size(), "edge") + ", " + Ui.count(t.constraints.size(), "constraint"));
+        if (!t.ports.isEmpty()) sb.append(", ").append(Ui.count(t.ports.size(), "port"));
+        if (it.file != null) sb.append("<br><font color='#5f6368'>").append(Ui.esc(it.file.getName())).append("</font>");
+        return sb.toString();
     }
 
     TemplateLibrary library() {
@@ -230,8 +284,8 @@ public class TemplatePanel extends JPanel {
         if (folder != null && !folder.isDirectory()) folder = null;
         library = new TemplateLibrary(folder);
         for (TemplateDef t : TemplateExamples.all()) library.addInMemory(t);
-        folderField.setText(folder == null ? "" : folder.getAbsolutePath());
-        folderField.setToolTipText(folder == null ? "No folder chosen: only the prepared examples are listed." : Ui.tooltip(Ui.esc(folder.getAbsolutePath())));
+        folderLabel.setText(folder == null ? "No folder: only the examples are listed." : "Folder: " + folder.getName());
+        folderLabel.setToolTipText(folder == null ? "Choose a folder to keep your own templates." : Ui.tooltip(Ui.esc(folder.getAbsolutePath())));
         if (folder != null) PREFS.put("folder", folder.getAbsolutePath());
         reloadLibrary(null);
     }
@@ -266,35 +320,28 @@ public class TemplatePanel extends JPanel {
         return i == null ? null : i.template;
     }
 
+    /** Under the list: the problems of the chosen template and the updates of its components, if any. */
     private void templateSelected() {
         Item i = libraryList.getSelectedValue();
-        if (i == null) {
-            templateInfo.setText(" ");
-            return;
-        }
-        if (i.template == null) {
-            templateInfo.setText(Ui.wrapped("<font color='#c5221f'>" + Ui.esc(i.error) + "</font>", Ui.TEXT_WIDTH));
-            return;
-        }
-        TemplateDef t = i.template;
         StringBuilder sb = new StringBuilder();
-        if (t.description != null && !t.description.isEmpty()) sb.append(Ui.esc(t.description)).append("<br>");
-        sb.append(t.isComposite() ? Ui.count(t.components.size(), "component") + ", " + Ui.count(t.links.size(), "link") + ", "
-                + Ui.count(t.relations.size(), "layout relation")
-                : Ui.count(t.nodes.size(), "node") + ", " + Ui.count(t.edges.size(), "edge") + ", " + Ui.count(t.constraints.size(), "constraint"));
-        if (!t.ports.isEmpty()) sb.append(", ").append(Ui.count(t.ports.size(), "port"));
-        List<TemplateValidator.Problem> ps = TemplateValidator.validate(t, sourceFor(t));
-        for (TemplateValidator.Problem p : ps) {
-            String color = p.severity == TemplateValidator.Severity.WARNING ? "#b06000" : "#c5221f";
-            sb.append("<br><font color='").append(color).append("'>").append(Ui.esc(p.toString())).append("</font>");
-        }
-        if (t.isComposite()) {
-            for (TemplateLibrary.Update u : library.updatesFor(t)) {
-                sb.append("<br><font color='#2563eb'>'").append(Ui.esc(u.component.name)).append("' uses ").append(Ui.esc(u.component.ref.toString()))
-                        .append("; rev. ").append(u.newer.revision).append(" is available (update in the editor).</font>");
+        if (i != null && i.template == null) {
+            sb.append("<font color='#c5221f'>").append(Ui.esc(i.error)).append("</font>");
+        } else if (i != null) {
+            TemplateDef t = i.template;
+            for (TemplateValidator.Problem p : TemplateValidator.validate(t, sourceFor(t))) {
+                String color = p.severity == TemplateValidator.Severity.WARNING ? "#b06000" : "#c5221f";
+                sb.append(sb.length() > 0 ? "<br>" : "").append("<font color='").append(color).append("'>").append(Ui.esc(p.toString())).append("</font>");
+            }
+            if (t.isComposite()) {
+                for (TemplateLibrary.Update u : library.updatesFor(t)) {
+                    sb.append(sb.length() > 0 ? "<br>" : "").append("<font color='#2563eb'>'").append(Ui.esc(u.component.name)).append("' uses ")
+                            .append(Ui.esc(u.component.ref.toString())).append("; rev. ").append(u.newer.revision)
+                            .append(" is available (update in the editor).</font>");
+                }
             }
         }
-        templateInfo.setText(Ui.wrapped(sb.toString(), Ui.TEXT_WIDTH));
+        templateInfo.setVisible(sb.length() > 0);
+        templateInfo.setText(sb.length() == 0 ? " " : Ui.wrapped(sb.toString(), Ui.TEXT_WIDTH));
     }
 
     private void editSelected() {
@@ -352,7 +399,7 @@ public class TemplatePanel extends JPanel {
 
     private void newComposite() {
         TemplateDef t = TemplateDef.create("New composite", TemplateDef.Kind.COMPOSITE);
-        TemplateEditor.open(t, null, library, "Insert building blocks from the library, connect their ports (structure) "
+        TemplateEditor.open(t, null, library, "Insert templates of the library as components, connect their ports (structure) "
                 + "and add layout relations.", this::saved);
     }
 
@@ -412,14 +459,32 @@ public class TemplatePanel extends JPanel {
 
     private Section createSearchSection() {
         Section s = new Section("Find matches");
-        ButtonGroup g = new ButtonGroup();
-        g.add(semanticsMode);
-        g.add(structureMode);
-        for (AbstractButton b : new AbstractButton[]{semanticsMode, structureMode, withinSelection, exact, place}) b.setOpaque(false);
-        semanticsMode.setName("modeSemantics");
-        structureMode.setName("modeStructure");
-        semanticsMode.setToolTipText(Ui.tooltip("Nodes and edges must have the structure <b>and</b> meet the template's conditions (e.g. SBGN roles)."));
-        structureMode.setToolTipText(Ui.tooltip("Only the structure counts: which nodes are joined by which edges, and in which direction."));
+        findButton.setName("findMatches");
+        findButton.setToolTipText(Ui.tooltip("Searches the active graph for the template chosen in the library; nothing is "
+                + "applied yet. Limits: " + fmt(TemplateLimits.maxMatchesPerRun) + " matches per search, " + TemplateLimits.maxShown
+                + " shown at once, " + TemplateLimits.maxApplyPerStep + " applied per step."));
+        findButton.addActionListener(e -> {
+            SearchRun r = TemplateWorkbench.get().run(TemplateWorkbench.activeGraph());
+            if (r != null && r.state() == SearchRun.State.RUNNING) TemplateWorkbench.get().cancelSearch();
+            else find();
+        });
+        s.addRow(findButton);
+        searchStatus.setName("searchStatus");
+        s.addRow(searchStatus, Ui.GAP_S);
+        notice.setVisible(false);
+        noticeLinks.setVisible(false);
+        findMore.setName("findMore");
+        s.addRow(notice, Ui.GAP_XS);
+        s.addRow(noticeLinks, Ui.GAP_XS);
+
+        // the options: the default (structure and conditions, the whole graph) needs none of them
+        for (AbstractButton b : new AbstractButton[]{structureOnly, withinSelection, exact, place}) {
+            b.setOpaque(false);
+            b.addActionListener(e -> showOptionsSummary());
+        }
+        structureOnly.setName("modeStructure");
+        structureOnly.setToolTipText(Ui.tooltip("On: only the structure counts, i.e. which nodes are joined by which edges, and "
+                + "in which direction. Off: nodes and edges must also meet the template's conditions (e.g. SBGN roles)."));
         withinSelection.setName("withinSelection");
         withinSelection.setToolTipText(Ui.tooltip("Restricts <b>where</b> to search: a match may use only nodes selected in the graph. "
                 + "(Choosing matches to apply is done on the found matches.)"));
@@ -428,32 +493,24 @@ public class TemplatePanel extends JPanel {
         place.setToolTipText(Ui.tooltip("When applying, the matched nodes first take the template's arrangement (moved to where they are), "
                 + "then the constraints are solved. Off: only the constraints act."));
         place.addActionListener(e -> TemplateWorkbench.get().setPlaceNodes(place.isSelected()));
-        s.addRow(semanticsMode);
-        s.addRow(structureMode, Ui.GAP_XS);
-        s.addRow(withinSelection, Ui.GAP_S);
-        Section adv = Section.collapsible("Advanced", false);
-        adv.addRow(exact);
-        adv.addRow(place, Ui.GAP_XS);
-        adv.addRow(Ui.hint("Limits: " + fmt(TemplateLimits.maxMatchesPerRun) + " matches per search, " + TemplateLimits.maxShown
-                + " shown at once, " + TemplateLimits.maxApplyPerStep + " applied per step."), Ui.GAP_S);
-        s.addRow(adv, Ui.GAP_S);
-        findButton.setName("findMatches");
-        findButton.addActionListener(e -> {
-            SearchRun r = TemplateWorkbench.get().run(TemplateWorkbench.activeGraph());
-            if (r != null && r.state() == SearchRun.State.RUNNING) TemplateWorkbench.get().cancelSearch();
-            else find();
-        });
-        s.addRow(findButton, Ui.GAP_M);
-        searchStatus.setName("searchStatus");
-        s.addRow(searchStatus, Ui.GAP_S);
-        outdated.setVisible(false);
-        searchAgain.setVisible(false);
-        s.addRow(outdated, Ui.GAP_XS);
-        s.addRow(searchAgain, Ui.GAP_XS);
-        findMore.setName("findMore");
-        findMore.setVisible(false);
-        s.addRow(findMore, Ui.GAP_XS);
+        options.setName("searchOptions");
+        options.addRow(structureOnly);
+        options.addRow(withinSelection, Ui.GAP_XS);
+        options.addRow(exact, Ui.GAP_XS);
+        options.addRow(place, Ui.GAP_XS);
+        s.addRow(options, Ui.GAP_M);
+        showOptionsSummary();
         return s;
+    }
+
+    /** The options that differ from the default, in the header of the closed "Options". */
+    private void showOptionsSummary() {
+        List<String> on = new ArrayList<>();
+        if (structureOnly.isSelected()) on.add("structure only");
+        if (withinSelection.isSelected()) on.add("selection");
+        if (exact.isSelected()) on.add("exact");
+        if (!place.isSelected()) on.add("no placing");
+        options.setTrailingText(on.isEmpty() ? null : String.join(" · ", on));
     }
 
     /** Searches the active graph for the chosen template. */
@@ -514,7 +571,7 @@ public class TemplatePanel extends JPanel {
      * else why not (the status line shows it as well).
      */
     String startSearch(List<SearchTask> tasks) {
-        String why = TemplateWorkbench.get().search(tasks, semanticsMode.isSelected(), exact.isSelected(), withinSelection.isSelected());
+        String why = TemplateWorkbench.get().search(tasks, !structureOnly.isSelected(), exact.isSelected(), withinSelection.isSelected());
         if (why != null) {
             searchStatus.setStatus(why, StatusLabel.Kind.ERROR);
             return why;
@@ -528,11 +585,6 @@ public class TemplatePanel extends JPanel {
 
     private Section createMatchesSection() {
         Section s = matchesSection;
-        showSwitch.setName("suggestionMode");
-        showSwitch.setToolTipText(Ui.tooltip("<b>On</b>: the matches are drawn on the graph; hover shows them, a click opens their actions. "
-                + "Selecting and moving nodes still works. <b>Esc</b> turns it off."));
-        showSwitch.addActionListener(e -> TemplateWorkbench.get().setSuggestionMode(showSwitch.isSelected()));
-        s.addRow(ConstraintsTab.switchRow("Show on graph", showSwitch, showState));
         matchList.setName("matchList");
         matchList.setCellRenderer(new MatchRenderer());
         matchList.setFixedCellHeight(38);
@@ -548,8 +600,8 @@ public class TemplatePanel extends JPanel {
             @Override public void mouseClicked(MouseEvent e) {
                 int i = matchList.locationToIndex(e.getPoint());
                 Rectangle cell = i < 0 ? null : matchList.getCellBounds(i, i);
-                if (cell == null || !cell.contains(e.getPoint())) return;
-                if (e.getX() - cell.x < BOX_COLUMN) {
+                if (cell == null || !cell.contains(e.getPoint()) || !SwingUtilities.isLeftMouseButton(e)) return;
+                if (onCheckBox(e.getPoint())) {
                     Match m = matchModel.get(i);
                     TemplateWorkbench.get().setSelected(m, !m.selected);
                 } else if (TemplateWorkbench.get().focus != matchModel.get(i)) {
@@ -557,6 +609,8 @@ public class TemplatePanel extends JPanel {
                     showChosenMatch();
                 }
             }
+            @Override public void mousePressed(MouseEvent e) { matchMenu(e); }
+            @Override public void mouseReleased(MouseEvent e) { matchMenu(e); }
         });
         matchList.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_SPACE, 0), "toggleSelected");
         matchList.getActionMap().put("toggleSelected", new AbstractAction() {
@@ -566,29 +620,61 @@ public class TemplatePanel extends JPanel {
                 if (m != null) TemplateWorkbench.get().setSelected(m, !m.selected);
             }
         });
-        matchList.setToolTipText(Ui.tooltip("Click the box or press Space to select a match for applying; choosing a row shows it on the graph."));
-        s.addRow(scroll(matchList), Ui.GAP_S);
+        matchList.setToolTipText(Ui.tooltip("Tick the box (or press Space) to select a match for applying; click the row to "
+                + "see it on the graph with its actions."));
+        s.addRow(noMatches);
+        matchScroll = scroll(matchList);
+        s.addRow(matchScroll, Ui.GAP_S);
+
         prevPage.addActionListener(e -> page(-1));
         nextPage.addActionListener(e -> page(1));
-        JPanel pager = new JPanel(new BorderLayout(Ui.GAP_S, 0));
+        pageLabel.setFont(Ui.small());
+        pageLabel.setForeground(Ui.MUTED);
+        pager = new JPanel(new BorderLayout(Ui.GAP_S, 0));
         pager.setOpaque(false);
         pager.add(pageLabel, BorderLayout.CENTER);
         pager.add(Ui.row(prevPage, nextPage), BorderLayout.EAST);
         s.addRow(pager, Ui.GAP_XS);
+
         selectAll.setName("selectAllFound");
         clearSel.setName("clearSelection");
+        clearResults.setName("clearResults");
         selectAll.addActionListener(e -> TemplateWorkbench.get().selectAllFound(TemplateWorkbench.activeGraph()));
         clearSel.addActionListener(e -> TemplateWorkbench.get().clearSelected(TemplateWorkbench.activeGraph()));
-        s.addRow(Ui.row(selectAll, clearSel), Ui.GAP_S);
-        selectionInfo.setName("selectionInfo");
-        s.addRow(selectionInfo, Ui.GAP_S);
+        clearResults.addActionListener(e -> TemplateWorkbench.get().clearResults(TemplateWorkbench.activeGraph()));
+        selectedLabel.setFont(Ui.small());
+        selectedLabel.setForeground(Ui.MUTED);
+        selectedLabel.setName("selectionInfo");
+        JLabel dot = new JLabel("·");
+        dot.setFont(Ui.small());
+        dot.setForeground(Ui.MUTED);
+        selectionRow = new JPanel(new BorderLayout(Ui.GAP_S, 0));
+        selectionRow.setOpaque(false);
+        selectionRow.add(Ui.flow(Ui.GAP_S, selectedLabel, selectAll, dot, clearSel), BorderLayout.CENTER);
+        selectionRow.add(clearResults, BorderLayout.EAST);
+        s.addRow(selectionRow, Ui.GAP_S);
+
         applySelected.setName("applySelected");
         applySelected.addActionListener(e -> applySelected());
         s.addRow(applySelected, Ui.GAP_S);
-        applyAll.setName("applyAllFound");
-        applyAll.addActionListener(e -> applyAllFound());
-        s.addRow(applyAll, Ui.GAP_XS);
         return s;
+    }
+
+    /** The context menu of a match: select it for applying (or not), show it on the graph. */
+    private void matchMenu(MouseEvent e) {
+        if (!e.isPopupTrigger()) return;
+        int i = matchList.locationToIndex(e.getPoint());
+        if (i < 0 || !matchList.getCellBounds(i, i).contains(e.getPoint())) return;
+        Match m = matchModel.get(i);
+        JPopupMenu menu = new JPopupMenu();
+        boolean selectable = m.state != Match.State.APPLIED && m.state != Match.State.INVALID;
+        menu.add(menuItem(m.selected ? "Remove from selection" : "Select for applying", "toggleSelected", "Collects matches to apply "
+                + "together with \"Apply selected\".", () -> TemplateWorkbench.get().setSelected(m, !m.selected))).setEnabled(selectable);
+        menu.add(menuItem("Show on the graph", "showMatch", "Its outline and actions beside it on the graph.", () -> {
+            matchList.setSelectedValue(m, true);
+            showChosenMatch();
+        }));
+        menu.show(matchList, e.getX(), e.getY());
     }
 
     /** The match chosen in the list: its popover beside it on the graph, scrolled into view. */
@@ -624,46 +710,6 @@ public class TemplatePanel extends JPanel {
         searchStatus.setStatus(msg, StatusLabel.Kind.SUCCESS);
     }
 
-    private void applyAllFound() {
-        TemplateWorkbench wb = TemplateWorkbench.get();
-        Graph g = TemplateWorkbench.activeGraph();
-        SearchRun run = wb.run(g);
-        if (run == null) return;
-        List<Match> all = wb.matches(g);
-        int applicable = 0, applied = 0, invalid = 0, stale = 0;
-        for (Match m : all) {
-            if (m.state == Match.State.APPLIED) applied++;
-            else if (m.state == Match.State.INVALID) invalid++;
-            else {
-                applicable++;
-                if (m.state == Match.State.STALE) stale++;
-            }
-        }
-        int now = Math.min(applicable, TemplateLimits.maxApplyPerStep);
-        List<Match> todo = new ArrayList<>();
-        for (Match m : all) if ((m.state == Match.State.FOUND || m.state == Match.State.STALE) && todo.size() < now) todo.add(m);
-        StringBuilder sb = new StringBuilder("<html><b>Apply all found matches</b><br><br>");
-        sb.append(fmt(all.size())).append(" found").append(run.state() == SearchRun.State.COMPLETE ? " (search complete)"
-                : " — " + Ui.esc(run.state().label()).toLowerCase(Locale.ROOT) + ": there may be more in the graph").append(".<br>");
-        sb.append("This step applies <b>").append(now).append("</b>").append(applicable > now ? " (limit " + TemplateLimits.maxApplyPerStep
-                + " per step; " + (applicable - now) + " stay for the next step)" : "").append(": about ")
-                .append(Ui.count(TemplateWorkbench.constraintCount(todo), "constraint")).append(".<br>");
-        if (applied > 0) sb.append(applied).append(applied == 1 ? " already applied is skipped.<br>" : " already applied are skipped.<br>");
-        if (invalid > 0) sb.append(invalid).append(invalid == 1 ? " no longer fits and is skipped.<br>" : " no longer fit and are skipped.<br>");
-        if (stale > 0) sb.append(Math.min(stale, now)).append(Math.min(stale, now) == 1 ? " outdated one is checked again first.<br>"
-                : " outdated ones are checked again first.<br>");
-        sb.append("<br>The layout is solved once for all of them; Edit › Undo reverts the step.</html>");
-        if (now == 0) {
-            JOptionPane.showMessageDialog(this, "Nothing left to apply: every found match is applied or no longer fits.",
-                    "Apply all found", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-        if (JOptionPane.showConfirmDialog(this, sb.toString(), "Apply all found", JOptionPane.OK_CANCEL_OPTION,
-                JOptionPane.QUESTION_MESSAGE) != JOptionPane.OK_OPTION) return;
-        String msg = wb.apply(todo, "All found");
-        searchStatus.setStatus(msg, StatusLabel.Kind.SUCCESS);
-    }
-
     // ================================================================== instances
 
     private Section createInstanceSection() {
@@ -675,41 +721,39 @@ public class TemplatePanel extends JPanel {
         instanceList.setVisibleRowCount(4);
         instanceList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);   // the actions act on one instance
         instanceList.getAccessibleContext().setAccessibleName("Applied template instances");
+        instanceList.setToolTipText(Ui.tooltip("Click an instance to see it on the graph with its actions: switch it off or on, "
+                + "remove it, show its constraints, prefer it."));
         instanceList.addListSelectionListener(e -> {
             if (e.getValueIsAdjusting() || updatingInstances) return;
             TemplateInstance i = instanceList.getSelectedValue();
             TemplateWorkbench.get().listInstance = i;
             TemplateWorkbench.get().focusInstance = i;
             updateInstanceActions();
-            MatchOverlay.repaintAll();
+            if (i != null) showInstance(i);
+            else MatchOverlay.repaintAll();
         });
-        s.addRow(scroll(instanceList));
+        instanceList.addMouseListener(new MouseAdapter() {
+            @Override public void mouseClicked(MouseEvent e) {
+                // the row chosen before, whose popover was closed or replaced since: no selection event comes
+                int k = instanceList.locationToIndex(e.getPoint());
+                if (k < 0 || !instanceList.getCellBounds(k, k).contains(e.getPoint())) return;
+                TemplateInstance i = instanceModel.get(k);
+                if (!MatchPopover.isOpenFor(i)) showInstance(i);
+            }
+        });
+        instanceScroll = scroll(instanceList);
+        s.addRow(instanceScroll);
         s.addRow(instanceInfo, Ui.GAP_XS);
-        instOnOff.setName("instanceOnOff");
-        instRemove.setName("instanceRemove");
-        instPrefer.setName("instancePrefer");
-        instOnOff.addActionListener(e -> {
-            TemplateInstance i = instanceList.getSelectedValue();
-            if (i != null) TemplateWorkbench.get().setInstanceOn(i, "", !i.isOn());
-        });
-        instRemove.addActionListener(e -> {
-            TemplateInstance i = instanceList.getSelectedValue();
-            if (i != null) TemplateWorkbench.get().removeInstance(i);
-        });
-        instShow.addActionListener(e -> {
-            TemplateInstance i = instanceList.getSelectedValue();
-            if (i == null) return;
-            DisplayConstraints.clearMarkings();
-            DisplayConstraints.drawConstraints(i.present(ConstraintStore.constraints));
-        });
-        instPrefer.addActionListener(e -> {
-            TemplateInstance i = instanceList.getSelectedValue();
-            if (i != null) TemplateWorkbench.get().preferInstance(i, this);
-        });
-        s.addRow(Ui.row(instOnOff, instRemove), Ui.GAP_S);
-        s.addRow(Ui.row(instShow, instPrefer), Ui.GAP_XS);
         s.addRow(partsBox, Ui.GAP_S);
         return s;
+    }
+
+    /** The actions of an applied instance: in its popover beside it on the graph, which is scrolled into view. */
+    private void showInstance(TemplateInstance i) {
+        TemplateWorkbench wb = TemplateWorkbench.get();
+        if (i.graph != TemplateWorkbench.activeGraph()) return;
+        wb.revealInstance(i);
+        wb.openInstancePopover(i);
     }
 
     private void refreshInstances() {
@@ -735,14 +779,11 @@ public class TemplatePanel extends JPanel {
     private void updateInstanceActions() {
         TemplateInstance i = instanceList.getSelectedValue();
         boolean any = i != null;
-        instOnOff.setEnabled(any);
-        instRemove.setEnabled(any);
-        instShow.setEnabled(any);
-        instPrefer.setEnabled(any && i.status(ConstraintStore.constraints).notApplied > 0);
-        instOnOff.setText(any && !i.isOn() ? "Switch on" : "Switch off");
         partsBox.clearRows();
+        instanceScroll.setVisible(!instanceModel.isEmpty());
         if (!any) {
-            instanceInfo.setText(Ui.wrapped(instanceModel.isEmpty() ? "No template applied to this graph yet." : "Choose an instance to see and change it.", Ui.TEXT_WIDTH));
+            instanceInfo.setText(Ui.wrapped(instanceModel.isEmpty() ? "No template applied to this graph yet."
+                    : "Click an instance for its actions on the graph.", Ui.TEXT_WIDTH));
         } else {
             TemplateInstance.Status st = i.status(ConstraintStore.constraints);
             instanceInfo.setText(Ui.wrapped("<b>" + Ui.esc(i.label()) + "</b> · " + Ui.esc(i.template.toString()) + "<br>" + Ui.esc(st.text()), Ui.TEXT_WIDTH));
@@ -767,6 +808,51 @@ public class TemplatePanel extends JPanel {
         StringBuilder sb = new StringBuilder();
         for (int k = 0; k < depth; k++) sb.append("   ");
         return sb.toString();
+    }
+
+    // ================================================================== rule set
+
+    /** The rule set in short: its name and rules, the window that edits it and the search for its active rules. */
+    private Section createRuleSection() {
+        Section s = new Section("Rule set");
+        JButton edit = Ui.button("Edit rule set…", "Opens the rule set in a window of its own: bundle templates as rules, "
+                + "each switched on or off with a priority; open and save rule sets.", e -> openRuleSet());
+        edit.setName("editRuleSet");
+        JButton find = Ui.button("Find with rules", "Searches the active graph for every active rule of the rule set; the "
+                + "matches appear above and on the graph. Nothing is applied yet.", e -> {
+                    String why = ruleSection.find();
+                    if (why != null) searchStatus.setStatus(why, StatusLabel.Kind.ERROR);
+                    String skipped = why == null ? ruleSection.skipped() : null;
+                    ruleStatus.setStatus(skipped == null ? null : "Skipped: " + skipped, StatusLabel.Kind.ERROR);
+                    ruleStatus.setVisible(skipped != null);
+                });
+        find.setName("findRuleMatchesHere");
+        s.addRow(ruleSummary);
+        s.addRow(Ui.row(edit, find), Ui.GAP_S);
+        ruleStatus.setVisible(false);
+        s.addRow(ruleStatus, Ui.GAP_XS);
+        showRuleSummary();
+        return s;
+    }
+
+    private void showRuleSummary() {
+        ruleSummary.setText(Ui.wrapped(Ui.esc(ruleSection.summary()), Ui.TEXT_WIDTH));
+        ruleStatus.setVisible(false);   // about the rules as they were
+    }
+
+    private void openRuleSet() {
+        if (ruleWindow == null) {
+            ruleWindow = new JFrame("Rule set");
+            VerticalStack column = new VerticalStack();
+            column.setBorder(Ui.columnPadding(Ui.GAP_L, Ui.GAP_XL));
+            column.addRow(ruleSection);
+            ruleWindow.setContentPane(new gui.components.ScrollColumn(column, Ui.COLUMN_WIDTH));
+            ruleWindow.setDefaultCloseOperation(WindowConstants.HIDE_ON_CLOSE);
+            ruleWindow.setSize(Ui.TAB_WIDTH + 30, 640);
+            ruleWindow.setLocationRelativeTo(this);
+        }
+        ruleWindow.setVisible(true);
+        ruleWindow.toFront();
     }
 
     // ================================================================== refresh
@@ -814,21 +900,21 @@ public class TemplatePanel extends JPanel {
             searchStatus.setToolTipText(Ui.tooltip(Ui.esc(text) + (run.notes().isEmpty() ? "" : "<br>" + Ui.esc(String.join(" ", run.notes())))
                     + "<br>Assignments examined: " + fmt(run.assignments())));
         }
+        // one notice under the status: the graph changed since the search, or the search stopped at its limit
         boolean more = run != null && !running && run.state() == SearchRun.State.LIMITED && run.isLimitedByMatches();
+        boolean out = g != null && wb.isRunOutdated(g) && run != null && !running;
+        String say = out ? "The graph changed after the search: new matches may exist, changed ones are marked outdated."
+                : more ? "The search stopped at its limit: the graph may hold more matches." : null;
+        notice.setVisible(say != null);
+        if (say != null) notice.setText(Ui.wrapped("<font color='#b06000'>" + say + "</font>", Ui.TEXT_WIDTH));
+        searchAgain.setVisible(out);
         findMore.setVisible(more);
+        noticeLinks.setVisible(out || more);
         if (more) {
             findMore.setText("Find more (up to " + fmt(run.options.maxMatches * 2L) + ")");
             findMore.setToolTipText(Ui.tooltip("Searches again and collects up to " + fmt(run.options.maxMatches * 2L)
                     + " matches. The matches applied so far stay applied."));
         }
-        boolean out = g != null && wb.isRunOutdated(g) && run != null && !running;
-        outdated.setVisible(out);
-        searchAgain.setVisible(out);
-        if (out) outdated.setText(Ui.wrapped("<font color='#b06000'>The graph changed after the search: new matches may exist, "
-                + "changed ones are marked outdated.</font>", Ui.TEXT_WIDTH));
-
-        if (showSwitch.isSelected() != wb.isSuggestionMode()) showSwitch.setSelected(wb.isSuggestionMode());
-        ConstraintsTab.showState(showState, wb.isSuggestionMode());
 
         updatingMatches = true;
         try {
@@ -845,33 +931,41 @@ public class TemplatePanel extends JPanel {
             updatingMatches = false;
         }
         List<Match> all = wb.matches(g);
+        boolean found = !all.isEmpty();
+        // without matches the section is one line; the list and its actions come with the first match
+        noMatches.setVisible(!found);
+        noMatches.setText(Ui.wrapped(run == null ? "No matches yet: choose a template in the library and find where it fits."
+                : running ? "Searching…" : "The search found no match.", Ui.TEXT_WIDTH));
+        matchScroll.setVisible(found);
+        selectionRow.setVisible(found);
+        applySelected.setVisible(found);
         matchList.setVisibleRowCount(Math.max(1, Math.min(7, matchModel.size())));
-        matchesSection.setTrailingText(all.isEmpty() ? null : fmt(all.size()));
         int page = wb.page(g), pages = wb.pageCount(g);
         int from = page * TemplateLimits.maxShown;
-        pageLabel.setText(all.isEmpty() ? "No matches yet."
-                : pages > 1 ? (from + 1) + "–" + (from + matchModel.size()) + " of " + fmt(all.size())
-                : "All " + fmt(all.size()) + " shown");
+        matchesSection.setTrailingText(!found ? null : pages > 1 ? (from + 1) + "–" + (from + matchModel.size()) + " of " + fmt(all.size())
+                : fmt(all.size()));
+        pager.setVisible(found && pages > 1);
+        pageLabel.setText("Page " + (page + 1) + " of " + pages);
         prevPage.setEnabled(page > 0);
         nextPage.setEnabled(page < pages - 1);
-        prevPage.setVisible(pages > 1);
-        nextPage.setVisible(pages > 1);
         List<Match> sel = wb.selected(g);
         int constraints = TemplateWorkbench.constraintCount(sel);
-        selectionInfo.setText(Ui.wrapped(sel.isEmpty() ? "No match selected for applying." : sel.size() + (sel.size() == 1 ? " match" : " matches")
-                + " selected → " + constraints + (constraints == 1 ? " constraint" : " constraints")
-                + (sel.size() > TemplateLimits.maxApplyPerStep ? " (the first " + TemplateLimits.maxApplyPerStep + " are applied per step)" : ""), Ui.TEXT_WIDTH));
-        applySelected.setText(sel.isEmpty() ? "Apply selected" : "Apply selected (" + sel.size() + ")");
-        applySelected.setEnabled(!sel.isEmpty() && !running);
-        int applicable = 0;
-        for (Match m : all) if (m.state == Match.State.FOUND || m.state == Match.State.STALE) applicable++;
-        boolean complete = run != null && run.state() == SearchRun.State.COMPLETE;
-        applyAll.setText(applicable == 0 ? "Apply all found…" : "Apply all found (" + fmt(applicable) + (complete ? "" : ", search incomplete") + ")…");
-        applyAll.setToolTipText(Ui.tooltip("Applies every found match that is not applied yet, at most " + TemplateLimits.maxApplyPerStep
-                + " per step; shows the numbers first." + (complete ? "" : " The search stopped early: this means all <b>found</b> matches, not all in the graph.")));
-        applyAll.setEnabled(applicable > 0 && !running);
-        selectAll.setEnabled(applicable > 0);
+        int applicable = 0, applied = 0;
+        for (Match m : all) {
+            if (selectable(m)) applicable++;
+            else if (m.state == Match.State.APPLIED) applied++;
+        }
+        selectedLabel.setText(applicable > 0 ? sel.size() + " of " + fmt(applicable) + " selected:"
+                : applied == all.size() ? "All applied." : "None left to apply.");
+        selectAll.setEnabled(applicable > 0 && sel.size() < applicable);
         clearSel.setEnabled(!sel.isEmpty());
+        applySelected.setText(sel.isEmpty() ? "Apply selected" : "Apply " + fmt(sel.size()) + " selected");
+        applySelected.setToolTipText(Ui.tooltip(sel.isEmpty() ? "Tick matches in the list (or All) to apply them together."
+                : "Makes " + Ui.count(constraints, "constraint") + " on the graph and solves the layout once (Edit › Undo reverts it)."
+                + (sel.size() > TemplateLimits.maxApplyPerStep ? " The first " + TemplateLimits.maxApplyPerStep
+                + " are applied in this step, the others stay selected for the next." : "")));
+        applySelected.setEnabled(!sel.isEmpty() && !running);
+        clearResults.setEnabled(!running);
         matchList.repaint();
         refreshInstances();
         ruleSection.refresh();
@@ -961,12 +1055,16 @@ public class TemplatePanel extends JPanel {
     /** Match row: selection box, symbol and number, template, nodes, state. */
     private static final class MatchRenderer extends JPanel implements ListCellRenderer<Match> {
         private static final long serialVersionUID = 1L;
-        private final JLabel box = new JLabel(), head = new JLabel(), body = new JLabel();
+        /** A real check box, so the column that selects for applying is seen as one; its width is {@link #BOX_COLUMN}. */
+        private final JCheckBox box = new JCheckBox();
+        private final JLabel head = new JLabel(), body = new JLabel();
 
         MatchRenderer() {
             super(new BorderLayout(Ui.GAP_S, 0));
-            setBorder(new EmptyBorder(2, 4, 2, 4));
-            box.setFont(Ui.font().deriveFont(15f));
+            setBorder(new EmptyBorder(2, 2, 2, 4));
+            box.setOpaque(false);
+            box.setBorder(new EmptyBorder(0, 0, 0, 0));
+            box.setPreferredSize(new Dimension(BOX_COLUMN - 2 - Ui.GAP_S, box.getPreferredSize().height));
             JPanel text = new JPanel(new GridLayout(2, 1));
             text.setOpaque(false);
             head.setFont(Ui.bold().deriveFont(Ui.small().getSize2D() + 1));
@@ -979,25 +1077,39 @@ public class TemplatePanel extends JPanel {
 
         @Override
         public Component getListCellRendererComponent(JList<? extends Match> l, Match m, int index, boolean selected, boolean focus) {
-            boolean selectable = m.state != Match.State.APPLIED && m.state != Match.State.INVALID;
-            box.setText(!selectable ? " " : m.selected ? "☑" : "☐");
+            boolean selectable = selectable(m);
+            box.setEnabled(selectable);
+            box.setSelected(selectable && m.selected);
             Color c = MatchOverlay.colorOf(m);
-            head.setText(MatchOverlay.symbolOf(m) + " " + m.title());
+            // the check box shows whether a suggestion is selected: the symbol and the state text only show the others
+            boolean plain = MatchOverlay.isSuggestion(m);
+            head.setText(plain ? m.title() : MatchOverlay.symbolOf(m) + " " + m.title());
             List<String> labels = new ArrayList<>();
             for (Node n : m.nodes()) {
                 String s = ConstraintCatalog.plainLabel(n);
                 labels.add(s);
                 if (labels.size() >= 3) break;
             }
-            body.setText(MatchOverlay.stateText(m) + " · " + String.join(", ", labels) + (m.nodes().size() > 3 ? ", …" : "")
+            body.setText((plain ? "Suggestion" : MatchOverlay.stateText(m)) + " · " + String.join(", ", labels) + (m.nodes().size() > 3 ? ", …" : "")
                     + (m.variants().size() > 1 ? " · " + m.variants().size() + " assignments" : ""));
             setBackground(rowBackground(l, index, selected));
             head.setForeground(selected ? l.getSelectionForeground() : c);
             body.setForeground(selected ? l.getSelectionForeground() : Ui.MUTED);
-            box.setForeground(selected ? l.getSelectionForeground() : Ui.ACCENT);
             setOpaque(true);
             return this;
         }
+    }
+
+    /** A match that can be selected for applying: its check box is enabled. */
+    static boolean selectable(Match m) {
+        return m.state != Match.State.APPLIED && m.state != Match.State.INVALID;
+    }
+
+    /** True if {@code p} (in the match list) lies on the enabled check box of a row. */
+    private boolean onCheckBox(Point p) {
+        int i = matchList.locationToIndex(p);
+        Rectangle cell = i < 0 ? null : matchList.getCellBounds(i, i);
+        return cell != null && cell.contains(p) && p.x - cell.x < BOX_COLUMN && selectable(matchModel.get(i));
     }
 
     /** Instance row: on/off symbol, label, state. */

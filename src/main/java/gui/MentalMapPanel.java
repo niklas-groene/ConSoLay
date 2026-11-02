@@ -1,12 +1,9 @@
 package gui;
 
 import adaptagrams_bridge.CBLayoutAlgorithm;
-import gui.components.Badge;
-import gui.components.CardPanel;
-import gui.components.CardSelector;
+import gui.components.PrimaryButton;
 import gui.components.Section;
 import gui.components.StatusLabel;
-import gui.components.SwitchToggle;
 import gui.components.Ui;
 import gui.components.VerticalStack;
 import layout.mental_map.ComparisonLayoutRunner;
@@ -35,7 +32,10 @@ import org.graffiti.plugins.modes.defaults.MegaMoveTool;
 
 import javax.swing.Timer;
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 import java.io.File;
@@ -61,12 +61,8 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
 
     /** Wrap width of the live toggle's text beside its check mark. */
     private static final int CHECK_TEXT_WIDTH = Ui.TEXT_WIDTH - 35;
-    /** Padding inside a snapshot card. */
-    private static final int CARD_PADDING = Ui.GAP_M;
-    /** Size of the thumbnail of a snapshot card. */
-    private static final int THUMB_WIDTH = 46, THUMB_HEIGHT = 34;
-    /** Wrap width of the text of a snapshot card: the card's inner width minus the thumbnail and the gap beside it. */
-    private static final int CARD_TEXT_WIDTH = Ui.TEXT_WIDTH - 2 * (CARD_PADDING + 1) - THUMB_WIDTH - Ui.GAP_M;
+    /** Size of the thumbnail of a row of the snapshot list. */
+    private static final int THUMB_WIDTH = 40, THUMB_HEIGHT = 30;
 
     /** Resolution of the scrubber: its value runs from 0 (oldest snapshot) to this (newest). */
     private static final int SCRUB_MAX = 1000;
@@ -216,16 +212,46 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
      * {@code mentalmap.uid} attribute (see {@link Snapshot#ensureUid}); before that nothing is written into a graph.
      */
     private boolean engaged;
-    /** The layout method: Prototype, and the Improved method as a placeholder that cannot be selected yet. */
-    private final CardSelector<ComparisonLayoutRunner.Choice> methodSelector;
+    /**
+     * The layout method. Only the Prototype can run; the planned Improved method ({@link
+     * ComparisonLayoutRunner.Choice#IMPROVED}) gets a choice next to the run button once it exists.
+     */
+    private final ComparisonLayoutRunner.Choice method = ComparisonLayoutRunner.Choice.PROTOTYPE;
+    /** The primary action: makes the current layout the reference while there is none, then runs the layout. */
+    private final PrimaryButton runButton;
+    /** Makes the current layout the reference; shown once there is one (before, the primary action does it). */
+    private final JButton setReferenceButton;
     private final StatusLabel runStatusLabel;
-    /** Snapshot cards of the "History" section, newest first. */
-    private final VerticalStack timelineListPanel;
-    /** Section "Timeline"; its header counts the snapshots. */
+    /** Section "Timeline": scrubber, playback and the snapshots; shown from two snapshots on. */
     private final Section timelineSection;
-    private final StatusLabel referenceStatusLabel;
-    /** Shown under the reference status while nothing is pinned. */
-    private final JLabel referenceHint;
+    /** The snapshots, newest first; choosing one puts it on the graph. */
+    private final DefaultListModel<Snapshot> snapshotModel = new DefaultListModel<>();
+    /** The row pressed last was chosen already: a click on it puts it on the graph again (no selection event comes). */
+    private boolean pressedChosenRow;
+    private final JList<Snapshot> snapshotList = new JList<Snapshot>(snapshotModel) {
+        private static final long serialVersionUID = 1L;
+        @Override protected void processMouseEvent(MouseEvent e) {
+            if (e.getID() == MouseEvent.MOUSE_PRESSED) {
+                int i = locationToIndex(e.getPoint());
+                pressedChosenRow = i >= 0 && isSelectedIndex(i);
+            }
+            super.processMouseEvent(e);
+        }
+        @Override public String getToolTipText(MouseEvent e) {
+            int i = locationToIndex(e.getPoint());
+            if (i < 0 || !getCellBounds(i, i).contains(e.getPoint())) return null;
+            Snapshot s = snapshotModel.get(i);
+            return Ui.tooltip("<b>" + Ui.esc(snapshotName(s)) + "</b>" + (s == history.getReference() ? " (reference)" : "")
+                    + "<br>" + Ui.esc(s.ago() + " · " + Ui.count(s.getNodeCount(), "node"))
+                    + "<br>Click to put it on the graph; right-click to make it the reference.");
+        }
+    };
+    /** Makes the snapshot chosen in the list the reference. */
+    private final JButton listReferenceButton;
+    /** The scrubber and the row of steps: shown from two snapshots on (with one there is nothing to morph). */
+    private JComponent scrubberRow, stepRow;
+    /** The panel moves the list's selection itself (it follows the scrubber): that puts nothing on the graph. */
+    private boolean syncingList;
     private final JCheckBox liveToggle;
     private Timer liveTimer;
     private boolean suppressLive = false;
@@ -255,89 +281,62 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
     private Rectangle2D runContent;
     // Keep graph in view
     private final TimelineCamera camera = new TimelineCamera(this::onManualCameraChange, this::isTimelineRunning);
-    private final SwitchToggle keepInViewSwitch = new SwitchToggle("Keep graph in view", true);
-    private final JLabel keepInViewState = new JLabel();
-    /** Updates of the "… ago" texts of the snapshot cards, rebuilt with the cards. */
-    private final List<Runnable> agoUpdates = new ArrayList<>();
-    /** Keeps the "… ago" texts of the cards and of the reference status current. */
+    private final JCheckBox keepInViewBox = new JCheckBox("Keep the graph in view", true);
+    /** Keeps the "… ago" texts of the snapshot list and of the run button's tooltip current. */
     private final Timer agoTimer = new Timer(30_000, e -> {
-        for (Runnable r : agoUpdates) r.run();
+        snapshotList.repaint();
         updateReferenceStatus();
     });
 
     /**
-     * Builds the sections "Method", "Reference", "Timeline" and "History" in a transparent column without an outer
-     * border (the tab's scrolling column provides the padding) and takes over from a previous panel.
+     * Builds the sections "Layout" and "Timeline" in a transparent column without an outer border (the tab's scrolling
+     * column provides the padding) and takes over from a previous panel. The column shows what can be done next: at
+     * first a single button that sets the reference; the timeline appears with the second snapshot.
      */
     public MentalMapPanel() {
         super(new BorderLayout());
         setOpaque(false);
 
-        // --- Method: the Prototype, and a placeholder for the planned Improved method. The other choices of
-        //     ComparisonLayoutRunner are not offered here.
-        methodSelector = new CardSelector<>(Ui.TEXT_WIDTH);
-        methodSelector.addOption(ComparisonLayoutRunner.Choice.PROTOTYPE, "Prototype",
-                "Keeps the left-right and top-bottom order and the neighbourhood groups of the reference.",
-                "The mental-map method of the thesis, extended for sequences of states: hard ordering and cluster "
-                        + "constraints derived from the pinned reference. A changed graph is laid out with a "
-                        + "constraint-based force-directed layout; an unchanged graph is only made to satisfy the "
-                        + "constraints. From step to step the nodes keep their order and stay close to where they "
-                        + "were, new nodes start next to their neighbours (or in the nearest free space when there is "
-                        + "no room near them), and when the graph shrinks the freed space is given back down to a "
-                        + "readable density.");
-        methodSelector.addPlaceholderOption(ComparisonLayoutRunner.Choice.IMPROVED, "Improved",
-                "Planned successor of the Prototype. Not available yet.",
-                "An improved mental-map algorithm is planned. It cannot be selected yet.", "Coming soon");
-        methodSelector.setName("mentalMapMethod");
-        methodSelector.getAccessibleContext().setAccessibleName("Method");
+        // --- Layout: the primary action, the other ways to set the reference or the state, the live toggle and the
+        //     status. Status lines are clipped, hints wrap: nothing may widen the column.
+        runButton = Ui.primaryButton("Set current layout as reference", null, e -> runPreserve(true));
+        runButton.setName("mentalMapRun");
 
-        Section methodSection = new Section("Method");
-        methodSection.addRow(methodSelector);
-
-        // --- Reference: the pinned snapshot, the actions relative to it, the live toggle and the run status.
-        //     Status lines are clipped, hints wrap: nothing may widen the column.
-        referenceStatusLabel = new StatusLabel(" ");
-        referenceHint = Ui.hint("The first run pins the current layout.");
-
-        JButton preserveButton = Ui.primaryButton("Run layout",
-                "Run the selected method relative to the pinned reference snapshot. While nothing is pinned, "
-                        + "the first click pins the current layout instead. The constraints a run applies are "
-                        + "listed, read only, under Constraints › Mental map.",
-                e -> runPreserve(true));
-
-        JButton captureButton = Ui.button("Capture snapshot",
-                "Store the current layout as a new snapshot and pin it as the reference.",
+        setReferenceButton = Ui.button("Set current layout as reference",
+                "Keep the current layout as a new snapshot and make it the reference the next runs keep.",
                 e -> captureSnapshot(null));
+        setReferenceButton.setName("mentalMapSetReference");
 
         JButton nextStateButton = Ui.button("Load next state…",
                 "Turn the graph into the state in a graph file, e.g. the network of the next time point. Nodes are "
                         + "matched by their label: nodes and edges the file no longer has are removed, new ones are "
                         + "added with their style from the file, in a block right of the drawing. The current layout "
-                        + "is pinned as the reference first, so Run layout places the new state relative to it.",
+                        + "becomes the reference first, so Run layout places the new state relative to it.",
                 e -> loadNextState());
         nextStateButton.setName("mentalMapNextState");
 
-        liveToggle = new JCheckBox(Ui.wrapped("Auto re-layout while editing", CHECK_TEXT_WIDTH));
+        liveToggle = new JCheckBox(Ui.wrapped("Run the layout after each edit", CHECK_TEXT_WIDTH));
         liveToggle.setOpaque(false);
-        liveToggle.setToolTipText(Ui.tooltip("Run the selected layout 0.4 s after an edit of the graph. "
+        liveToggle.setName("mentalMapLive");
+        liveToggle.setToolTipText(Ui.tooltip("Run the layout 0.4 s after an edit of the graph. "
                 + "Moving nodes, the SBGN steps and the constraint re-solve after a move do not count as edits."));
         liveToggle.addActionListener(e -> onLiveToggled());
 
-        runStatusLabel = new StatusLabel("Ready");
+        runStatusLabel = new StatusLabel(" ");
 
-        Section referenceSection = new Section("Reference");
-        referenceSection.addRow(referenceStatusLabel);
-        referenceSection.addRow(referenceHint, Ui.GAP_XS);
-        referenceSection.addRow(preserveButton);
-        referenceSection.addRow(captureButton);
-        referenceSection.addRow(nextStateButton);
-        referenceSection.addRow(liveToggle);
-        referenceSection.addRow(runStatusLabel);
+        Section layoutSection = new Section("Layout");
+        layoutSection.addRow(runButton);
+        layoutSection.addRow(setReferenceButton);
+        layoutSection.addRow(nextStateButton);
+        layoutSection.addRow(liveToggle);
+        layoutSection.addRow(runStatusLabel);
 
-        // --- Timeline: the scrubber morphs the graph from the oldest (left) to the newest (right) snapshot.
+        // --- Timeline: the scrubber morphs the graph from the oldest (left) to the newest (right) snapshot; the list
+        //     below holds the snapshots, newest first.
         scrubSlider = new JSlider(0, SCRUB_MAX, SCRUB_MAX);
         scrubSlider.setOpaque(false);
         scrubSlider.getAccessibleContext().setAccessibleName("Timeline position");
+        scrubSlider.setToolTipText(Ui.tooltip("Drag to morph the graph from the oldest to the newest snapshot."));
         scrubSlider.addChangeListener(e -> onScrub());
 
         positionLabel = mutedSmall(" ");
@@ -348,42 +347,66 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         scrubber.add(scrubSlider, BorderLayout.CENTER);
         scrubber.add(scrubEnds(positionLabel), BorderLayout.SOUTH);
 
+        backButton = Ui.button("←", "Glide to the previous snapshot.", e -> step(-1));
         playButton = Ui.button("▶ Play", "Animate the morph from the scrubber's position to the newest snapshot; "
                 + "from the oldest one when the scrubber is at the end.", e -> togglePlay());
-        backButton = Ui.button("← Back", "Glide to the previous snapshot.", e -> step(-1));
-        nextButton = Ui.button("Next →", "Glide to the next snapshot.", e -> step(1));
+        nextButton = Ui.button("→", "Glide to the next snapshot.", e -> step(1));
         playButton.setName("mentalMapPlay");
         backButton.setName("mentalMapBack");
         nextButton.setName("mentalMapNext");
 
-        keepInViewSwitch.setName("keepGraphInView");
-        keepInViewSwitch.setToolTipText(Ui.tooltip("<b>On</b>: while the timeline plays, steps or is dragged, and after "
-                + "a restore or a layout run, the view zooms and pans smoothly just as far as needed to keep the whole "
-                + "graph visible. Zooming or panning by hand while it moves the view switches it off. <b>Off</b>: the "
-                + "view stays where you put it."));
-        keepInViewSwitch.addActionListener(e -> onKeepInViewToggled());
-        ConstraintsTab.showState(keepInViewState, true);
+        keepInViewBox.setName("keepGraphInView");
+        keepInViewBox.setOpaque(false);
+        keepInViewBox.setToolTipText(Ui.tooltip("While the timeline plays, steps or is dragged, and after a restore or "
+                + "a layout run, the view zooms and pans smoothly just as far as needed to keep the whole graph visible. "
+                + "Zooming or panning by hand while it moves the view turns this off."));
+        keepInViewBox.addActionListener(e -> onKeepInViewToggled());
+
+        snapshotList.setName("snapshotList");
+        snapshotList.setCellRenderer(new SnapshotRenderer());
+        snapshotList.setFixedCellHeight(THUMB_HEIGHT + 8);
+        snapshotList.setFixedCellWidth(1);   // the list takes the visible width; long names are clipped
+        snapshotList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        snapshotList.getAccessibleContext().setAccessibleName("Snapshots");
+        ToolTipManager.sharedInstance().registerComponent(snapshotList);
+        snapshotList.addListSelectionListener(e -> {
+            if (e.getValueIsAdjusting()) return;
+            updateListButtons();
+            if (syncingList) return;
+            Snapshot s = snapshotList.getSelectedValue();
+            // later: putting the snapshot on the graph rebuilds the list
+            if (s != null) SwingUtilities.invokeLater(() -> { if (history.getAll().contains(s)) restoreSnapshot(s); });
+        });
+        snapshotList.addMouseListener(new MouseAdapter() {
+            @Override public void mousePressed(MouseEvent e) { showSnapshotMenu(e); }
+            @Override public void mouseReleased(MouseEvent e) { showSnapshotMenu(e); }
+            @Override public void mouseClicked(MouseEvent e) {
+                // the chosen row once more (e.g. after an edit): no selection event comes
+                Snapshot s = snapshotList.getSelectedValue();
+                if (SwingUtilities.isLeftMouseButton(e) && pressedChosenRow && s != null) restoreSnapshot(s);
+            }
+        });
+        JScrollPane snapshotScroll = new gui.components.NestedScrollPane(snapshotList, ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+                ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER) {
+            private static final long serialVersionUID = 1L;
+            @Override public Dimension getPreferredSize() { return new Dimension(40, super.getPreferredSize().height); }
+            @Override public Dimension getMinimumSize() { return getPreferredSize(); }
+        };
+
+        listReferenceButton = Ui.button("Set as reference", "Make the snapshot chosen in the list the reference the next "
+                + "runs keep (right-clicking a snapshot does the same).", e -> setReference(snapshotList.getSelectedValue()));
+        listReferenceButton.setName("mentalMapListReference");
 
         timelineSection = new Section("Timeline");
-        timelineSection.addRow(scrubber);
-        timelineSection.addRow(playButton);
-        timelineSection.addRow(Ui.row(backButton, nextButton));
-        timelineSection.addRow(Ui.hint("Drag to morph from the oldest to the newest snapshot."));
-        timelineSection.addRow(ConstraintsTab.switchRow("Keep graph in view", keepInViewSwitch, keepInViewState), Ui.GAP_M);
-        timelineSection.addRow(Ui.hint("Zooms and pans smoothly so the whole graph stays visible. "
-                + "Zooming or panning by hand while it moves the view switches it off."), Ui.GAP_XS);
-
-        // --- History: one card per snapshot, directly in the tab's scrolling column.
-        timelineListPanel = new VerticalStack();
-
-        Section historySection = new Section("History");
-        historySection.addRow(timelineListPanel);
+        scrubberRow = timelineSection.addRow(scrubber);
+        stepRow = timelineSection.addRow(Ui.row(backButton, playButton, nextButton));
+        timelineSection.addRow(keepInViewBox);
+        timelineSection.addRow(snapshotScroll, Ui.GAP_M);
+        timelineSection.addRow(listReferenceButton, Ui.GAP_S);
 
         VerticalStack sections = new VerticalStack();
-        sections.addRow(methodSection, 0);
-        sections.addRow(referenceSection, Ui.SECTION_GAP);
+        sections.addRow(layoutSection, 0);
         sections.addRow(timelineSection, Ui.SECTION_GAP);
-        sections.addRow(historySection, Ui.SECTION_GAP);
         add(sections, BorderLayout.CENTER);
 
         refreshTimeline();
@@ -640,7 +663,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
             return;
         }
         stopTimeline();   // a running morph would overwrite the result
-        ComparisonLayoutRunner.Choice choice = methodSelector.getSelectedValue();
+        ComparisonLayoutRunner.Choice choice = method;
         // A live run follows the graph only if it was in view: the user may be working zoomed in on a detail.
         boolean follow = addToHistory || camera.shows(live, GraphBounds.of(live));
         GraphTimeline t = timeline;
@@ -739,7 +762,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         // A capture moves nothing (it would bypass VANTED's undo history), so the display offset is not grown here.
         Snapshot s = t.add(captureUnmodified(live, label, t), true);
         t.shown = s.positionsByUid();
-        status("Pinned “" + label + "” as the reference", StatusLabel.Kind.SUCCESS);
+        status("“" + label + "” is the reference now", StatusLabel.Kind.SUCCESS);
         camera.ensureScrollable(live, GraphBounds.of(live));
         refreshTimeline();
         showSliderAt(history.getAll().size() - 1);
@@ -990,7 +1013,8 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         GraphTimeline t = timeline;
         if (live == null || live.getNumberOfNodes() == 0 || history.isEmpty()) return false;
         if (t.showsFrame && showsTimelineFrame(live, t)) return false;
-        String label = t.pendingState != null ? t.pendingState : "Snapshot " + (history.addedCount() + 1);
+        // named for what it is: the edited state, kept so that moving through the timeline loses nothing
+        String label = t.pendingState != null ? t.pendingState : "Edited state " + (history.addedCount() + 1);
         Snapshot now = Snapshot.capture(live, label, t.offsetX, t.offsetY, t.shown);
         for (Snapshot s : history.getAll()) {
             if (s.sameState(now)) return false;
@@ -1047,37 +1071,56 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         liveTimer.start();
     }
 
-    /** Reference status line: the pinned snapshot, or a hint that the first run pins the current layout. */
+    /**
+     * The controls that depend on the reference: the primary button sets it while there is none and runs the layout
+     * relative to it afterwards; "Set current layout as reference" appears once there is one.
+     */
     private void updateReferenceStatus() {
-        if (referenceStatusLabel == null) return;
+        if (runButton == null) return;
         Snapshot ref = history.getReference();
-        if (ref == null) {
-            referenceStatusLabel.setStatus("Nothing pinned yet", StatusLabel.Kind.INFO);
-        } else {
-            referenceStatusLabel.setStatus("Pinned: " + Ui.count(ref.getNodeCount(), "node") + " · " + ref.ago(),
-                    StatusLabel.Kind.SUCCESS);
-        }
-        if (referenceHint != null) referenceHint.setVisible(ref == null);
+        runButton.setText(ref == null ? "Set current layout as reference" : "Run layout");
+        runButton.setToolTipText(Ui.tooltip(ref == null
+                ? "Keep the current layout as the reference: the runs after it keep its left-right and top-bottom order "
+                        + "and its neighbourhood groups."
+                : "Lay the graph out relative to the reference <b>" + Ui.esc(snapshotName(ref)) + "</b> ("
+                        + Ui.esc(Ui.count(ref.getNodeCount(), "node") + ", " + ref.ago()) + ") with the Prototype, the "
+                        + "mental-map method of the thesis extended for sequences of states: hard ordering and cluster "
+                        + "constraints derived from the reference. A changed graph is laid out with a constraint-based "
+                        + "force-directed layout; an unchanged graph is only made to satisfy the constraints. New nodes "
+                        + "start next to their neighbours, and when the graph shrinks the freed space is given back. The "
+                        + "constraints a run applies are listed, read only, under Constraints › Mental map."));
+        runButton.repaint();
+        setReferenceButton.setVisible(ref != null);
+        updateListButtons();
     }
 
-    /** Rebuild the snapshot cards from the snapshot history (newest first) and update the timeline controls. */
+    /**
+     * Rebuild the snapshot list from the history (newest first) and update the timeline controls. The timeline shows
+     * from two snapshots on: with fewer there is nothing to move between.
+     */
     private void refreshTimeline() {
-        if (timelineListPanel == null) return;
+        if (runButton == null) return;
         lastScrubIndex = -1; // history changed → scrubber must re-sync topology on next move
-        timelineListPanel.clearRows();
-        agoUpdates.clear();
         List<Snapshot> all = history.getAll();
-        if (all.isEmpty()) {
-            timelineListPanel.addRow(Ui.hint("No snapshots yet – capture one to pin the reference."));
-        } else {
-            for (int i = all.size() - 1; i >= 0; i--) {
-                timelineListPanel.addRow(buildSnapshotRow(all.get(i), i));
-            }
+        syncingList = true;
+        try {
+            snapshotModel.clear();
+            for (int i = all.size() - 1; i >= 0; i--) snapshotModel.addElement(all.get(i));
+        } finally {
+            syncingList = false;
         }
+        snapshotList.setVisibleRowCount(Math.max(1, Math.min(6, all.size())));
+        // from the first snapshot on: the list puts it back on the graph; morphing needs a second one
+        boolean morph = all.size() >= 2;
+        timelineSection.setVisible(!all.isEmpty());
+        scrubberRow.setVisible(morph);
+        stepRow.setVisible(morph);
+        keepInViewBox.setVisible(morph);
+        listReferenceButton.setVisible(morph);
         updateTimelineControls();
         updateReferenceStatus();
-        timelineListPanel.revalidate();
-        timelineListPanel.repaint();
+        revalidate();
+        repaint();
     }
 
     /**
@@ -1099,6 +1142,21 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         backButton.setEnabled(canMorph && value > 0);
         nextButton.setEnabled(canMorph && value < SCRUB_MAX);
         positionLabel.setText(count == 0 ? " " : (int) Math.round(position(count)) + 1 + " / " + count);
+        syncListSelection(count);
+    }
+
+    /** The list chooses the snapshot the scrubber is on or nearest to; that puts nothing on the graph. */
+    private void syncListSelection(int n) {
+        if (n == 0 || snapshotModel.size() != n) return;
+        int row = n - 1 - (int) Math.round(position(n));   // the list is newest first
+        if (row < 0 || row >= n || snapshotList.getSelectedIndex() == row) return;
+        syncingList = true;
+        try {
+            snapshotList.setSelectedIndex(row);
+            snapshotList.ensureIndexIsVisible(row);
+        } finally {
+            syncingList = false;
+        }
     }
 
     // ---- timeline scrubber / morph animation ----
@@ -1397,8 +1455,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
     // ---- keep graph in view ----
 
     private void onKeepInViewToggled() {
-        boolean on = keepInViewSwitch.isSelected();
-        ConstraintsTab.showState(keepInViewState, on);
+        boolean on = keepInViewBox.isSelected();
         camera.setEnabled(on);
         if (!on) return;
         Graph live = activeGraph();
@@ -1412,8 +1469,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
 
     /** The user zoomed or panned while the camera was moving the view: leave the view to the user. */
     private void onManualCameraChange() {
-        keepInViewSwitch.setSelected(false);   // fires no action event
-        ConstraintsTab.showState(keepInViewState, false);
+        keepInViewBox.setSelected(false);   // fires no action event
         camera.setEnabled(false);
         status("View moved by hand: “Keep graph in view” is off", StatusLabel.Kind.INFO);
     }
@@ -1428,56 +1484,72 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         return index < 0 ? "Snapshot" : "Snapshot " + (index + 1);
     }
 
-    /**
-     * One card of the history: thumbnail, name and "ago · n nodes" (and a "Reference" badge on the pinned
-     * snapshot, whose card is highlighted), with "Pin" and "Restore" underneath.
-     */
-    private JComponent buildSnapshotRow(final Snapshot s, int index) {
-        final boolean isRef = (s == history.getReference());
+    /** Makes {@code s} the reference the next runs keep. */
+    private void setReference(Snapshot s) {
+        if (s == null || !history.getAll().contains(s)) return;
+        history.setReference(s);
+        refreshTimeline();
+        status("“" + snapshotName(s) + "” is the reference now", StatusLabel.Kind.SUCCESS);
+    }
 
-        // Thumbnail and text side by side, the two buttons underneath, so the card fits the width of the column.
-        CardPanel card = new CardPanel(new BorderLayout(0, Ui.GAP_M), CARD_PADDING);
-        card.setHighlighted(isRef);
+    /** "Set as reference" acts on the snapshot chosen in the list, unless it is the reference already. */
+    private void updateListButtons() {
+        if (listReferenceButton == null) return;
+        Snapshot s = snapshotList.getSelectedValue();
+        listReferenceButton.setEnabled(s != null && s != history.getReference());
+    }
 
-        JLabel thumbnail = new JLabel(s.getThumbnail(THUMB_WIDTH, THUMB_HEIGHT));
-        thumbnail.setVerticalAlignment(SwingConstants.TOP);
+    /** The context menu of a snapshot: put it on the graph, make it the reference. */
+    private void showSnapshotMenu(MouseEvent e) {
+        if (!e.isPopupTrigger()) return;
+        int i = snapshotList.locationToIndex(e.getPoint());
+        if (i < 0 || !snapshotList.getCellBounds(i, i).contains(e.getPoint())) return;
+        Snapshot s = snapshotModel.get(i);
+        JPopupMenu menu = new JPopupMenu();
+        JMenuItem restore = new JMenuItem("Put on the graph");
+        restore.addActionListener(a -> restoreSnapshot(s));
+        JMenuItem reference = new JMenuItem("Set as reference");
+        reference.setEnabled(s != history.getReference());
+        reference.addActionListener(a -> setReference(s));
+        menu.add(restore);
+        menu.add(reference);
+        menu.show(snapshotList, e.getX(), e.getY());
+    }
 
-        String name = snapshotName(s, index);
-        JLabel title = new JLabel(Ui.wrapped(Ui.esc(name), CARD_TEXT_WIDTH));
-        title.setFont(Ui.bold());
-        VerticalStack text = new VerticalStack();
-        text.addRow(title);
-        JLabel meta = text.addRow(Ui.hint(" ", CARD_TEXT_WIDTH), Ui.GAP_XS);
-        Runnable showMeta = () -> meta.setText(Ui.wrapped(Ui.esc(s.ago() + " · " + Ui.count(s.getNodeCount(), "node")), CARD_TEXT_WIDTH));
-        showMeta.run();
-        agoUpdates.add(showMeta);
-        if (isRef) {
-            JPanel badgeRow = new JPanel(new BorderLayout());   // keeps the badge at its own width
-            badgeRow.setOpaque(false);
-            badgeRow.add(new Badge("Reference"), BorderLayout.WEST);
-            text.addRow(badgeRow, Ui.GAP_S);
+    /** A row of the snapshot list: thumbnail, name, "ago · n nodes", and "Reference" on the reference. */
+    private final class SnapshotRenderer extends JPanel implements ListCellRenderer<Snapshot> {
+        private static final long serialVersionUID = 1L;
+        private final JLabel thumbnail = new JLabel(), name = new JLabel(), meta = new JLabel(), mark = new JLabel();
+
+        SnapshotRenderer() {
+            super(new BorderLayout(Ui.GAP_M, 0));
+            setBorder(new EmptyBorder(3, 4, 3, 6));
+            JPanel text = new JPanel(new GridLayout(2, 1));
+            text.setOpaque(false);
+            name.setFont(Ui.bold().deriveFont(Ui.small().getSize2D() + 1));
+            meta.setFont(Ui.small());
+            mark.setFont(Ui.small().deriveFont(Font.BOLD));
+            text.add(name);
+            text.add(meta);
+            add(thumbnail, BorderLayout.WEST);
+            add(text, BorderLayout.CENTER);
+            add(mark, BorderLayout.EAST);
         }
-        JPanel textColumn = new JPanel(new BorderLayout());
-        textColumn.setOpaque(false);
-        textColumn.add(text, BorderLayout.NORTH);
 
-        JPanel top = new JPanel(new BorderLayout(Ui.GAP_M, 0));
-        top.setOpaque(false);
-        top.add(thumbnail, BorderLayout.WEST);
-        top.add(textColumn, BorderLayout.CENTER);
-        card.add(top, BorderLayout.CENTER);
-
-        JButton pin = Ui.button("Pin", "Pin this snapshot as the mental-map reference", e -> {
-            history.setReference(s);
-            refreshTimeline();
-        });
-        pin.setEnabled(!isRef);
-
-        JButton restore = Ui.button("Restore",
-                "Restore this snapshot on the graph: its node positions, and the nodes and edges it had.",
-                e -> restoreSnapshot(s));
-
-        card.add(Ui.row(pin, restore), BorderLayout.SOUTH);
-        return card;
+        @Override
+        public Component getListCellRendererComponent(JList<? extends Snapshot> l, Snapshot s, int index, boolean selected, boolean focus) {
+            boolean ref = s == history.getReference();
+            thumbnail.setIcon(s.getThumbnail(THUMB_WIDTH, THUMB_HEIGHT));
+            name.setText(snapshotName(s));
+            meta.setText(s.ago() + " · " + Ui.count(s.getNodeCount(), "node"));
+            mark.setText(ref ? "Reference" : "");
+            setBackground(selected ? l.getSelectionBackground() : index % 2 == 0 ? l.getBackground() : Ui.SURFACE_HOVER);
+            name.setForeground(selected ? l.getSelectionForeground() : Ui.TEXT);
+            meta.setForeground(selected ? l.getSelectionForeground() : Ui.MUTED);
+            mark.setForeground(selected ? l.getSelectionForeground() : Ui.ACCENT);
+            getAccessibleContext().setAccessibleName(name.getText() + (ref ? ", reference" : "") + ", " + meta.getText());
+            setOpaque(true);
+            return this;
+        }
     }
 }

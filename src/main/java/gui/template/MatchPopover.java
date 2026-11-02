@@ -45,6 +45,17 @@ final class MatchPopover {
         return panel != null;
     }
 
+    /** True if the popover shows the actions of {@code inst}. */
+    static boolean isOpenFor(TemplateInstance inst) {
+        return panel != null && inst != null && anchorInstance == inst;
+    }
+
+    /** The main window's root pane (the popover's window), or null without a view. */
+    static JRootPane mainRoot() {
+        JLayeredPane lp = layered();
+        return lp == null ? null : SwingUtilities.getRootPane(lp);
+    }
+
     static void hideAll() {
         if (panel != null) {
             Container p = panel.getParent();
@@ -60,6 +71,7 @@ final class MatchPopover {
         placedView = null;
         placedTarget = null;
         if (follow != null) follow.stop();
+        MatchInteraction.get().unbindEscape();
     }
 
     /**
@@ -227,6 +239,15 @@ final class MatchPopover {
             gui.DisplayConstraints.drawConstraints(inst.present(ConstraintStore.constraints));
         });
         body.addRow(show, Ui.GAP_XS);
+        if (inst.status(ConstraintStore.constraints).notApplied > 0) {
+            JButton prefer = Ui.button("Prefer this instance…", "Raises the priorities of its constraints that are not applied "
+                    + "so they win; shows first what changes.", e -> {
+                        wb.preferInstance(inst, layered());
+                        reopen.run();
+                    });
+            prefer.setName("instancePrefer");
+            body.addRow(prefer, Ui.GAP_XS);
+        }
     }
 
     /** Lists overlapping matches to choose one; moving through the list previews each on the graph. */
@@ -303,6 +324,7 @@ final class MatchPopover {
         p.addMouseListener(new MouseAdapter() { });   // clicks stay in the popover
         panel = p;
         lp.add(p, JLayeredPane.POPUP_LAYER);
+        MatchInteraction.get().bindEscape();   // Escape closes it
         place(lp, at);
         lp.revalidate();
         lp.repaint();
@@ -341,8 +363,8 @@ final class MatchPopover {
         Rectangle target;
         if (anchor != null || anchorInstance != null) {
             Rectangle2D b = anchor != null ? MatchOverlay.bounds(anchor, lp) : MatchOverlay.bounds(anchorInstance, lp);
-            if (b == null) return;
-            target = b.getBounds();
+            // nothing of it left on the graph (e.g. an instance whose nodes were deleted): its actions stay reachable
+            target = b != null ? b.getBounds() : new Rectangle(vis.x + 20, vis.y + 20, 1, 1);
         } else {
             target = new Rectangle(at == null ? vis.x + 20 : at.x, at == null ? vis.y + 20 : at.y, 1, 1);
         }

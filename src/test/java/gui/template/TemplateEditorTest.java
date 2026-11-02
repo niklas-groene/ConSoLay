@@ -20,6 +20,7 @@ import javax.swing.AbstractButton;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
+import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JSpinner;
@@ -39,6 +40,7 @@ import java.util.function.Predicate;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 
@@ -358,6 +360,47 @@ public class TemplateEditorTest {
             }
             assertEquals(before + 4, count(pp, JComboBox.class));
         });
+    }
+
+    /**
+     * Size, further conditions and ports of a node start closed with what they hold in the header; a part the user
+     * opened stays open when the panel is built anew after a change.
+     */
+    @Test
+    public void nodePartsShowTheirContentAndStayOpen() throws Exception {
+        onEdt(() -> {
+            EditorModel model = new EditorModel(pattern(1), new TemplateLibrary(null));
+            model.selNodes.add("n1");
+            PatternProperties pp = new PatternProperties(model);
+            gui.components.Section size = part(pp, "SIZE");
+            assertFalse(size.isExpanded());
+            assertEquals(1, count(size, JLabel.class, "40 × 30"));
+            for (String a : Arrays.asList("label", "sbgn.compartment")) {
+                model.change("Add condition", () -> model.def().node("n1").setCondition(new Condition(a, Condition.Op.EXISTS, null)));
+            }
+            assertEquals(1, count(part(pp, "MORE CONDITIONS"), JLabel.class, "2"));
+            Component header = part(pp, "SIZE").getComponent(0);
+            header.dispatchEvent(new MouseEvent(header, MouseEvent.MOUSE_PRESSED, 0, java.awt.event.InputEvent.BUTTON1_DOWN_MASK, 2, 2, 1, false, MouseEvent.BUTTON1));
+            assertTrue(part(pp, "SIZE").isExpanded());
+            model.change("Rename node", () -> model.def().node("n1").label = "A");   // rebuilds the panel
+            assertTrue(part(pp, "SIZE").isExpanded());
+            assertFalse(part(pp, "PORTS").isExpanded());
+        });
+    }
+
+    /** The collapsible part of the node section whose header reads {@code title}. */
+    private static gui.components.Section part(Container root, String title) {
+        Component l = find(root, JLabel.class, c -> title.equals(((JLabel) c).getText()));
+        return (gui.components.Section) SwingUtilities.getAncestorOfClass(gui.components.Section.class, l);
+    }
+
+    private static int count(Container root, Class<?> type, String text) {
+        int n = 0;
+        for (Component c : root.getComponents()) {
+            if (type.isInstance(c) && c instanceof JLabel && text.equals(((JLabel) c).getText())) n++;
+            if (c instanceof Container) n += count((Container) c, type, text);
+        }
+        return n;
     }
 
     /** A value stepped repeatedly is one undo step, its spinner stays, and showing a value never changes it. */

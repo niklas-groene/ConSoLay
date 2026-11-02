@@ -9,10 +9,9 @@ import javax.swing.*;
 import java.awt.*;
 
 /**
- * Main tab "Templates": every operation on templates in one place. The {@link TemplatePanel} below a short
- * introduction holds the library (create a template from the selection or as a composite of other templates, edit,
+ * Main tab "Templates": every operation on templates in one place. The {@link TemplatePanel} holds the library (create a template from the selection or as a composite of other templates, edit,
  * import, choose the library folder), the search for matches, the found matches with their conflict checks, the
- * applied instances and the rule sets. Editing a template opens the template editor in its own window.
+ * applied instances and a summary of the rule set. Editing a template or the rule set opens a window of its own.
  *
  * @author Niklas Gröne
  */
@@ -25,11 +24,7 @@ public class TemplatesTab extends JPanel {
 
         VerticalStack column = new VerticalStack();
         column.setBorder(Ui.columnPadding(Ui.GAP_L, Ui.GAP_XL));
-        column.addRow(Ui.hint("Templates describe where they fit (a pattern, or a composite of other templates) and which "
-                + "constraints they make there. Find where they fit, review the suggestions and their conflicts on the "
-                + "graph and apply the ones you choose; build templates and rule sets in the editor.",
-                Ui.COLUMN_WIDTH - 2 * Ui.PAD));
-        column.addRow(new TemplatePanel(), Ui.SECTION_GAP);
+        column.addRow(new TemplatePanel());
 
         add(new ScrollColumn(column, Ui.COLUMN_WIDTH), BorderLayout.CENTER);
     }

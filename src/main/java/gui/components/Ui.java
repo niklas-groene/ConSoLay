@@ -188,6 +188,37 @@ public final class Ui {
         }, tooltip, action);
     }
 
+    /**
+     * A small text link for a secondary action inside a line of text (e.g. "All · None"); it takes no more room than
+     * its text.
+     */
+    public static JButton link(String text, String tooltip, ActionListener action) {
+        JButton b = new JButton(text);
+        b.setBorderPainted(false);
+        b.setContentAreaFilled(false);
+        b.setOpaque(false);
+        b.setMargin(new Insets(0, 0, 0, 0));
+        b.setBorder(new EmptyBorder(1, 0, 1, 0));
+        b.setFont(small());
+        b.setForeground(ACCENT);
+        b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        return withAction(b, tooltip, action);
+    }
+
+    /** Components left to right at their own widths, {@code gap} px apart (e.g. a text and its links). */
+    public static JPanel flow(int gap, JComponent... components) {
+        JPanel row = new JPanel();
+        row.setLayout(new BoxLayout(row, BoxLayout.X_AXIS));   // unlike a FlowLayout, no gap before the first one
+        row.setOpaque(false);
+        for (int i = 0; i < components.length; i++) {
+            if (i > 0) row.add(Box.createHorizontalStrut(gap));
+            components[i].setAlignmentY(Component.CENTER_ALIGNMENT);
+            row.add(components[i]);
+        }
+        row.add(Box.createHorizontalGlue());
+        return row;
+    }
+
     /** The primary action of a section (at most one per section). */
     public static PrimaryButton primaryButton(String text, String tooltip, ActionListener action) {
         return withAction(new PrimaryButton(text), tooltip, action);

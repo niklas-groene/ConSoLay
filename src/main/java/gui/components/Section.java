@@ -25,6 +25,8 @@ public class Section extends JPanel {
     private final VerticalStack body = new VerticalStack();
     private final boolean collapsible;
     private boolean expanded = true;
+    /** Told when the user opens or closes the section (not when the code does). */
+    private Runnable onToggle = () -> { };
 
     /** A section that is always open. */
     public Section(String title) {
@@ -67,6 +69,15 @@ public class Section extends JPanel {
         label.setFont(Ui.small());
         label.setForeground(Ui.MUTED);
         header.setTrailing(label);
+    }
+
+    public boolean isExpanded() {
+        return expanded;
+    }
+
+    /** Called after the user opened or closed the section, e.g. to keep its state across a rebuild. */
+    public void setOnToggle(Runnable r) {
+        onToggle = r == null ? () -> { } : r;
     }
 
     public void setExpanded(boolean expanded) {
@@ -127,6 +138,7 @@ public class Section extends JPanel {
         private void toggle() {
             requestFocusInWindow();
             setExpanded(!expanded);
+            onToggle.run();
         }
 
         void setTrailing(JComponent c) {

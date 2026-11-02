@@ -29,8 +29,9 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * Section "Rule set" of the Templates panel: several templates bundled as named rules, each switched on or off, with a
- * priority for the constraints it makes, saved as one file that carries every template it needs. Creating, loading or
+ * The rule set, edited in a window of its own that the Templates panel opens (the panel shows it in short): several
+ * templates bundled as named rules, each switched on or off, with a priority for the constraints it makes, saved as one
+ * file that carries every template it needs. Creating, loading or
  * editing a rule set never changes the graph: "Find matches for active rules" searches, and the found matches are
  * reviewed and applied like any others.
  *
@@ -58,9 +59,13 @@ final class RuleSetSection extends Section {
     private boolean updating;
     /** The rule the editor fields show; their edits go to it, even when they are committed after the list moved on. */
     private RuleSystem.Rule shown;
+    /** The active rules the last search left out and why ("A (template missing)"), or null. */
+    private String skipped;
+    /** Told about every change of the rule set (its name, its rules, a new or opened one): the panel's summary follows. */
+    Runnable onChanged = () -> { };
 
     RuleSetSection(TemplatePanel panel) {
-        super("Rule set", true, false);
+        super("Rule set", false, true);
         this.panel = panel;
         Object[] prios = new Object[Priority.values().length + 1];
         prios[0] = KEEP;
@@ -68,7 +73,10 @@ final class RuleSetSection extends Section {
         rulePriority = Ui.comboBox(prios);
 
         nameField.setText(rules.name);
-        onCommit(nameField, () -> rules.name = nameField.getText().trim());
+        onCommit(nameField, () -> {
+            rules.name = nameField.getText().trim();
+            onChanged.run();
+        });
         addRow(Ui.labeled("Name", nameField));
         addRow(Ui.hint("Bundle templates as rules; find the matches of all active rules at once, review them and apply the ones you want."), Ui.GAP_XS);
         list.setName("ruleList");
@@ -83,6 +91,7 @@ final class RuleSetSection extends Section {
         });
         list.setVisibleRowCount(4);
         list.setFixedCellWidth(1);
+        list.setFixedCellHeight(22);   // so the empty list is as high as four rules, too
         list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);   // the editor and the buttons act on one rule
         list.addListSelectionListener(e -> { if (!e.getValueIsAdjusting()) showRule(); });
         list.getAccessibleContext().setAccessibleName("Rules");
@@ -90,7 +99,7 @@ final class RuleSetSection extends Section {
             private static final long serialVersionUID = 1L;
             @Override public Dimension getPreferredSize() { return new Dimension(40, super.getPreferredSize().height); }
         }, Ui.GAP_S);
-        JButton add = Ui.button("Add chosen template", "Adds the template chosen in the library as a new rule.", e -> addRule());
+        JButton add = Ui.button("Add template", "Adds the template chosen in the Library list of the Templates page as a new rule.", e -> addRule());
         add.setName("addRule");
         JButton remove = Ui.button("Remove", "Removes the rule (not its template).", e -> removeRule());
         JButton up = Ui.button("Up", "Moves the rule up (the list order is the order of the search).", e -> move(-1));
@@ -143,6 +152,16 @@ final class RuleSetSection extends Section {
         if (updating || shown == null) return;
         e.accept(shown);
         list.repaint();
+        onChanged.run();
+    }
+
+    /** The rule set in a line: its name and how many of its rules are active. */
+    String summary() {
+        int active = 0;
+        for (RuleSystem.Rule r : rules.rules) if (r.enabled) active++;
+        String name = rules.name == null || rules.name.trim().isEmpty() ? "Untitled rule set" : rules.name.trim();
+        return rules.rules.isEmpty() ? name + ": no rules yet. Edit the rule set to add templates of the library as rules."
+                : name + ": " + active + " of " + Ui.count(rules.rules.size(), "rule") + " active.";
     }
 
     private TemplateSource source() {
@@ -163,6 +182,7 @@ final class RuleSetSection extends Section {
         for (RuleSystem.Rule r : rules.rules) model.addElement(r);
         if (!model.isEmpty()) list.setSelectedIndex(0);
         showRule();
+        onChanged.run();
     }
 
     private void showRule() {
@@ -193,7 +213,7 @@ final class RuleSetSection extends Section {
     private void addRule() {
         TemplateDef t = panel.selectedTemplate();
         if (t == null) {
-            status.setStatus("Choose a template in the library first.", StatusLabel.Kind.ERROR);
+            status.setStatus("Choose a template in the Library list of the Templates page first.", StatusLabel.Kind.ERROR);
             return;
         }
         RuleSystem.Rule r = new RuleSystem.Rule(rules.nextRuleId(), t.name, t.ref());
@@ -202,6 +222,7 @@ final class RuleSetSection extends Section {
         model.addElement(r);
         list.setSelectedValue(r, true);
         status.setStatus("Added rule '" + r.name + "'.", StatusLabel.Kind.SUCCESS);
+        onChanged.run();
     }
 
     private void removeRule() {
@@ -210,6 +231,7 @@ final class RuleSetSection extends Section {
         rules.rules.remove(r);
         model.removeElement(r);
         showRule();
+        onChanged.run();
     }
 
     private void move(int d) {
@@ -252,7 +274,8 @@ final class RuleSetSection extends Section {
         }
     }
 
-    private void find() {
+    /** Searches the active graph for every active rule; returns null if the search started, else why not. */
+    String find() {
         List<SearchTask> tasks = new ArrayList<>();
         List<String> skipped = new ArrayList<>();
         for (RuleSystem.Rule r : rules.rules) {
@@ -269,18 +292,25 @@ final class RuleSetSection extends Section {
             }
             tasks.add(new SearchTask(t, s, r.name, r.priority));
         }
+        this.skipped = skipped.isEmpty() ? null : String.join(", ", skipped);
         if (tasks.isEmpty()) {
-            status.setStatus(rules.rules.isEmpty() ? "Add rules first." : "No active rule can search" + (skipped.isEmpty() ? "." : ": " + String.join(", ", skipped)),
-                    StatusLabel.Kind.ERROR);
-            return;
+            String why = rules.rules.isEmpty() ? "The rule set has no rules yet." : "No active rule can search" + (skipped.isEmpty() ? "." : ": " + String.join(", ", skipped));
+            status.setStatus(why, StatusLabel.Kind.ERROR);
+            return why;
         }
         String why = panel.startSearch(tasks);
         if (why != null) {
             status.setStatus("Not searched: " + why, StatusLabel.Kind.ERROR);
-            return;
+            return why;
         }
         status.setStatus("Searching " + Ui.count(tasks.size(), "rule") + (skipped.isEmpty() ? "" : "; skipped: " + String.join(", ", skipped)),
                 skipped.isEmpty() ? StatusLabel.Kind.INFO : StatusLabel.Kind.ERROR);
+        return null;
+    }
+
+    /** The active rules the last search left out, with the reason, or null if it searched for all of them. */
+    String skipped() {
+        return skipped;
     }
 
     private void open() {
