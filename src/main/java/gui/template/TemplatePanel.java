@@ -207,11 +207,13 @@ public class TemplatePanel extends JPanel {
         s.addRow(scroll(libraryList));
         s.addRow(templateInfo, Ui.GAP_XS);
 
-        // New: the three ways to make a template, in one menu
-        JButton newButton = Ui.button("New ▾", "Make a template: from the nodes selected in the graph, as a composite of "
-                + "other templates, or from a file.", null);
+        // New: the ways to make a template, in one menu
+        JButton newButton = Ui.button("New ▾", "Make a template: an empty one to draw from scratch, from the nodes selected "
+                + "in the graph, as a composite of other templates, or from a file.", null);
         newButton.setName("newTemplate");
         JPopupMenu menu = new JPopupMenu();
+        menu.add(menuItem("Blank template", "newBlank", "A new, empty template: draw its nodes and edges in the editor "
+                + "(Add node, Connect) and add its constraints. Needs no graph and no selection.", this::newBlank));
         menu.add(menuItem("From selection", "newFromSelection", "A new template from the selected nodes, their edges and the "
                 + "constraints that lie completely inside the selection. Opens the editor.", this::newFromSelection));
         menu.add(menuItem("Composite of templates", "newComposite", "A template made of other templates: connect their ports "
@@ -395,6 +397,13 @@ public class TemplatePanel extends JPanel {
         }
         if (r.taken == 0) banner.append(" Add constraints, or derive them from the arrangement.");
         TemplateEditor.open(r.template, null, library, banner.toString(), this::saved);
+    }
+
+    /** "Blank template": an empty pattern in the editor, drawn from scratch (no graph or selection needed). */
+    private void newBlank() {
+        TemplateDef t = TemplateDef.create("New template", TemplateDef.Kind.PATTERN);
+        TemplateEditor.open(t, null, library, "An empty template: choose \"Add node\" and click on the canvas, connect nodes "
+                + "with \"Connect\", then add constraints. Save puts it into the library.", this::saved);
     }
 
     private void newComposite() {
