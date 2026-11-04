@@ -13,13 +13,15 @@ orders, groups, areas, pins, rows, stars, ...), the add-on decides contradicting
 drawing onto the applied constraints and shows every constraint with its state. Constraints come from three levels and
 pass through the same loop:
 
-- **by hand**: the Constraints page (tab "Constraint-Based Layout") with a palette, a list and a Conflicts section that
+- **by hand**: the Constraints page (tab "Constraint-Based Layout") with a palette and a list whose "Conflicts" filter
   explains every decision;
 - **from a library**: templates (patterns with conditions on node and edge attributes and the constraints to create),
-  composites and rule sets, found in a graph by a subgraph search and applied in batches (the Templates page);
+  composites and rule sets, drawn from scratch or taken from a selection, found in a graph by a subgraph search and
+  applied in batches (the Templates page);
 - **by algorithm**: layout algorithms written as steps that add constraints instead of setting positions, with the
   SBGN PD, ER and AF layouts as the first ones (Algorithms › SBGN); other add-ons register their own through
-  `layout.steps.StepLayoutRegistry` (see `supplement/algorithm-interface.md`).
+  `layout.steps.StepLayoutRegistry` (see `supplement/algorithm-interface.md`). The Mental Map layout puts the orders
+  and groups it keeps from the reference into the same list.
 
 ## Build
 

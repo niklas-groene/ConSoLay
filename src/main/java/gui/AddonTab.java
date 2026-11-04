@@ -250,6 +250,21 @@ public class AddonTab extends InspectorTab implements ViewListener, SessionListe
     }
 
     /**
+     * Decides anew which constraints of {@code g}'s store are applied, without moving a node, and shows the result: after
+     * a layout put constraints into the store that it already holds (a Mental Map run, the timeline).
+     */
+    static void decideConstraints(Graph g) {
+        if (g != null && g == ConstraintStore.activeGraph() && ConstraintStore.constraints != null) {
+            List<Constraint> all = ConstraintStore.constraints.getAllConstraints();
+            ConstraintConflicts.Scope scope = CBLayoutAlgorithm.userScope(g, ConstraintsTab.isForceDirected(), ConstraintsTab.isAvoidOverlaps());
+            if (scope != null) ConstraintConflicts.resolve(all, scope);
+            ConflictLog.setDeactivated(all);
+        }
+        ListModels.updateAllLists();
+        DisplayConstraints.revalidateIndication();
+    }
+
+    /**
      * VANTED fires this after File › Save and Save As. SBGN-ML keeps no foreign attributes, so the constraints of a map
      * saved as SBGN-ML go into the companion file next to it.
      */

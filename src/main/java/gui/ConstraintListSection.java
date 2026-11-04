@@ -16,6 +16,7 @@ import gui.components.SvgIcon;
 import gui.components.SwitchToggle;
 import gui.components.Ui;
 import gui.components.VerticalStack;
+import layout.mental_map.MentalMapConstraints;
 import layout.store.GraphConstraints;
 
 import de.ipk_gatersleben.ag_nw.graffiti.GraphHelper;
@@ -44,7 +45,9 @@ import java.util.function.Predicate;
  * Section "Constraints" of the {@link ConstraintsTab}: the constraints of the active graph in one filterable list, the
  * actions on the selected entries and, for a single entry, a card to edit its values, switch and priority. A constraint
  * that is not applied stays in the list, greyed, with the reason; with "Group by structure" the constraints a layout
- * step made for one {@link ConstraintGroup} form one entry, on which drawing, switch, priority and Delete act together.
+ * step or a Mental Map run made for one {@link ConstraintGroup} form one entry, on which drawing, switch, priority and
+ * Delete act together. The filter "Conflicts" shows every entry of the {@link ConflictLog}: the constraints not applied
+ * or not satisfied, those the SBGN guard dropped (with Restore) and the warnings.
  *
  * @author Niklas Gröne
  */
@@ -55,12 +58,16 @@ final class ConstraintListSection extends Section {
     /** Filters of the "Show" box, in order. */
     private static final Map<String, Predicate<Constraint>> FILTERS = new LinkedHashMap<>();
 
+    /** The filter that lists the conflicts (the box shows their number with it). */
+    static final String CONFLICTS = "Conflicts";
+
     static {
         FILTERS.put("All constraints", c -> true);
+        FILTERS.put(CONFLICTS, c -> ConflictLog.entryFor(c) != null);
         FILTERS.put("Made by you", c -> !c.isAutomatic());
         FILTERS.put("From templates", c -> c.getOrigin() != null);
-        FILTERS.put("From the SBGN steps", Constraint::isAutomatic);
-        FILTERS.put("With conflicts", c -> ConflictLog.entryFor(c) != null);
+        FILTERS.put("From the SBGN steps", c -> c.isAutomatic() && !MentalMapConstraints.isMentalMap(c));
+        FILTERS.put("From the Mental Map", MentalMapConstraints::isMentalMap);
         FILTERS.put("Not applied", c -> c.isEnabled() && !c.isActive());
         for (ConstraintKind.Category cat : ConstraintKind.Category.values()) {
             FILTERS.put(ConstraintCatalog.categoryLabel(cat), c -> c.getKind().getCategory() == cat);
@@ -77,8 +84,9 @@ final class ConstraintListSection extends Section {
             ConstraintGroup group = groupOf(c);
             if (group != null) {
                 List<Constraint> ms = membersOf(c);
-                StringBuilder sb = new StringBuilder("<b>" + Ui.esc(group.label) + "</b><br>" + Ui.count(ms.size(), "constraint") + " of step "
-                        + Ui.esc(group.step) + "; the switch, the priority and Delete act on all of them.");
+                StringBuilder sb = new StringBuilder("<b>" + Ui.esc(group.label) + "</b><br>" + Ui.count(ms.size(), "constraint")
+                        + (MentalMapConstraints.isMentalMap(c) ? " of the last Mental Map run" : " of step " + Ui.esc(group.step))
+                        + "; the switch, the priority and Delete act on all of them.");
                 int k = 0;
                 for (Constraint m : ms) {
                     if (k++ == 8) { sb.append("<br>…"); break; }
@@ -90,7 +98,8 @@ final class ConstraintListSection extends Section {
             ConstraintCatalog.Info info = ConstraintCatalog.info(c);
             return Ui.tooltip("<b>" + Ui.esc(ConstraintCatalog.describe(c)) + "</b><br>" + Ui.esc(ConstraintCatalog.nodesText(c))
                     + (info == null ? "" : "<br><i>Adaptagrams: " + Ui.esc(info.adaptagrams) + "</i>")
-                    + (c.isAutomatic() ? "<br>Made by an SBGN step." : "")
+                    + (MentalMapConstraints.isMentalMap(c) ? "<br>Made by the last Mental Map run (" + Ui.esc(c.getGroup().label) + ")."
+                            : c.isAutomatic() ? "<br>Made by an SBGN step." : "")
                     + (c.getOrigin() == null ? "" : "<br>From template instance <b>" + Ui.esc(c.getOrigin().getInstanceLabel()) + "</b>: "
                             + Ui.esc(c.getOrigin().pathText()) + " (rev. " + c.getOrigin().getTemplateRevision() + ")"
                             + (c.getOrigin().isSwitchedOn() ? "" : "<br>Its instance (or component) is switched off."))
@@ -120,6 +129,12 @@ final class ConstraintListSection extends Section {
     private final JButton preferButton = Ui.button("Prefer this",
             "Raise its priority above the constraints it contradicts (if even the highest is not enough, lower theirs), "
                     + "so that it is applied instead of them.", null);
+    private final JButton restoreButton = Ui.button("Restore",
+            "Put the dropped constraint back as your own constraint: then it ranks above the SBGN steps' constraints of the "
+                    + "same priority.", null);
+    /** The warnings of the conflict log (they name no single constraint); shown with the "Conflicts" filter. */
+    private final JLabel warningsHint = Ui.hint(" ");
+    private final JButton dismissWarnings = Ui.button("Dismiss warnings", "Forget these warnings.", null);
     /** True while the card shows a constraint's state: the controls' listeners must not write it back. */
     private boolean updatingEditor;
     private final Timer resolveTimer;
@@ -158,6 +173,17 @@ final class ConstraintListSection extends Section {
         list.getActionMap().put("deleteConstraints", delete);
         list.getAccessibleContext().setAccessibleName("Constraints");
         filter.setName("constraintFilter");
+        filter.setRenderer(new DefaultListCellRenderer() {
+            private static final long serialVersionUID = 1L;
+            @Override public Component getListCellRendererComponent(JList<?> l, Object value, int index, boolean sel, boolean focus) {
+                super.getListCellRendererComponent(l, value, index, sel, focus);
+                if (CONFLICTS.equals(value)) {
+                    int n = ConflictLog.entries().size();
+                    if (n > 0) setText(CONFLICTS + " (" + n + ")");
+                }
+                return this;
+            }
+        });
         filter.addActionListener(e -> refresh());
         groupBox.setName("groupByStructure");
         groupBox.setOpaque(false);
@@ -187,15 +213,35 @@ final class ConstraintListSection extends Section {
         editorTitle.setFont(Ui.bold());
         editorForm.setOpaque(false);
         editorState.setName("constraintState");
+        preferButton.setName("preferConstraint");
+        preferButton.addActionListener(e -> {
+            if (editing == null) return;
+            Constraint c = editing;
+            prefer(c);
+            keepShowing(c);
+        });
+        restoreButton.setName("restoreConstraint");
+        restoreButton.addActionListener(e -> restoreEditing());
         editorBody.addRow(editorState);
+        editorBody.addRow(Ui.row(preferButton, restoreButton), Ui.GAP_S);
         editorBody.addRow(editorForm, Ui.GAP_S);
         editorBody.addRow(createEditorAdvanced(), Ui.GAP_M);
         editorCard.add(editorTitle, BorderLayout.NORTH);
         editorCard.add(editorBody, BorderLayout.CENTER);
         editorCard.setVisible(false);
 
+        warningsHint.setName("conflictWarnings");
+        dismissWarnings.setName("dismissWarnings");
+        dismissWarnings.addActionListener(e -> {
+            boolean freed = false;
+            for (ConflictLog.Entry w : ConflictLog.entries()) if (w.kind == ConflictLog.Kind.WARNING) freed |= ConflictLog.discard(w);
+            if (freed) AddonTab.executeUserConstraints();
+            ListModels.updateAllLists();
+        });
         addRow(Ui.labeled("Show", filter));
         addRow(groupBox, Ui.GAP_XS);
+        addRow(warningsHint, Ui.GAP_XS);
+        addRow(dismissWarnings, Ui.GAP_XS);
         addRow(emptyHint);
         addRow(scroll);
         addRow(Ui.row(showAllButton, selectNodesButton));
@@ -228,18 +274,10 @@ final class ConstraintListSection extends Section {
             for (Constraint m : membersOf(editing)) m.setPriority(p);
             afterStateChange();
         });
-        preferButton.setName("preferConstraint");
-        preferButton.addActionListener(e -> {
-            if (editing == null) return;
-            Constraint c = editing;
-            prefer(c);
-            keepShowing(c);
-        });
         editorAdvanced.setName("editorAdvanced");
         editorAdvanced.addRow(ConstraintsTab.switchRow("Enabled", activeSwitch, activeState));
         editorAdvanced.addRow(Ui.labeled("Priority", priorityBox), Ui.GAP_S);
         editorAdvanced.addRow(Ui.hint(PriorityControls.RULE, ConstraintsTab.CARD_TEXT_WIDTH), Ui.GAP_XS);
-        editorAdvanced.addRow(preferButton, Ui.GAP_S);
         return editorAdvanced;
     }
 
@@ -250,6 +288,25 @@ final class ConstraintListSection extends Section {
         ListModels.updateAllLists();
         DisplayConstraints.revalidateIndication();
         keepShowing(c);
+    }
+
+    /** Restore of the card: the dropped constraint goes back into the store as the user's own, then a solve applies it. */
+    private void restoreEditing() {
+        Constraint c = editing;
+        ConflictLog.Entry en = c == null ? null : ConflictLog.entryFor(c);
+        if (en == null || en.kind != ConflictLog.Kind.DROPPED) return;
+        ConflictLog.restore(en);
+        Graph g = activeGraph();
+        if (g != null && belongsTo(c, g)) AddonTab.executeUserConstraints();
+        ListModels.updateAllLists();
+        DisplayConstraints.revalidateIndication();
+        keepShowing(c);
+    }
+
+    /** True for a constraint the SBGN guard dropped: it is in the conflict log, not in the store. */
+    private static boolean isDropped(Constraint c) {
+        ConflictLog.Entry e = ConflictLog.entryFor(c);
+        return e != null && e.kind == ConflictLog.Kind.DROPPED;
     }
 
     /** The card stays on the constraint it changed, even if the filter no longer shows it ("Not applied"). */
@@ -281,6 +338,7 @@ final class ConstraintListSection extends Section {
     void refresh() {
         Set<Constraint> selected = new HashSet<>(list.getSelectedValuesList());
         Predicate<Constraint> f = FILTERS.get((String) filter.getSelectedItem());
+        boolean conflicts = CONFLICTS.equals(filter.getSelectedItem());
         Graph active = activeGraph();
         refreshing = true;
         boolean lostSelection;
@@ -301,6 +359,7 @@ final class ConstraintListSection extends Section {
                     if (!belongsTo(c, active)) continue;
                     total++;
                     ConstraintGroup g = grouping ? c.getGroup() : null;
+                    if (g != null && members.get(g) != null && members.get(g).size() == 1) g = null;   // a group of one is that one
                     if (g != null) {
                         List<Constraint> ms = members.get(g);
                         if (ms == null || ms.get(0) != c) continue;   // not the first member: shown through the first
@@ -314,20 +373,34 @@ final class ConstraintListSection extends Section {
                     // the constraint being edited stays, so a change that takes it out of the filter keeps its card
                     if (f == null || f.test(c) || c == editing) model.addElement(c);
                 }
+                // what the SBGN guard dropped is no longer in the store: the conflicts list it, for Restore
+                if (conflicts) {
+                    for (ConflictLog.Entry e : ConflictLog.entries()) {
+                        if (e.kind == ConflictLog.Kind.DROPPED && e.constraint != null && belongsTo(e.constraint, active)
+                                && !model.contains(e.constraint) && !ConstraintStore.constraints.getAllConstraints().contains(e.constraint)) {
+                            model.addElement(e.constraint);
+                        }
+                    }
+                }
             }
+            showWarnings(conflicts);
             List<Integer> keep = new ArrayList<>();
             for (int i = 0; i < model.size(); i++) if (selected.contains(model.get(i))) keep.add(i);
             int[] ix = new int[keep.size()];
             for (int i = 0; i < ix.length; i++) ix[i] = keep.get(i);
             list.setSelectedIndices(ix);
             lostSelection = keep.size() < selected.size() || (editing != null && !model.contains(editing));
-            setTrailingText(represented.isEmpty() ? (model.size() == total ? String.valueOf(total) : model.size() + " of " + total)
-                    : Ui.count(model.size(), "entry", "entries") + " · " + total);
+            int nConflicts = active == null ? 0 : ConflictLog.entries().size();
+            setTrailingText((represented.isEmpty() ? (model.size() == total || conflicts ? String.valueOf(conflicts ? model.size() : total)
+                    : model.size() + " of " + total) : Ui.count(model.size(), "entry", "entries") + " · " + total)
+                    + (nConflicts == 0 || conflicts ? "" : " · " + Ui.count(nConflicts, "conflict")));
             list.setVisibleRowCount(Math.max(2, Math.min(6, model.size())));
-            emptyHint.setVisible(model.isEmpty());
-            emptyHint.setText(Ui.wrapped(active == null ? "Open a graph first." : total == 0
-                    ? "No constraints yet: choose one above and add it to selected nodes."
+            emptyHint.setVisible(model.isEmpty() && !(conflicts && warningsHint.isVisible()));
+            emptyHint.setText(Ui.wrapped(active == null ? "Open a graph first."
+                    : conflicts ? "No conflicts: every constraint that is switched on is applied and holds."
+                    : total == 0 ? "No constraints yet: choose one above and add it to selected nodes."
                     : "No constraint matches the filter.", Ui.TEXT_WIDTH));
+            filter.repaint();   // the number of conflicts in the box
         } finally {
             refreshing = false;
         }
@@ -340,6 +413,22 @@ final class ConstraintListSection extends Section {
     private static Graph activeGraph() {
         EditorSession session = ConstraintsTab.activeSession();
         return session == null ? null : session.getGraph();
+    }
+
+    /** With the "Conflicts" filter: the warnings of the conflict log above the list, and the button that dismisses them. */
+    private void showWarnings(boolean conflicts) {
+        List<String> ws = new ArrayList<>();
+        if (conflicts && activeGraph() != null) {
+            for (ConflictLog.Entry e : ConflictLog.entries()) if (e.kind == ConflictLog.Kind.WARNING) ws.add(e.phase + ": " + e.reason);
+        }
+        warningsHint.setVisible(!ws.isEmpty());
+        dismissWarnings.setVisible(!ws.isEmpty());
+        if (ws.isEmpty()) return;
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < Math.min(5, ws.size()); i++) sb.append(i == 0 ? "" : "<br>").append("⚠ ").append(Ui.esc(ws.get(i)));
+        if (ws.size() > 5) sb.append("<br>… and ").append(ws.size() - 5).append(" more");
+        warningsHint.setText(Ui.wrapped(sb.toString(), Ui.TEXT_WIDTH));
+        warningsHint.setForeground(ConflictColors.WARNING);
     }
 
     /** True if every node of {@code c} is in {@code g}. */
@@ -392,6 +481,9 @@ final class ConstraintListSection extends Section {
         List<Constraint> sel = list.getSelectedValuesList();
         if (!sel.isEmpty()) beforeDrawing.run();
         DisplayConstraints.clearMarkings();
+        // a single constraint that is not applied: with the constraints it contradicts, drawn under it
+        ConflictLog.Entry conflict = sel.size() == 1 && groupOf(sel.get(0)) == null ? ConflictLog.entryFor(sel.get(0)) : null;
+        if (conflict != null) for (Constraint p : conflict.partners) DisplayConstraints.drawConstraint(p);
         for (Constraint c : sel) for (Constraint m : membersOf(c)) DisplayConstraints.drawConstraint(m);
         updateActions();
         buildEditor(sel.size() == 1 ? sel.get(0) : null);
@@ -428,6 +520,7 @@ final class ConstraintListSection extends Section {
         GraphHelper.selectNodes(true, nodes);
     }
 
+    /** Deletes the selected constraints; a dropped one (not in the store) is forgotten. */
     private void deleteSelected() {
         List<Constraint> sel = new ArrayList<>();
         for (Constraint c : list.getSelectedValuesList()) sel.addAll(membersOf(c));
@@ -478,9 +571,11 @@ final class ConstraintListSection extends Section {
         }
         ConstraintCatalog.Info info = ConstraintCatalog.info(c);
         ConstraintGroup group = groupOf(c);
-        // a group's card has no values: its switch and priority act on all members (Advanced)
-        List<ConstraintCatalog.Editable> editables = info == null || group != null ? new ArrayList<>() : info.editablesFor(c);
-        editorTitle.setText("Edit: " + (group != null ? group.label : info == null ? ConstraintCatalog.describe(c) : info.title));
+        boolean dropped = isDropped(c);
+        // a group's card has no values: its switch and priority act on all members (Advanced); a dropped one has none
+        List<ConstraintCatalog.Editable> editables = info == null || group != null || dropped ? new ArrayList<>() : info.editablesFor(c);
+        editorTitle.setText((dropped ? "Dropped: " : "Edit: ") + (group != null ? group.label : info == null ? ConstraintCatalog.describe(c) : info.title));
+        editorAdvanced.setVisible(!dropped);
         editorForm.setVisible(!editables.isEmpty());
         updateEditorState();
         editorCard.setVisible(true);
@@ -553,8 +648,20 @@ final class ConstraintListSection extends Section {
         Constraint c = editing;
         if (c == null) return;
         ConstraintGroup group = groupOf(c);
+        restoreButton.setVisible(false);
         if (group != null) {
             updateGroupEditorState(group, membersOf(c));
+            return;
+        }
+        ConflictLog.Entry conflict = ConflictLog.entryFor(c);
+        if (conflict != null && conflict.kind == ConflictLog.Kind.DROPPED) {
+            editorState.setVisible(true);
+            editorState.setText(Ui.wrapped(Ui.esc("Dropped by " + conflict.phase + ": " + conflict.reason
+                    + ". Restore puts it back as your own constraint."), ConstraintsTab.CARD_TEXT_WIDTH));
+            editorState.setForeground(ConflictColors.DROPPED);
+            preferButton.setVisible(false);
+            restoreButton.setVisible(true);
+            editorCard.revalidate();
             return;
         }
         updatingEditor = true;
@@ -571,14 +678,17 @@ final class ConstraintListSection extends Section {
                 : !c.isEnabled() ? "Switched off: no solve applies it until you switch it on again under Advanced."
                 : d == null ? null
                 : d.contradictsItself() ? "Not applied. " + d.reason()
-                : "Not applied. " + d.reason() + " It keeps its settings; to apply it, raise its priority or use Prefer this "
-                        + "under Advanced.";
+                : "Not applied. " + d.reason() + " It keeps its settings; to apply it, raise its priority under Advanced or "
+                        + "use Prefer this.";
+        if (state == null && conflict != null && conflict.kind != ConflictLog.Kind.DEACTIVATED) {
+            state = conflict.title() + " (" + conflict.phase + "): " + conflict.reason + ".";
+        }
         editorState.setVisible(state != null);
         if (state != null) {
             editorState.setText(Ui.wrapped(Ui.esc(state), ConstraintsTab.CARD_TEXT_WIDTH));
-            editorState.setForeground(c.isEnabled() ? Ui.WARNING : Ui.MUTED);
+            editorState.setForeground(!c.isEnabled() ? Ui.MUTED : d == null && conflict != null ? ConflictColors.of(conflict.kind) : Ui.WARNING);
         }
-        preferButton.setVisible(c.isEnabled() && d != null && !d.contradictsItself());
+        preferButton.setVisible(c.isEnabled() && d != null && !d.contradictsItself() && belongsTo(c, activeGraph()));
         editorAdvanced.setTrailingText(c.getPriority().label() + (c.isEnabled() ? "" : " · off"));
         editorCard.revalidate();
     }
@@ -606,7 +716,8 @@ final class ConstraintListSection extends Section {
         } finally {
             updatingEditor = false;
         }
-        StringBuilder sb = new StringBuilder(ms.size() + (ms.size() == 1 ? " constraint" : " constraints") + " of step " + group.step + ".");
+        StringBuilder sb = new StringBuilder(ms.size() + (ms.size() == 1 ? " constraint" : " constraints")
+                + (MentalMapConstraints.STEP.equals(group.step) ? " of the last Mental Map run." : " of step " + group.step + "."));
         if (on < ms.size()) sb.append(' ').append(ms.size() - on).append(" switched off.");
         if (notApplied > 0) sb.append(' ').append(notApplied).append(" not applied (conflict).");
         if (conflicts > 0) sb.append(' ').append(conflicts).append(" dropped or not satisfied.");
@@ -621,6 +732,11 @@ final class ConstraintListSection extends Section {
     }
 
     // ------------------------------------------------------------------ rendering
+
+    /** The marker of a constraint an algorithm made: "MM" for the Mental Map, "SBGN" for the SBGN steps. */
+    private static String sourceMark(Constraint c) {
+        return MentalMapConstraints.isMentalMap(c) ? "MM" : "SBGN";
+    }
 
     /**
      * Two-line cell: pictogram, description and nodes, a marker for conflicts, a priority other than "Normal" and
@@ -654,35 +770,40 @@ final class ConstraintListSection extends Section {
             ConstraintGroup group = groupOf(c);
             if (group != null) return groupCell(l, c, group, membersOf(c), index, selected);
             ConstraintCatalog.Info info = ConstraintCatalog.info(c);
-            boolean off = !c.isEnabled();
-            Deactivation notApplied = off ? null : c.getDeactivation();
-            icon.setIcon(info == null ? null : SvgIcon.get(info.icon, 24, (off || notApplied != null) && !selected));
+            ConflictLog.Entry conflict = ConflictLog.entryFor(c);
+            boolean dropped = conflict != null && conflict.kind == ConflictLog.Kind.DROPPED;
+            boolean off = !c.isEnabled() && !dropped;
+            Deactivation notApplied = off || dropped ? null : c.getDeactivation();
+            icon.setIcon(info == null ? null : SvgIcon.get(info.icon, 24, (off || dropped || notApplied != null) && !selected));
             head.setText(ConstraintCatalog.describe(c));
             String from = c.getOrigin() == null ? "" : c.getOrigin().getInstanceLabel() + " · ";
-            body.setText(off ? (c.isSwitchedOnItself() ? "Instance off · " : "Switched off · ") + from + ConstraintCatalog.nodesText(c)
-                    : notApplied != null ? from + notApplied.shortReason() : from + ConstraintCatalog.nodesText(c));
-            ConflictLog.Entry conflict = ConflictLog.entryFor(c);
+            body.setText(dropped ? "Dropped · " + conflict.reason
+                    : off ? (c.isSwitchedOnItself() ? "Instance off · " : "Switched off · ") + from + ConstraintCatalog.nodesText(c)
+                    : notApplied != null ? from + notApplied.shortReason()
+                    : conflict != null && conflict.kind == ConflictLog.Kind.UNSATISFIED ? "Not satisfied · " + conflict.reason
+                    : from + ConstraintCatalog.nodesText(c));
             if (off) {
                 mark.setText("OFF");
                 mark.setForeground(selected ? l.getSelectionForeground() : Ui.MUTED);
             } else if (conflict != null) {
                 mark.setText("●");
-                mark.setForeground(selected ? l.getSelectionForeground() : ConflictPanel.colorOf(conflict.kind));
+                mark.setForeground(selected ? l.getSelectionForeground() : ConflictColors.of(conflict.kind));
             } else if (c.getPriority() != Priority.NORMAL) {
                 // a priority other than the default, so it can be seen without opening the card
                 mark.setText(c.getPriority().label());
                 mark.setForeground(selected ? l.getSelectionForeground()
                         : c.getPriority().compareTo(Priority.NORMAL) > 0 ? Ui.ACCENT : Ui.MUTED);
             } else if (c.isAutomatic()) {
-                mark.setText("SBGN");
+                mark.setText(sourceMark(c));
                 mark.setForeground(selected ? l.getSelectionForeground() : Ui.MUTED);
             } else {
                 mark.setText("");
             }
             setBackground(selected ? l.getSelectionBackground() : index % 2 == 0 ? l.getBackground() : Ui.SURFACE_HOVER);
-            head.setForeground(selected ? l.getSelectionForeground() : off || notApplied != null ? Ui.MUTED
+            head.setForeground(selected ? l.getSelectionForeground() : off || dropped || notApplied != null ? Ui.MUTED
                     : conflict != null && conflict.kind != ConflictLog.Kind.WARNING ? Ui.ERROR : Ui.TEXT);
-            body.setForeground(selected ? l.getSelectionForeground() : notApplied != null ? Ui.WARNING : Ui.MUTED);
+            body.setForeground(selected ? l.getSelectionForeground() : notApplied != null ? Ui.WARNING
+                    : dropped ? ConflictColors.DROPPED : Ui.MUTED);
             setOpaque(true);
             return this;
         }
@@ -707,9 +828,9 @@ final class ConstraintListSection extends Section {
             if (notApplied > 0) sb.append(" · ").append(notApplied).append(" not applied");
             if (conflicts > 0) sb.append(" · ").append(conflicts).append(" with conflicts");
             body.setText(sb.toString());
-            mark.setText(allOff ? "OFF" : conflicts > 0 || notApplied > 0 ? "●" : "SBGN");
-            mark.setForeground(selected ? l.getSelectionForeground() : allOff ? Ui.MUTED : conflicts > 0 ? ConflictPanel.UNSATISFIED_COLOR
-                    : notApplied > 0 ? ConflictPanel.DEACTIVATED_COLOR : Ui.MUTED);
+            mark.setText(allOff ? "OFF" : conflicts > 0 || notApplied > 0 ? "●" : sourceMark(first));
+            mark.setForeground(selected ? l.getSelectionForeground() : allOff ? Ui.MUTED : conflicts > 0 ? ConflictColors.UNSATISFIED
+                    : notApplied > 0 ? ConflictColors.DEACTIVATED : Ui.MUTED);
             setBackground(selected ? l.getSelectionBackground() : index % 2 == 0 ? l.getBackground() : Ui.SURFACE_HOVER);
             head.setForeground(selected ? l.getSelectionForeground() : allOff ? Ui.MUTED : Ui.TEXT);
             body.setForeground(selected ? l.getSelectionForeground() : notApplied > 0 || conflicts > 0 ? Ui.WARNING : Ui.MUTED);

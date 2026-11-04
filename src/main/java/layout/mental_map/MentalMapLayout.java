@@ -15,8 +15,9 @@ import java.util.*;
 /**
  * Mental-map preserving layout: derives relative-ordering constraints and neighbourhood clusters from a reference
  * {@link Snapshot} and re-lays out the live graph with the constraint-based force-directed engine of
- * {@link CBLayoutAlgorithm}. The derived constraints live in this instance's own {@link Constraints} store, never in
- * the user's {@link ConstraintStore#constraints}; in stable mode ({@link #stableExtent}) the drawing keeps its area
+ * {@link CBLayoutAlgorithm}. The derived constraints live in this instance's own {@link Constraints} store; the run
+ * solves them without the constraints of {@link ConstraintStore#constraints}, and the Mental Map panel puts copies of
+ * them into it afterwards ({@link MentalMapConstraints}); in stable mode ({@link #stableExtent}) the drawing keeps its area
  * per node when the layout is chained over time steps.
  *
  * @author Niklas Gröne

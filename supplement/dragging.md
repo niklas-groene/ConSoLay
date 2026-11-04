@@ -49,7 +49,7 @@ of which the GUI refresh is about 0.3 ms.
 ## How a drag step stays cheap
 
 1. **The lists are not rebuilt during a drag.** `ConflictLog.clearUnsatisfied()` tells its listeners only if an entry
-   went, and `setDeactivated` only if the decisions changed, so the constraint list and the Conflicts section are
+   went, and `setDeactivated` only if the decisions changed, so the constraint list and its Conflicts filter are
    rebuilt only when something changed; per step only the overlay is repainted.
 2. **Only the affected part is solved** (`-Dcblayout.dragSolve=component`; `all` solves the whole graph): with the
    force-directed run and the overlap removal off, a drag step solves only the constraint components of the dragged

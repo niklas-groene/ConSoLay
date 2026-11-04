@@ -15,8 +15,8 @@ import java.util.List;
  * {@link Constraints} store) and its neighbourhood clusters ({@link CBLayoutAlgorithm#allCluster}), copied right after
  * the solve, so the next run, which clears and refills both, cannot change them.
  *
- * <p>Information only: nothing hands these objects to a solver again, and they never enter the user's
- * {@link ConstraintStore#constraints}.
+ * <p>Nothing hands these objects to a solver again: {@link MentalMapConstraints#fromRun} makes the copies that the Mental
+ * Map panel puts into the graph's {@link ConstraintStore#constraints}.
  *
  * @author Niklas Gröne
  */

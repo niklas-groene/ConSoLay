@@ -1,6 +1,10 @@
 package gui;
 
 import adaptagrams_bridge.CBLayoutAlgorithm;
+import constraints.ConflictLog;
+import constraints.Constraint;
+import constraints.ConstraintStore;
+import constraints.Constraints;
 import gui.components.PrimaryButton;
 import gui.components.Section;
 import gui.components.StatusLabel;
@@ -9,6 +13,7 @@ import gui.components.VerticalStack;
 import layout.mental_map.ComparisonLayoutRunner;
 import layout.mental_map.DerivedConstraints;
 import layout.mental_map.GraphBounds;
+import layout.mental_map.MentalMapConstraints;
 import layout.mental_map.NextState;
 import layout.mental_map.Snapshot;
 import layout.mental_map.SnapshotHistory;
@@ -95,11 +100,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
     /** The panel that listens; building the add-on tab again unregisters the previous one. */
     private static MentalMapPanel instance;
 
-    /** A refresh of the Constraints tab's "Mental map" section after an edit is queued on the EDT. */
-    private volatile boolean sectionRefreshQueued;
 
-    /** Why the Constraints tab no longer shows the last run after the timeline put another state on the graph. */
-    private static final String RESTORED = "A snapshot of the timeline is on the graph now, not the result of the last run.";
 
     /**
      * The timeline of one graph and how the live graph shows it. The snapshots keep the coordinates of the layout that
@@ -114,12 +115,12 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         /** Scrubber value while another graph is active: the state this graph shows. */
         int sliderValue = SCRUB_MAX;
         /**
-         * What the last layout run applied; null before the first run, after a failed one and once the timeline
-         * (restore, scrubbing) put another state on the graph.
+         * The Mental Map constraints of the state each snapshot holds ({@link MentalMapConstraints}), as copies: putting
+         * the snapshot on the graph puts them into the graph's store again, with the changes made to them meanwhile.
          */
-        LastRun lastRun;
-        /** Why {@link #lastRun} is null, for the Constraints tab; null: no run yet. */
-        String noRunReason;
+        final Map<Snapshot, List<Constraint>> poolStates = new WeakHashMap<>();
+        /** The snapshot whose state the Mental Map constraints in the store belong to; null: none (a live run, an edit). */
+        Snapshot poolOwner;
         /** The file of the state the graph shows (loaded with "Load next state…" or opened); null: unknown. */
         File stateFile;
         /** Name of the state loaded last; the next layout run labels its snapshot with it. Null: none waiting. */
@@ -158,45 +159,8 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
     }
 
     /**
-     * What the last layout run on a graph applied: the constraints and groups the method derived from the reference
-     * (see {@link DerivedConstraints}). The "Mental map" section of the {@link ConstraintsTab} shows them; nothing
-     * solves them again.
-     */
-    static final class LastRun {
-        final String method;
-        final String reference;
-        final DerivedConstraints derived;
-
-        LastRun(String method, String reference, DerivedConstraints derived) {
-            this.method = method;
-            this.reference = reference;
-            this.derived = derived;
-        }
-    }
-
-    /** What the last run on {@code g} applied, or null (no run yet, it failed, or the timeline showed another state since). */
-    static LastRun lastRunOf(Graph g) {
-        GraphTimeline t = instance == null || g == null ? null : instance.timelines.get(g);
-        return t == null ? null : t.lastRun;
-    }
-
-    /** Why {@link #lastRunOf} is null for {@code g}; null if there was no run yet. */
-    static String noRunReasonOf(Graph g) {
-        GraphTimeline t = instance == null || g == null ? null : instance.timelines.get(g);
-        return t == null ? null : t.noRunReason;
-    }
-
-    /** {@code t}'s last run no longer describes what the live graph shows. */
-    private static void forgetLastRun(GraphTimeline t, String reason) {
-        if (t.lastRun == null) return;
-        t.lastRun = null;
-        t.noRunReason = reason;
-        ConstraintsTab.mentalMapRunChanged();
-    }
-
-    /**
-     * One timeline per graph; {@link #sessionClosed} drops it. The weak keys are only a fallback: a timeline with a
-     * {@link GraphTimeline#lastRun} refers to live nodes, and so to its own key.
+     * One timeline per graph; {@link #sessionClosed} drops it. The weak keys are only a fallback: a timeline with
+     * {@link GraphTimeline#poolStates} refers to live nodes, and so to its own key.
      */
     private final Map<Graph, GraphTimeline> timelines = new WeakHashMap<>();
     /** Timeline of {@link #graph}. */
@@ -610,15 +574,6 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         if (!suppressLive && !scrubbing) {
             lastScrubIndex = -1;
             timeline.showsFrame = false;
-            // The "Mental map" rows keep only constraints whose nodes are still on the graph. VANTED deletes inside a
-            // transaction, so AddonTab's (delayed) preNodeRemoved, which refreshes the lists, does not come.
-            if (timeline.lastRun != null && !sectionRefreshQueued) {
-                sectionRefreshQueued = true;   // one refresh for a burst of edits
-                SwingUtilities.invokeLater(() -> {
-                    sectionRefreshQueued = false;
-                    ConstraintsTab.mentalMapRunChanged();
-                });
-            }
         }
         if (!layoutOutput) scheduleLiveRelayout();
     }
@@ -679,13 +634,11 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
             GraphBounds.translate(live, -ox, -oy);
             boolean done = false;
             try {
-                t.lastRun = null;
-                t.noRunReason = "The last run failed.";
                 DerivedConstraints derived = comparisonLayouts.run(choice, live, ref);
                 // The run drops every bend; SBGN-ED's port markers need their bend for an export as SBGN-ML.
                 SbgnPortSync.apply(live);
-                t.lastRun = new LastRun(methodName(choice), snapshotName(ref), derived);
-                t.noRunReason = null;
+                // what the run applied replaces the previous run's constraints in the graph's store
+                setPoolConstraints(t, live, MentalMapConstraints.fromRun(derived, live));
                 t.shown = positionsByUid(live);
                 t.showsFrame = false;
                 if (addToHistory) {
@@ -698,6 +651,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
                     // no step without any change to the timeline
                     List<Snapshot> all = history.getAll();
                     if (all.isEmpty() || !all.get(all.size() - 1).sameState(result)) t.add(result, false);
+                    recordPoolState(t, live, history.getAll().get(history.getAll().size() - 1));
                 }
                 growOffset(GraphBounds.union(history.bounds(), GraphBounds.of(live)));
                 done = true;
@@ -705,6 +659,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
                 GraphBounds.translate(live, done ? t.offsetX : ox, done ? t.offsetY : oy);
             }
             camera.compensateShift(live, t.offsetX - ox, t.offsetY - oy);
+            AddonTab.decideConstraints(live);   // the run's constraints are in the store now
             if (addToHistory) {
                 refreshTimeline();
                 showSliderAt(history.getAll().size() - 1);   // the live graph is the newest snapshot now
@@ -724,8 +679,65 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         camera.ensureScrollable(live, bounds);
         if (follow) camera.keepInView(live, bounds, TimelineCamera.Pace.JUMP, true);
         DisplayConstraints.revalidateIndication();
-        ConstraintsTab.mentalMapRunChanged();
         updateReferenceStatus();
+    }
+
+    // ---- Mental Map constraints in the graph's store ----
+
+    /**
+     * {@code made} replaces the Mental Map constraints in the store of {@code live} (a run): those there go, after the
+     * snapshot they belong to took over their current state. Nothing moves; the caller decides the conflicts anew once the
+     * graph is back in its display frame ({@link AddonTab#decideConstraints}).
+     */
+    private static void setPoolConstraints(GraphTimeline t, Graph live, List<Constraint> made) {
+        Constraints store = ConstraintStore.of(live);
+        List<Constraint> before = MentalMapConstraints.in(store);
+        if (t.poolOwner != null) t.poolStates.put(t.poolOwner, MentalMapConstraints.copies(before, n -> n));
+        MentalMapConstraints.removeFrom(store);
+        for (Constraint c : made) store.addConstraint(c);
+        t.poolOwner = null;
+        if (!before.isEmpty()) ConflictLog.forget(before);
+    }
+
+    /** Snapshot {@code s} holds the state of {@code live} now: it keeps a copy of the Mental Map constraints in its store. */
+    private static void recordPoolState(GraphTimeline t, Graph live, Snapshot s) {
+        if (s == null) return;
+        t.poolStates.put(s, MentalMapConstraints.copies(MentalMapConstraints.in(ConstraintStore.of(live)), n -> n));
+        t.poolOwner = s;
+    }
+
+    /**
+     * Before the timeline puts another state on {@code live}: the snapshot the Mental Map constraints in the store belong
+     * to takes over their current state (switches, priorities and deletions included), and they leave the store.
+     */
+    private static void stashPoolState(GraphTimeline t, Graph live) {
+        Constraints store = ConstraintStore.of(live);
+        List<Constraint> current = MentalMapConstraints.in(store);
+        if (t.poolOwner != null) t.poolStates.put(t.poolOwner, MentalMapConstraints.copies(current, n -> n));
+        MentalMapConstraints.removeFrom(store);
+        t.poolOwner = null;
+        if (!current.isEmpty()) ConflictLog.forget(current);
+    }
+
+    /** After snapshot {@code s} was put on {@code live}: its Mental Map constraints go into the store, on the live nodes. */
+    private static void unstashPoolState(GraphTimeline t, Graph live, Snapshot s) {
+        List<Constraint> saved = t.poolStates.get(s);
+        t.poolOwner = s;
+        List<Constraint> back = Collections.emptyList();
+        if (saved != null && !saved.isEmpty()) {
+            Map<String, Node> byUid = new HashMap<>();
+            for (Node n : live.getNodes()) byUid.put(Snapshot.uidOf(n), n);
+            back = MentalMapConstraints.copies(saved, n -> byUid.get(Snapshot.uidOf(n)));
+            Constraints store = ConstraintStore.of(live);
+            for (Constraint c : back) store.addConstraint(c);
+        }
+        poolChanged(live, back);
+    }
+
+    /** The Mental Map constraints in the store of {@code live} changed: decide the conflicts anew and show the lists. */
+    private static void poolChanged(Graph live, List<Constraint> touched) {
+        if (touched.isEmpty() && MentalMapConstraints.in(ConstraintStore.of(live)).isEmpty()) return;
+        AddonTab.decideConstraints(live);
     }
 
     /** Node positions of {@code g} by uid. */
@@ -761,6 +773,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         // In the frame of the timeline; nodes nobody moved since the panel put them there get exactly that position.
         // A capture moves nothing (it would bypass VANTED's undo history), so the display offset is not grown here.
         Snapshot s = t.add(captureUnmodified(live, label, t), true);
+        recordPoolState(t, live, s);
         t.shown = s.positionsByUid();
         status("“" + label + "” is the reference now", StatusLabel.Kind.SUCCESS);
         camera.ensureScrollable(live, GraphBounds.of(live));
@@ -821,8 +834,8 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         t.showsFrame = false;
         lastScrubIndex = -1;   // the live topology is none of the snapshots now
         if (first) captureSnapshot(stateName(file));
+        else t.poolOwner = null;   // the Mental Map constraints left in the store belong to the new state, no snapshot
         dropSbgnLayoutOf(live);
-        if (t.lastRun != null) ConstraintsTab.mentalMapRunChanged();   // its rows keep only nodes still on the graph
         Rectangle2D bounds = GraphBounds.of(live);
         camera.ensureScrollable(live, bounds);
         camera.keepInView(live, bounds, TimelineCamera.Pace.JUMP, true);
@@ -924,6 +937,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
     private void autoCaptureOnLoad(Graph loaded) {
         if (loaded == null || loaded.getNumberOfNodes() == 0) return;
         Snapshot s = history.add(captureUnmodified(loaded, "On graph load", timeline));
+        recordPoolState(timeline, loaded, s);
         timeline.shown = s.positionsByUid();
         refreshTimeline();
     }
@@ -981,8 +995,8 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         keepLiveState(s);   // the snapshot being restored stays in the history, however full it is
         double ox = timeline.offsetX, oy = timeline.offsetY;
         growOffset(history.bounds());   // e.g. a captured state that reached negative coordinates
-        // before the restore: its node deletions refresh the lists, which then need not rebuild the old run's rows
-        forgetLastRun(timeline, RESTORED);
+        // the Mental Map constraints of the state shown go first, so that the restore's deletions leave them as they are
+        stashPoolState(timeline, live);
         suppressLive = true;
         try {
             s.restore(live, timeline.offsetX, timeline.offsetY);
@@ -991,6 +1005,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         } finally {
             suppressLive = false;
         }
+        unstashPoolState(timeline, live, s);
         camera.compensateShift(live, timeline.offsetX - ox, timeline.offsetY - oy);
         dropSbgnLayoutOf(live);
         int index = history.getAll().indexOf(s);
@@ -1020,6 +1035,7 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
             if (s.sameState(now)) return false;
         }
         t.add(now, false, keep);
+        recordPoolState(t, live, now);
         // a loaded state that no run has placed yet: putting this snapshot on the graph again lets the next run name it
         if (t.pendingState != null) t.pendingStates.put(now, t.pendingState);
         t.shown = now.positionsByUid();
@@ -1241,13 +1257,15 @@ public class MentalMapPanel extends JPanel implements SessionListenerExt, GraphL
         if (growOffset(GraphBounds.union(boxesInFrame(s)))) lastScrubIndex = -1;
         double ox = timeline.offsetX, oy = timeline.offsetY;
         Map<String, Point2D> shown = new HashMap<>();
-        forgetLastRun(timeline, RESTORED);
         scrubbing = true;
         suppressLive = true;
         try {
             if (nearest != lastScrubIndex) {
+                // the topology is that of the nearest snapshot, and so are the Mental Map constraints in the store
+                stashPoolState(timeline, live);
                 s.get(nearest).restore(live, ox, oy);
                 timeline.restored(s.get(nearest));
+                unstashPoolState(timeline, live, s.get(nearest));
                 dropSbgnLayoutOf(live);
                 lastScrubIndex = nearest;
             }

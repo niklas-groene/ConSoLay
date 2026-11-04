@@ -14,7 +14,7 @@ import javax.swing.SwingUtilities;
  * ({@link ConstraintFeasibility}) dropped, constraints the solver reported as unsatisfiable,
  * constraints the user solve measured as not holding, constraints not applied because they contradict constraints of
  * a higher rank ({@link ConstraintConflicts}), and warnings about contradicting user constraints. The GUI
- * (ConflictPanel, the constraint list, ConstraintOverlay) reads it; the layout writes it.
+ * (the constraint list and its Conflicts filter, ConstraintOverlay) reads it; the layout writes it.
  */
 public final class ConflictLog {
 

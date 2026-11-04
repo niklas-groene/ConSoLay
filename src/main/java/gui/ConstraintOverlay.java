@@ -56,7 +56,7 @@ import java.util.Map;
  * Transparent component in the frame's {@link JLayeredPane} that draws the shown constraints over the active VANTED
  * view without adding anything to the graph; it registers no mouse listeners, so clicks reach the view. Each
  * constraint is drawn in the colour of its {@link ConstraintKind.Category category}, a conflicting one in the
- * conflict colour of the {@link ConflictPanel} and a switched-off one in grey, both with a badge.
+ * conflict colour of {@link ConflictColors} and a switched-off one in grey, both with a badge.
  *
  * @author Niklas Gröne
  */
@@ -305,12 +305,12 @@ public class ConstraintOverlay extends JComponent {
      * else the category colour (lighter if automatic).
      */
     private static Color colorFor(Constraint c, ConflictLog.Entry conflict) {
-        if (!c.isEnabled()) return withAlpha(ConflictPanel.WARNING_COLOR, AUTOMATIC_ALPHA);
+        if (!c.isEnabled()) return withAlpha(ConflictColors.WARNING, AUTOMATIC_ALPHA);
         if (conflict != null) {
-            return conflict.kind == ConflictLog.Kind.DROPPED ? ConflictPanel.DROPPED_COLOR
+            return conflict.kind == ConflictLog.Kind.DROPPED ? ConflictColors.DROPPED
                     // translucent: what it contradicts may lie right under it (two gaps between the same nodes)
-                    : conflict.kind == ConflictLog.Kind.DEACTIVATED ? withAlpha(ConflictPanel.DEACTIVATED_COLOR, AUTOMATIC_ALPHA)
-                    : ConflictPanel.UNSATISFIED_COLOR;
+                    : conflict.kind == ConflictLog.Kind.DEACTIVATED ? withAlpha(ConflictColors.DEACTIVATED, AUTOMATIC_ALPHA)
+                    : ConflictColors.UNSATISFIED;
         }
         Color base = categoryColor(c);
         return c.isAutomatic() ? withAlpha(base, AUTOMATIC_ALPHA) : base;

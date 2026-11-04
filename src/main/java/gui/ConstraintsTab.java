@@ -38,7 +38,8 @@ import java.util.Set;
 
 /**
  * Main tab "Constraints": the solver switches, the palette and settings card that add a constraint to the selected
- * nodes, the constraints of the active graph, what the last Mental Map run applied (read only) and the conflicts.
+ * nodes, and the constraints of the active graph (the user's, those of the SBGN steps, of templates and of the last
+ * Mental Map run), whose "Conflicts" filter lists what could not be applied.
  * After adding, and after every change, the constraints are solved on the active graph
  * ({@link AddonTab#executeUserConstraints()}).
  *
@@ -87,11 +88,6 @@ public class ConstraintsTab extends JPanel {
         if (instance != null) instance.refreshAll();
     }
 
-    /** A Mental Map run (or the timeline) changed what the "Mental map" section shows. */
-    static void mentalMapRunChanged() {
-        if (instance != null) instance.mentalMapSection.refresh();
-    }
-
     /** The selection of the active graph changed: update what the Add button would act on. */
     static void graphSelectionChanged() {
         if (instance != null) instance.updateSelection();
@@ -136,9 +132,6 @@ public class ConstraintsTab extends JPanel {
     private Set<Constraint> appliedBeforeAdd = Collections.emptySet();
 
     private final ConstraintListSection listSection = new ConstraintListSection();
-    private final MentalMapConstraintSection mentalMapSection = new MentalMapConstraintSection();
-    private final Section conflictSection = Section.collapsible("Conflicts", false);
-    private final ConflictPanel conflictPanel = new ConflictPanel();
 
     public ConstraintsTab() {
         super(new BorderLayout());
@@ -149,16 +142,15 @@ public class ConstraintsTab extends JPanel {
         column.addRow(createSolverSection());
         column.addRow(createAddSection(), Ui.SECTION_GAP);
         column.addRow(listSection, Ui.SECTION_GAP);
-        column.addRow(mentalMapSection, Ui.SECTION_GAP);
-        column.addRow(createConflictSection(), Ui.SECTION_GAP);
         add(new ScrollColumn(column, Ui.COLUMN_WIDTH), BorderLayout.CENTER);
-        // The two constraint lists draw their selection on the graph; one draws at a time.
-        listSection.beforeDrawing = mentalMapSection::clearSelection;
-        mentalMapSection.beforeDrawing = listSection::clearSelection;
 
         showSolver();
-        ConflictLog.addListener(this::updateConflictCount);
-        updateConflictCount();
+        // The list is a model without change events: a new conflict (e.g. after a layout step) shows at once, in the
+        // list, its Conflicts filter and on the overlay.
+        ConflictLog.addListener(() -> {
+            try { ListModels.updateAllLists(); } catch (Throwable ignored) { }
+            try { ConstraintOverlay.repaintAll(); } catch (Throwable ignored) { }
+        });
         updateSelection();
     }
 
@@ -407,17 +399,7 @@ public class ConstraintsTab extends JPanel {
         lastValues.put(currentKind, form == null ? null : form.values());
     }
 
-    // ------------------------------------------------------------------ list and conflicts
-
-    private Section createConflictSection() {
-        conflictSection.addRow(conflictPanel);
-        return conflictSection;
-    }
-
-    private void updateConflictCount() {
-        int n = ConflictLog.entries().size();
-        conflictSection.setTrailingText(n == 0 ? "none" : String.valueOf(n));
-    }
+    // ------------------------------------------------------------------ list
 
     /** True if a constraint of the store that is switched on has all its nodes in the active graph. */
     private static boolean hasConstraintsOnActiveGraph() {
@@ -437,11 +419,8 @@ public class ConstraintsTab extends JPanel {
 
     private void refreshAll() {
         listSection.refresh();
-        mentalMapSection.refresh();
-        updateConflictCount();
         updateSelection();
         updateAddNote();
-        conflictPanel.updateButtons();   // "Prefer this" depends on the active graph
     }
 
     /**
