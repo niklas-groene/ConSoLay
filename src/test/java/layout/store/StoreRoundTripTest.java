@@ -396,6 +396,83 @@ public class StoreRoundTripTest {
         throw new AssertionError("example " + id + " exists");
     }
 
+    /**
+     * A constraints file read into the same map opened anew: the map was not saved after the file was written, so its
+     * nodes carry no stable ids, and here no SBGN glyph ids either; labels repeat (the empty labels of the processes, ATP,
+     * ADP). The structure keys of the file find every node, also when the reader adds the nodes in another order.
+     */
+    @Test
+    public void aConstraintsFileFindsTheNodesOfTheMapOpenedAnew() throws Exception {
+        Graph g = withoutGlyphIds(glycolysis());
+        Constraints store = new Constraints();
+        ConstraintStore.constraints = store;
+        // every node with a label that is not unique, aligned with each of its neighbours
+        Map<String, Integer> count = new TreeMap<>();
+        for (Node n : g.getNodes()) count.merge(AttributeHelper.getLabel(n, ""), 1, Integer::sum);
+        for (Node n : g.getNodes()) {
+            if (count.get(AttributeHelper.getLabel(n, "")) < 2) continue;
+            for (Node m : n.getNeighbors()) {
+                constraints.HorizontalConstraint c = new constraints.HorizontalConstraint(new ArrayList<>(Arrays.asList(n, m)),
+                        constraints.HorizontalConstraint.HorizontalConstraintType.MIDDLE);
+                c.setAutomatic(true);
+                store.addConstraint(c);
+            }
+        }
+        assertTrue(store.getAllConstraints().size() > 30);
+        Map<Node, String> keys = StructureKeys.of(g);
+        List<String> before = byStructure(store.getAllConstraints(), keys);
+
+        // the map opened anew, its nodes added in reverse order
+        Graph g2 = reversed(withoutGlyphIds(glycolysis()));
+        Constraints store2 = new Constraints();
+        StoreCodec.Report r = GraphConstraints.read(GraphConstraints.fileJson(g, store), g2, store2, null);
+        assertEquals("problems: " + r.problems, 0, r.problems.size());
+        assertEquals(store.getAllConstraints().size(), store2.getAllConstraints().size());
+        assertEquals(before, byStructure(store2.getAllConstraints(), StructureKeys.of(g2)));
+        assertEquals(signatures(store.getAllConstraints()), signatures(store2.getAllConstraints()));
+
+        // without the keys (the attribute of a map, which keeps the stable ids) the repeated labels are not found
+        StoreCodec.Report old = GraphConstraints.read(GraphConstraints.json(g, store), withoutGlyphIds(glycolysis()), new Constraints(), null);
+        assertTrue(old.skipped > 0);
+    }
+
+    private static Graph withoutGlyphIds(Graph g) {
+        for (Node n : g.getNodes()) {
+            try {
+                n.removeAttribute("sbgn" + org.graffiti.attributes.Attribute.SEPARATOR + "glyphid");
+            } catch (RuntimeException ignored) {
+                // none
+            }
+            assertEquals(null, GraphConstraints.glyphId(n));
+        }
+        return g;
+    }
+
+    /** A copy of {@code g} whose nodes and edges are added in reverse order. */
+    private static Graph reversed(Graph g) {
+        Graph r = new AdjListGraph();
+        Map<Node, Node> copy = new java.util.IdentityHashMap<>();
+        List<Node> ns = new ArrayList<>(g.getNodes());
+        Collections.reverse(ns);
+        for (Node n : ns) copy.put(n, r.addNodeCopy(n));
+        List<Edge> es = new ArrayList<>(g.getEdges());
+        Collections.reverse(es);
+        for (Edge e : es) r.addEdgeCopy(e, copy.get(e.getSource()), copy.get(e.getTarget()));
+        return r;
+    }
+
+    /** The constraints with their nodes named by structure key. */
+    private static List<String> byStructure(List<Constraint> cs, Map<Node, String> keys) {
+        List<String> l = new ArrayList<>();
+        for (Constraint c : cs) {
+            StringBuilder sb = new StringBuilder(c.getKind().name());
+            for (Node n : c.getNodes()) sb.append(':').append(keys.get(n));
+            l.add(sb.toString());
+        }
+        Collections.sort(l);
+        return l;
+    }
+
     /** "Load constraints… › Replace" checks the file before it removes anything: a wrong file is refused. */
     @Test
     public void aFileThatHoldsNoConstraintsIsRefusedBeforeLoading() {

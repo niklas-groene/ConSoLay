@@ -58,8 +58,16 @@ public final class StoreCodec {
         /** A second id the file format keeps for the node (the SBGN glyph id), or null. */
         String altId(Node n);
 
-        /** The node a saved entry stands for: by stable id, else by the alternative id, else by a unique label; null if none. */
-        Node node(String id, String alt, String label);
+        /** The node's {@link StructureKeys structure key}, or null if the document carries none. */
+        default String structureKey(Node n) {
+            return null;
+        }
+
+        /**
+         * The node a saved entry stands for: by stable id, else by the alternative id, else by its structure key, else by
+         * a unique label; null if none.
+         */
+        Node node(String id, String alt, String key, String label);
 
         /** The edge: by stable id, else the {@code index}-th edge from {@code from} to {@code to}; null if none. */
         Edge edge(String id, Node from, Node to, int index);
@@ -100,6 +108,8 @@ public final class StoreCodec {
                     if (nid != null) o.put("nid", nid);
                     String alt = el.altId(k);
                     if (alt != null) o.put("alt", alt);
+                    String key = el.structureKey(k);
+                    if (key != null) o.put("key", key);
                     String label = AttributeHelper.getLabel(k, null);
                     if (label != null) o.put("label", label);
                     nodes.add(o);
@@ -251,12 +261,14 @@ public final class StoreCodec {
             return r;
         }
         Map<String, Node> nodes = new LinkedHashMap<>();
+        java.util.Set<Node> bound = java.util.Collections.newSetFromMap(new IdentityHashMap<>());
         for (Object o : list(doc, "nodes")) {
             Map<String, Object> m = map(o);
             if (m == null) continue;
             String id = str(m, "id");
             if (id == null) continue;
-            Node n = el.node(str(m, "nid"), str(m, "alt"), str(m, "label"));
+            Node n = el.node(str(m, "nid"), str(m, "alt"), str(m, "key"), str(m, "label"));
+            if (n != null && !bound.add(n)) n = null;   // two entries never stand for the same node
             if (n == null) r.problems.add("Node \"" + (str(m, "label") != null ? str(m, "label") : id) + "\" is not in the graph.");
             else nodes.put(id, n);
         }

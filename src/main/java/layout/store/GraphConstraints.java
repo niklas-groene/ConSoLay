@@ -31,7 +31,8 @@ import java.util.WeakHashMap;
  * Saves a graph's constraint store with the graph and reads it back: as the string attribute {@code cbl.constraints}
  * (the JSON of {@link StoreCodec}), which VANTED's GML and GraphML writers keep, or, for SBGN-ML, whose writer drops
  * foreign attributes, as a companion file {@code <map>.cbl.json}. The nodes and edges a constraint refers to carry a
- * stable id ({@code cbl.nid} / {@code cbl.eid}); without it a node is found by its SBGN glyph id or a unique label.
+ * stable id ({@code cbl.nid} / {@code cbl.eid}); without it a node is found by its SBGN glyph id, by its structure key
+ * (a constraints file, see {@link StructureKeys}) or by a unique label.
  * {@link #sync} writes the attribute only when the JSON changed, so an unchanged map is not marked modified, and a
  * graph's saved store is read once, when its session first becomes active ({@link #markAttached}, {@link #loadSaved}).
  *
@@ -97,17 +98,33 @@ public final class GraphConstraints {
         }
     }
 
-    /** Names the graph's elements for the codec; {@code assign}: give nodes and edges stable ids as they are named. */
+    /**
+     * Names the graph's elements for the codec; {@code assign}: give nodes and edges stable ids as they are named;
+     * {@code keys}: name the nodes by their {@link StructureKeys structure key} as well (a file read into the map opened
+     * anew, which no longer carries the stable ids given when the file was written).
+     */
     static final class GraphElements implements StoreCodec.Elements {
         private final Graph g;
-        private final boolean assign;
-        private Map<String, Node> byNid, byAlt;
+        private final boolean assign, keys;
+        private Map<String, Node> byNid, byAlt, byKey;
         private Map<String, List<Node>> byLabel;
         private Map<String, Edge> byEid;
+        private Map<Node, String> structureKeys;
 
         GraphElements(Graph g, boolean assign) {
+            this(g, assign, false);
+        }
+
+        GraphElements(Graph g, boolean assign, boolean keys) {
             this.g = g;
             this.assign = assign;
+            this.keys = keys;
+        }
+
+        @Override public String structureKey(Node n) {
+            if (!keys) return null;
+            if (structureKeys == null) structureKeys = StructureKeys.of(g);
+            return structureKeys.get(n);
         }
 
         private boolean unique;
@@ -167,10 +184,14 @@ public final class GraphConstraints {
             byEid.keySet().removeAll(ambiguous);
         }
 
-        @Override public Node node(String id, String alt, String label) {
+        @Override public Node node(String id, String alt, String key, String label) {
             index();
             Node n = id == null ? null : byNid.get(id);
             if (n == null && alt != null) n = byAlt.get(alt);
+            if (n == null && key != null) {
+                if (byKey == null) byKey = StructureKeys.unique(StructureKeys.of(g));   // only for a file with keys
+                n = byKey.get(key);
+            }
             if (n == null && label != null) {
                 List<Node> l = byLabel.get(label);
                 if (l != null && l.size() == 1) n = l.get(0);
@@ -194,12 +215,25 @@ public final class GraphConstraints {
 
     /** The document of {@code store} on {@code g} (nodes and edges it refers to get their stable ids now). */
     public static Map<String, Object> document(Graph g, Constraints store) {
-        return StoreCodec.write(g, store, new GraphElements(g, true));
+        return document(g, store, false);
     }
 
-    /** The JSON text {@link #sync} writes into the graph. */
+    /**
+     * {@link #document(Graph, Constraints)}; {@code keys}: every node also carries its structure key, so that the file
+     * can be read into the map opened anew although the map was not saved with the stable ids (a constraints file).
+     */
+    public static Map<String, Object> document(Graph g, Constraints store, boolean keys) {
+        return StoreCodec.write(g, store, new GraphElements(g, true, keys));
+    }
+
+    /** The JSON text {@link #sync} writes into the graph (the graph keeps the stable ids, so no structure keys). */
     public static String json(Graph g, Constraints store) {
         return Json.write(document(g, store));
+    }
+
+    /** The JSON text of a constraints file: {@link #json} with the structure keys of the nodes. */
+    public static String fileJson(Graph g, Constraints store) {
+        return Json.write(document(g, store, true));
     }
 
     /** The saved store the graph carries (the JSON text), or null. */
@@ -328,7 +362,7 @@ public final class GraphConstraints {
 
     /** Writes the store of {@code g} as a companion file. */
     public static void writeCompanion(Graph g, Constraints store, File f) throws IOException {
-        Files.write(f.toPath(), json(g, store).getBytes(StandardCharsets.UTF_8));
+        Files.write(f.toPath(), fileJson(g, store).getBytes(StandardCharsets.UTF_8));
     }
 
     /** Reads a companion file into {@code store} on {@code g}. */
