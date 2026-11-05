@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -51,6 +52,8 @@ final class TemplateEditor extends JFrame {
     private final EditorModel model;
     private File file;
     private final Consumer<TemplateDef> onSaved;
+    /** Told about each save with Save (not "Save as copy"), after {@link #onSaved}; one per key, see {@link #follow}. */
+    private final Map<String, Consumer<TemplateDef>> followers = new LinkedHashMap<>();
     private final PrimaryButton saveButton = new PrimaryButton("Save");
     private final JButton undoButton = Ui.button("Undo", null, e -> undo());
     private final JButton redoButton = Ui.button("Redo", null, e -> redo());
@@ -168,6 +171,15 @@ final class TemplateEditor extends JFrame {
         ALL.add(e);
         e.setVisible(true);
         return e;
+    }
+
+    /**
+     * Tells {@code follower} about every later save of this window with Save (a new revision, or the first save of a
+     * copy, an example or an import), not with "Save as copy". A follower given under the same key replaces the one
+     * given before: the rule set editor keeps one per window.
+     */
+    void follow(String key, Consumer<TemplateDef> follower) {
+        followers.put(key, follower);
     }
 
     /** Brings the window opened under {@code key} to the front; false if there is none. */
@@ -499,6 +511,7 @@ final class TemplateEditor extends JFrame {
                 ? " It contains parts this version cannot apply; they were kept unchanged." : "");
         model.fire();
         if (onSaved != null) onSaved.accept(t.copy());
+        if (!asCopy) for (Consumer<TemplateDef> f : new ArrayList<>(followers.values())) f.accept(t.copy());
         // composites open in other windows may use it: their "update to rev. n" offers follow
         for (TemplateEditor e : new ArrayList<>(ALL)) {
             if (e != this) e.libraryChanged();

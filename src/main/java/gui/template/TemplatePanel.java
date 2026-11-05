@@ -44,6 +44,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.prefs.Preferences;
 
 /**
@@ -142,7 +144,7 @@ public class TemplatePanel extends JPanel {
     private boolean updatingInstances;
 
     // ---- rule set: edited in a window of its own, used from here
-    private final RuleSetSection ruleSection;
+    private final RuleSetEditor ruleEditor;
     private JFrame ruleWindow;
     private final JLabel ruleSummary = Ui.hint(" ");
     /** What the last search with the rules left out (shown only then). */
@@ -172,14 +174,14 @@ public class TemplatePanel extends JPanel {
         super(new BorderLayout());
         instance = this;
         setOpaque(false);
-        ruleSection = new RuleSetSection(this);
+        ruleEditor = new RuleSetEditor(this);
         VerticalStack sections = new VerticalStack();
         sections.addRow(createLibrarySection(), 0);
         sections.addRow(createSearchSection(), Ui.SECTION_GAP);
         sections.addRow(createMatchesSection(), Ui.SECTION_GAP);
         sections.addRow(createInstanceSection(), Ui.SECTION_GAP);
         sections.addRow(createRuleSection(), Ui.SECTION_GAP);
-        ruleSection.onChanged = this::showRuleSummary;
+        ruleEditor.onChanged = this::showRuleSummary;
         add(sections, BorderLayout.CENTER);
         String folder = PREFS.get("folder", null);
         setFolder(folder == null ? null : new File(folder));
@@ -193,7 +195,7 @@ public class TemplatePanel extends JPanel {
     private Section createLibrarySection() {
         Section s = new Section("Library");
         libraryList.setName("templateLibrary");
-        libraryList.setCellRenderer(new ItemRenderer());
+        libraryList.setCellRenderer(new ItemRenderer(null));
         libraryList.setFixedCellHeight(46);
         libraryList.setFixedCellWidth(1);
         libraryList.setVisibleRowCount(5);
@@ -211,15 +213,7 @@ public class TemplatePanel extends JPanel {
         JButton newButton = Ui.button("New ▾", "Make a template: an empty one to draw from scratch, from the nodes selected "
                 + "in the graph, as a composite of other templates, or from a file.", null);
         newButton.setName("newTemplate");
-        JPopupMenu menu = new JPopupMenu();
-        menu.add(menuItem("Blank template", "newBlank", "A new, empty template: draw its nodes and edges in the editor "
-                + "(Add node, Connect) and add its constraints. Needs no graph and no selection.", this::newBlank));
-        menu.add(menuItem("From selection", "newFromSelection", "A new template from the selected nodes, their edges and the "
-                + "constraints that lie completely inside the selection. Opens the editor.", this::newFromSelection));
-        menu.add(menuItem("Composite of templates", "newComposite", "A template made of other templates: connect their ports "
-                + "and add layout relations.", this::newComposite));
-        menu.add(menuItem("Import file…", "importTemplate", "Adds a template file (" + TemplateFiles.TEMPLATE_EXT
-                + " or old .gml) from anywhere.", this::importFile));
+        JPopupMenu menu = newMenu(e -> { });
         newButton.addActionListener(e -> menu.show(newButton, 0, newButton.getHeight()));
         JButton edit = Ui.button("Edit…", "Opens the chosen template in the editor (double-click works too).", e -> editSelected());
         edit.setName("editTemplate");
@@ -238,6 +232,23 @@ public class TemplatePanel extends JPanel {
         return s;
     }
 
+    /**
+     * The ways to make a template, as the menu of a "New" button (here and in the rule set editor); {@code opened} is
+     * told about the editor window each one opens.
+     */
+    JPopupMenu newMenu(Consumer<TemplateEditor> opened) {
+        JPopupMenu menu = new JPopupMenu();
+        menu.add(menuItem("Blank template", "newBlank", "A new, empty template: draw its nodes and edges in the editor "
+                + "(Add node, Connect) and add its constraints. Needs no graph and no selection.", () -> opened.accept(newBlank())));
+        menu.add(menuItem("From selection", "newFromSelection", "A new template from the selected nodes, their edges and the "
+                + "constraints that lie completely inside the selection. Opens the editor.", () -> opened.accept(newFromSelection())));
+        menu.add(menuItem("Composite of templates", "newComposite", "A template made of other templates: connect their ports "
+                + "and add layout relations.", () -> opened.accept(newComposite())));
+        menu.add(menuItem("Import file…", "importTemplate", "Adds a template file (" + TemplateFiles.TEMPLATE_EXT
+                + " or old .gml) from anywhere.", () -> opened.accept(importFile())));
+        return menu;
+    }
+
     private static JMenuItem menuItem(String text, String name, String tooltip, Runnable action) {
         JMenuItem item = new JMenuItem(text);
         item.setName(name);
@@ -247,7 +258,7 @@ public class TemplatePanel extends JPanel {
     }
 
     /** Name, description and size of a library entry (its tooltip). */
-    private static String describe(Item it) {
+    static String describe(Item it) {
         if (it.template == null) return "<b>" + Ui.esc(it.toString()) + "</b><br>" + Ui.esc(it.error);
         TemplateDef t = it.template;
         StringBuilder sb = new StringBuilder("<b>").append(Ui.esc(t.name)).append("</b>");
@@ -314,12 +325,31 @@ public class TemplatePanel extends JPanel {
             if (t != null && t.id.equals(keep)) idx = i;
         }
         if (!libraryModel.isEmpty()) libraryList.setSelectedIndex(idx);
-        ruleSection.libraryChanged();
+        ruleEditor.libraryChanged();
     }
 
     TemplateDef selectedTemplate() {
         Item i = libraryList.getSelectedValue();
         return i == null ? null : i.template;
+    }
+
+    /** The entries of the library list, in its order (the rule set editor lists them, too). */
+    List<Item> libraryItems() {
+        return Collections.list(libraryModel.elements());
+    }
+
+    /** The entry of the library list for the template with this id, or null. */
+    Item item(String id) {
+        for (int i = 0; i < libraryModel.size(); i++) {
+            TemplateDef t = libraryModel.get(i).template;
+            if (t != null && t.id.equals(id)) return libraryModel.get(i);
+        }
+        return null;
+    }
+
+    /** A renderer for library entries (preview, name, badges); {@code extra} adds a badge, or none for null. */
+    ListCellRenderer<Item> itemRenderer(Function<Item, String> extra) {
+        return new ItemRenderer(extra);
     }
 
     /** Under the list: the problems of the chosen template and the updates of its components, if any. */
@@ -352,6 +382,14 @@ public class TemplatePanel extends JPanel {
             JOptionPane.showMessageDialog(this, "Choose a template in the list first.", "Edit template", JOptionPane.INFORMATION_MESSAGE);
             return;
         }
+        edit(i, null);
+    }
+
+    /**
+     * Opens the template of a library entry in the editor (or brings its window to the front) and returns the window;
+     * {@code note}, if given, is shown in its banner.
+     */
+    TemplateEditor edit(Item i, String note) {
         String banner = i.example ? "This is a prepared example. Saving stores your own copy in the library folder." : null;
         File file = i.example || (i.file != null && TemplateFiles.isGmlFile(i.file)) ? null : i.file;
         TemplateDef t = i.template.copy();
@@ -369,21 +407,32 @@ public class TemplatePanel extends JPanel {
         // held in memory only) is a stored revision, the copy is new.
         boolean gml = i.file != null && TemplateFiles.isGmlFile(i.file);
         boolean copy = i.example || gml;
-        TemplateEditor.open(t, copy ? "copy:" + i.template.id : i.template.id, !copy, file, library, banner, this::saved);
+        if (note != null) banner = banner == null ? note : note + " " + banner;
+        return TemplateEditor.open(t, copy ? "copy:" + i.template.id : i.template.id, !copy, file, library, banner, this::saved);
     }
 
-    private void newFromSelection() {
+    /**
+     * Opens exactly this revision of a template in the editor, e.g. one that a rule set brought along and the library
+     * does not have (in that revision). Saving a change makes the next revision, in the library folder.
+     */
+    TemplateEditor editRevision(TemplateDef t, String note) {
+        TemplateLibrary.Entry entry = library.find(t.id);
+        File file = entry == null || TemplateFiles.isGmlFile(entry.file) ? null : entry.file;
+        return TemplateEditor.open(t, t.id, true, file, library, note, this::saved);
+    }
+
+    private TemplateEditor newFromSelection() {
         EditorSession s = TemplateWorkbench.activeSession();
         if (s == null || s.getGraph() == null) {
             JOptionPane.showMessageDialog(this, "Open a graph and select the nodes of the new template first.", "New template",
                     JOptionPane.INFORMATION_MESSAGE);
-            return;
+            return null;
         }
         List<Node> sel = new ArrayList<>(GraphHelper.getSelectedNodes(s));
         if (sel.isEmpty()) {
             JOptionPane.showMessageDialog(this, "Select the nodes of the new template in the graph first.", "New template",
                     JOptionPane.INFORMATION_MESSAGE);
-            return;
+            return null;
         }
         TemplateCapture.Result r = TemplateCapture.capture(s.getGraph(), sel, ConstraintStore.constraints, ConstraintCatalog::describe,
                 "Template from selection");
@@ -396,35 +445,36 @@ public class TemplatePanel extends JPanel {
             if (r.notTaken.size() > 6) banner.append("; …");
         }
         if (r.taken == 0) banner.append(" Add constraints, or derive them from the arrangement.");
-        TemplateEditor.open(r.template, null, library, banner.toString(), this::saved);
+        return TemplateEditor.open(r.template, null, library, banner.toString(), this::saved);
     }
 
     /** "Blank template": an empty pattern in the editor, drawn from scratch (no graph or selection needed). */
-    private void newBlank() {
+    private TemplateEditor newBlank() {
         TemplateDef t = TemplateDef.create("New template", TemplateDef.Kind.PATTERN);
-        TemplateEditor.open(t, null, library, "An empty template: choose \"Add node\" and click on the canvas, connect nodes "
+        return TemplateEditor.open(t, null, library, "An empty template: choose \"Add node\" and click on the canvas, connect nodes "
                 + "with \"Connect\", then add constraints. Save puts it into the library.", this::saved);
     }
 
-    private void newComposite() {
+    private TemplateEditor newComposite() {
         TemplateDef t = TemplateDef.create("New composite", TemplateDef.Kind.COMPOSITE);
-        TemplateEditor.open(t, null, library, "Insert templates of the library as components, connect their ports (structure) "
+        return TemplateEditor.open(t, null, library, "Insert templates of the library as components, connect their ports (structure) "
                 + "and add layout relations.", this::saved);
     }
 
-    private void importFile() {
+    /** Opens a template file in the editor; returns the window, or null if none opened. */
+    private TemplateEditor importFile() {
         JFileChooser fc = new JFileChooser(library.getFolder());
-        if (fc.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
+        if (fc.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return null;
         File f = fc.getSelectedFile();
         String key = "import:" + f.getAbsolutePath();   // known by the file until it is saved
-        if (TemplateEditor.toFront(key)) return;          // imported already and not saved yet: that window
+        if (TemplateEditor.toFront(key)) return null;     // imported already and not saved yet: that window
         TemplateDef t;
         boolean gml = TemplateFiles.isGmlFile(f);
         try {
             t = gml ? TemplateFiles.importGml(f) : TemplateFiles.load(f);
         } catch (Exception ex) {
             JOptionPane.showMessageDialog(this, ex.getMessage(), "Import template", JOptionPane.ERROR_MESSAGE);
-            return;
+            return null;
         }
         String banner = gml ? t.note : "Imported from " + f.getName() + ". Save to add it to the library folder.";
         File file = null;
@@ -439,7 +489,7 @@ public class TemplatePanel extends JPanel {
                     + known.revision + ".<br>The file holds revision " + t.revision + (newer ? ", a newer one." : ".") + "</html>";
             int a = JOptionPane.showOptionDialog(this, message, "Import template", JOptionPane.DEFAULT_OPTION,
                     JOptionPane.QUESTION_MESSAGE, null, options, options[0]);
-            if (a < 0 || "Cancel".equals(options[a])) return;
+            if (a < 0 || "Cancel".equals(options[a])) return null;
             if (update.equals(options[a])) {
                 TemplateLibrary.Entry entry = library.find(t.id);
                 file = entry == null || TemplateFiles.isGmlFile(entry.file) ? null : entry.file;
@@ -454,7 +504,7 @@ public class TemplatePanel extends JPanel {
                         + "Save to add it to the library folder.";
             }
         }
-        TemplateEditor.open(t, key, stored, file, library, banner, this::saved);
+        return TemplateEditor.open(t, key, stored, file, library, banner, this::saved);
     }
 
     /** The editor saved a template: list it and select it. */
@@ -824,14 +874,15 @@ public class TemplatePanel extends JPanel {
     /** The rule set in short: its name and rules, the window that edits it and the search for its active rules. */
     private Section createRuleSection() {
         Section s = new Section("Rule set");
-        JButton edit = Ui.button("Edit rule set…", "Opens the rule set in a window of its own: bundle templates as rules, "
-                + "each switched on or off with a priority; open and save rule sets.", e -> openRuleSet());
+        JButton edit = Ui.button("Edit rule set…", "Opens the rule set editor: every template of the library next to the "
+                + "rules; add templates as rules, switch them on or off, give them a priority, make and change templates; "
+                + "open and save rule sets.", e -> openRuleSet());
         edit.setName("editRuleSet");
         JButton find = Ui.button("Find with rules", "Searches the active graph for every active rule of the rule set; the "
                 + "matches appear above and on the graph. Nothing is applied yet.", e -> {
-                    String why = ruleSection.find();
+                    String why = ruleEditor.find();
                     if (why != null) searchStatus.setStatus(why, StatusLabel.Kind.ERROR);
-                    String skipped = why == null ? ruleSection.skipped() : null;
+                    String skipped = why == null ? ruleEditor.skipped() : null;
                     ruleStatus.setStatus(skipped == null ? null : "Skipped: " + skipped, StatusLabel.Kind.ERROR);
                     ruleStatus.setVisible(skipped != null);
                 });
@@ -845,19 +896,19 @@ public class TemplatePanel extends JPanel {
     }
 
     private void showRuleSummary() {
-        ruleSummary.setText(Ui.wrapped(Ui.esc(ruleSection.summary()), Ui.TEXT_WIDTH));
+        ruleSummary.setText(Ui.wrapped(Ui.esc(ruleEditor.summary()), Ui.TEXT_WIDTH));
         ruleStatus.setVisible(false);   // about the rules as they were
+        if (ruleWindow != null) ruleWindow.setTitle(ruleEditor.title());
     }
 
-    private void openRuleSet() {
+    /** Opens the rule set editor (one window, kept while VANTED runs: closing it only hides it). */
+    void openRuleSet() {
         if (ruleWindow == null) {
-            ruleWindow = new JFrame("Rule set");
-            VerticalStack column = new VerticalStack();
-            column.setBorder(Ui.columnPadding(Ui.GAP_L, Ui.GAP_XL));
-            column.addRow(ruleSection);
-            ruleWindow.setContentPane(new gui.components.ScrollColumn(column, Ui.COLUMN_WIDTH));
+            ruleWindow = new JFrame(ruleEditor.title());
+            ruleWindow.setContentPane(ruleEditor);
             ruleWindow.setDefaultCloseOperation(WindowConstants.HIDE_ON_CLOSE);
-            ruleWindow.setSize(Ui.TAB_WIDTH + 30, 640);
+            ruleWindow.setSize(920, 720);
+            ruleWindow.setMinimumSize(new Dimension(760, 520));
             ruleWindow.setLocationRelativeTo(this);
         }
         ruleWindow.setVisible(true);
@@ -977,7 +1028,7 @@ public class TemplatePanel extends JPanel {
         clearResults.setEnabled(!running);
         matchList.repaint();
         refreshInstances();
-        ruleSection.refresh();
+        ruleEditor.refresh();
     }
 
     private boolean sameList(List<Match> shown) {
@@ -1010,9 +1061,12 @@ public class TemplatePanel extends JPanel {
         private static final long serialVersionUID = 1L;
         private Item item;
         private final JLabel name = new JLabel(), badges = new JLabel();
+        /** A further badge of an entry (null: none), or null. */
+        private final Function<Item, String> extra;
 
-        ItemRenderer() {
+        ItemRenderer(Function<Item, String> extra) {
             super(new BorderLayout(Ui.GAP_M, 0));
+            this.extra = extra;
             setBorder(new EmptyBorder(3, 52, 3, 6));
             JPanel text = new JPanel(new GridLayout(2, 1));
             text.setOpaque(false);
@@ -1037,6 +1091,8 @@ public class TemplatePanel extends JPanel {
                 if (!it.example && it.file == null) b.add("not in the library folder");
                 if (it.template.isComposite() && library != null && !library.updatesFor(it.template).isEmpty()) b.add("update available");
             }
+            String more = extra == null ? null : extra.apply(it);
+            if (more != null) b.add(0, more);
             badges.setText(String.join(" · ", b));
             setBackground(rowBackground(l, index, selected));
             name.setForeground(selected ? l.getSelectionForeground() : it.template == null ? Ui.ERROR : Ui.TEXT);
